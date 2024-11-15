@@ -228,7 +228,7 @@ function Game:setupRoutine()
   self:createDirectoriesIfNeeded()
 
   self:cleanupOldVersions()
-  self:writeReleaseStreamDefinition()
+  --self:writeReleaseStreamDefinition()
   -- Run all unit tests now that we have everything loaded
   if TESTS_ENABLED then
     self:runUnitTests()
