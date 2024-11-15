@@ -4,7 +4,7 @@ require("client.src.config") -- We need to setup the config save data so we can 
 function love.conf(t)
   -- Set the identity before loading the config file
   -- as we need it set to get to the correct load directory.
-  love.filesystem.setIdentity("Panel Attack")
+  --love.filesystem.setIdentity("Panel Attack")
   readConfigFile(config)
 
   --t.identity = "" -- (already set above) -- The name of the save directory (string)
