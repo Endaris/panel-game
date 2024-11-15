@@ -18,15 +18,10 @@ local save = require("client.src.save")
 local fileUtils = require("client.src.FileUtils")
 local handleShortcuts = require("client.src.Shortcuts")
 local Player = require("client.src.Player")
-local GameModes = require("common.engine.GameModes")
-local NetClient = require("client.src.network.NetClient")
 local StartUp = require("client.src.scenes.StartUp")
 local SoundController = require("client.src.music.SoundController")
-require("client.src.BattleRoom")
 local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
-
-local RichPresence = require("client.lib.rich_presence.RichPresence")
 
 -- Provides a scale that is on .5 boundary to make sure it renders well.
 -- Useful for creating new canvas with a solid DPI
@@ -45,15 +40,15 @@ local Game = class(
     self.backgroundImage = nil -- the background image for the game, should always be set to something with the proper dimensions
     self.droppedFrames = 0
     self.puzzleSets = {} -- all the puzzles loaded into the game
-    self.netClient = NetClient()
+    --self.netClient = NetClient()
     self.server_queue = ServerQueue()
     self.main_menu_screen_pos = {consts.CANVAS_WIDTH / 2 - 108 + 50, consts.CANVAS_HEIGHT / 2 - 111}
     self.config = config
     self.localization = Localization
     self.replay = {}
     self.currently_paused_tracks = {} -- list of tracks currently paused
-    self.rich_presence = RichPresence()
-    self.rich_presence:initialize("902897593049301004")
+    -- self.rich_presence = RichPresence()
+    -- self.rich_presence:initialize("902897593049301004")
 
     self.muteSound = false
     self.canvasX = 0
@@ -80,8 +75,6 @@ local Game = class(
     self.last_y = 0
     self.input_delta = 0.0
 
-    -- misc
-    self.rich_presence = RichPresence()
     -- time in seconds, can be used by other elements to track the passing of time beyond dt
     self.timer = love.timer.getTime()
   end
