@@ -6,7 +6,7 @@ require("client.src.globals")
 local touchHandler = require("client.src.ui.touchHandler")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
 local ClientMessages = require("common.network.ClientProtocol")
-local RunTimeGraph = require("client.src.RunTimeGraph")
+--local RunTimeGraph = require("client.src.RunTimeGraph")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local prof = require("common.lib.jprof.jprof")
@@ -63,17 +63,17 @@ end
 -- Called every few fractions of a second to update the game
 -- dt is the amount of time in seconds that has passed.
 function love.update(dt)
-  if config.show_fps and config.debug_mode then
-    if CustomRun.runTimeGraph == nil then
-      CustomRun.runTimeGraph = RunTimeGraph()
-    end
-  else
-    CustomRun.runTimeGraph = nil
-  end
+  -- if config.show_fps and config.debug_mode then
+  --   if CustomRun.runTimeGraph == nil then
+  --     CustomRun.runTimeGraph = RunTimeGraph()
+  --   end
+  -- else
+  --   CustomRun.runTimeGraph = nil
+  -- end
 
-  inputManager:update(dt)
-  inputFieldManager.update()
-  touchHandler:update(dt)
+  -- inputManager:update(dt)
+  -- inputFieldManager.update()
+  -- touchHandler:update(dt)
 
   GAME:update(dt)
 end

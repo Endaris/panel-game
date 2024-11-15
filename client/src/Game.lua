@@ -1,10 +1,5 @@
-require("client.src.localization")
 require("common.lib.Queue")
-require("client.src.server_queue")
-local CharacterLoader = require("client.src.mods.CharacterLoader")
-local StageLoader = require("client.src.mods.StageLoader")
-local Panels = require("client.src.mods.Panels")
-require("client.src.mods.Theme")
+-- require("client.src.server_queue")
 
 -- The main game object for tracking everything in Panel Attack.
 -- Not to be confused with "Match" which is the current battle / instance of the game.
@@ -12,14 +7,12 @@ local consts = require("common.engine.consts")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
-local analytics = require("client.src.analytics")
 local input = require("common.lib.inputManager")
-local save = require("client.src.save")
 local fileUtils = require("client.src.FileUtils")
-local handleShortcuts = require("client.src.Shortcuts")
-local Player = require("client.src.Player")
+--local handleShortcuts = require("client.src.Shortcuts")
+--local Player = require("client.src.Player")
 local StartUp = require("client.src.scenes.StartUp")
-local SoundController = require("client.src.music.SoundController")
+--local SoundController = require("client.src.music.SoundController")
 local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
 
@@ -41,7 +34,7 @@ local Game = class(
     self.droppedFrames = 0
     self.puzzleSets = {} -- all the puzzles loaded into the game
     --self.netClient = NetClient()
-    self.server_queue = ServerQueue()
+    -- self.server_queue = ServerQueue()
     self.main_menu_screen_pos = {consts.CANVAS_WIDTH / 2 - 108 + 50, consts.CANVAS_HEIGHT / 2 - 111}
     self.config = config
     self.localization = Localization
@@ -84,7 +77,7 @@ Game.newCanvasSnappedScale = newCanvasSnappedScale
 
 function Game:load()
   -- TODO: include this with save.lua?
-  require("client.src.puzzles")
+  --require("client.src.puzzles")
   -- move to constructor
   self.updater = GAME_UPDATER or nil
   if self.updater then
@@ -97,10 +90,10 @@ function Game:load()
   else
     logger.debug("Launching game without updater")
   end
-  local user_input_conf = save.read_key_file()
-  if user_input_conf then
-    self.input:importConfigurations(user_input_conf)
-  end
+  -- local user_input_conf = save.read_key_file()
+  -- if user_input_conf then
+  --   self.input:importConfigurations(user_input_conf)
+  -- end
 
   self.navigationStack = require("client.src.NavigationStack")
   self.navigationStack:push(StartUp({setupRoutine = self.setupRoutine}))
@@ -200,6 +193,7 @@ end
 function Game:setupRoutine()
   -- loading various assets into the game
   coroutine.yield("Loading localization...")
+  require("client.src.localization")
   Localization:init()
   self.setLanguage(config.language_code)
 
@@ -208,23 +202,28 @@ function Game:setupRoutine()
   fileUtils.copyFile("docs/puzzles.txt", "puzzles/README.txt")
 
   coroutine.yield(loc("ld_theme"))
+  require("client.src.mods.Theme")
   theme_init()
   self.theme = themes[config.theme]
 
   -- stages and panels before characters since they are part of their loading!
   coroutine.yield(loc("ld_stages"))
+  local StageLoader = require("client.src.mods.StageLoader")
   StageLoader.initStages()
 
   coroutine.yield(loc("ld_panels"))
+  require("client.src.mods.Panels")
   panels_init()
 
   coroutine.yield(loc("ld_characters"))
+  local CharacterLoader = require("client.src.mods.CharacterLoader")
   CharacterLoader.initCharacters()
 
   coroutine.yield(loc("ld_analytics"))
+  local analytics = require("client.src.analytics")
   analytics.init()
 
-  SoundController:applyConfigVolumes()
+  --SoundController:applyConfigVolumes()
 
   self:createDirectoriesIfNeeded()
 
@@ -238,7 +237,7 @@ function Game:setupRoutine()
     self:runPerformanceTests()
   end
 
-  self:initializeLocalPlayer()
+  --self:initializeLocalPlayer()
 end
 
 -- GAME.localPlayer is the standard player for battleRooms that don't get started from replays/spectate
@@ -287,6 +286,7 @@ function Game:createDirectoriesIfNeeded()
   if #fileUtils.getFilteredDirectoryItems("training") == 0 then
     fileUtils.recursiveCopy("client/assets/default_data/training", "training")
   end
+  require("client.src.save")
   readAttackFiles("training")
 
   if love.system.getOS() ~= "OS X" then
@@ -306,7 +306,7 @@ function Game:runUnitTests()
   logger.info("Running Unit Tests...")
   GAME.muteSound = true
   --require("client.tests.Tests")
-  SoundController:applyConfigVolumes()
+  --SoundController:applyConfigVolumes()
 end
 
 function Game:runPerformanceTests()
@@ -364,9 +364,9 @@ function Game:update(dt)
     self.battleRoom:update(dt)
   end
   prof.pop("battleRoom update")
-  self.netClient:update(dt)
+  --self.netClient:update(dt)
 
-  handleShortcuts()
+  --handleShortcuts()
 
   prof.push("navigationStack update")
   self.navigationStack:update(dt)
@@ -377,8 +377,8 @@ function Game:update(dt)
   end
 
   self:updateMouseVisibility(dt)
-  SoundController:update()
-  self.rich_presence:runCallbacks()
+  --SoundController:update()
+  --self.rich_presence:runCallbacks()
 end
 
 function Game:draw()

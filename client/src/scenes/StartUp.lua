@@ -37,23 +37,24 @@ function StartUp:update(dt)
       error(status)
     end
   else
-    local success, status = coroutine.resume(self.setupRoutine, GAME)
-    if success then
-      if status then
-        self.message = status
-      end
-    else
-      GAME.crashTrace = debug.traceback(self.setupRoutine)
-      error(status)
-    end
-
     if coroutine.status(self.setupRoutine) == "dead" then
       love.graphics.setFont(GraphicsUtil.getGlobalFont())
       -- we need the indirection for the scenes here because startup initializes localization which following scenes need
       if themes[config.theme].images.bg_title then
-        GAME.navigationStack:replace(require("client.src.scenes.TitleScreen")())
+        --GAME.navigationStack:replace(require("client.src.scenes.TitleScreen")())
       else
-        GAME.navigationStack:replace(require("client.src.scenes.MainMenu")())
+        --GAME.navigationStack:replace(require("client.src.scenes.MainMenu")())
+      end
+      self.message = "StartUp successful"
+    else
+      local success, status = coroutine.resume(self.setupRoutine, GAME)
+      if success then
+        if status then
+          self.message = status
+        end
+      else
+        GAME.crashTrace = debug.traceback(self.setupRoutine)
+        error(status)
       end
     end
   end
