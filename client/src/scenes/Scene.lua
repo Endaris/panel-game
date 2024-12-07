@@ -3,9 +3,16 @@ local UiElement = require("client.src.ui.UIElement")
 local consts = require("common.engine.consts")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
+---@class Scene
+---@field uiRoot UiElement
+---@field music string
+---@field fallbackMusic string
+---@field keepMusic boolean
+
 -- Base class for a container representing a single screen of PanelAttack.
 -- Each scene should have a field called <Scene>.name = <Scene> (for identification in errors and debugging)
 -- Each scene must add its UiElements as children to its uiRoot property
+---@class Scene
 local Scene = class(
   function (self, sceneParams)
     self.uiRoot = UiElement({x = 0, y = 0, width = consts.CANVAS_WIDTH, height = consts.CANVAS_HEIGHT})
@@ -23,6 +30,8 @@ local Scene = class(
     self.keepMusic = false
   end
 )
+
+Scene.name = "Scene"
 
 -- abstract functions to be implemented per scene
 

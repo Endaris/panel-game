@@ -108,12 +108,6 @@ end
 -- maybe we can rewind from death this way
 ReplayGame.runGameOver = ReplayGame.runGame
 
-function ReplayGame:customDraw()
-  local textPos = themes[config.theme].gameover_text_Pos
-  local playbackText = self.playbackSpeeds[self.playbackSpeedIndex] .. "x"
-  GraphicsUtil.printf(playbackText, textPos[0], textPos[1], consts.CANVAS_WIDTH, "center", nil, 1, 10)
-end
-
 function ReplayGame:drawHUD()
   for i, stack in ipairs(self.match.stacks) do
     if config.show_ingame_infos then
@@ -138,6 +132,10 @@ function ReplayGame:drawHUD()
       prof.pop("Stack:drawAnalyticData")
     end
   end
+
+  local textPos = themes[config.theme].gameover_text_Pos
+  local playbackText = self.playbackSpeeds[self.playbackSpeedIndex] .. "x"
+  GraphicsUtil.printf(playbackText, textPos[0], textPos[1], consts.CANVAS_WIDTH, "center", nil, 1, 10)
 end
 
 return ReplayGame

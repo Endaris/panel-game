@@ -3,7 +3,13 @@ local class = require("common.lib.class")
 local SimulatedStack = require("common.engine.SimulatedStack")
 local CharacterLoader = require("client.src.mods.CharacterLoader")
 
-local ChallengeModePlayer = class(function(self, playerNumber)
+---@class ChallengeModePlayer : MatchParticipant
+
+---@class ChallengeModePlayer
+local ChallengeModePlayer = class(
+function(self, playerNumber)
+  ---@class ChallengeModePlayer
+  self = self
   self.name = "Challenger"
   self.playerNumber = playerNumber
   self.isLocal = true

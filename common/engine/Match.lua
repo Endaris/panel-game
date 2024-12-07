@@ -20,10 +20,16 @@ local Stack = require("common.engine.Stack")
 local consts = require("common.engine.consts")
 local prof = require("common.lib.jprof.jprof")
 
+---@class Match : Signal
+---@field stacks Stack[]
+
 -- A match is a particular instance of the game, for example 1 time attack round, or 1 vs match
+---@class Match
 Match =
   class(
   function(self, players, doCountdown, stackInteraction, winConditions, gameOverConditions, supportsPause, optionalArgs)
+    ---@class Match
+    self = self
     self.spectators = {}
     self.spectatorString = ""
     self.players = {}

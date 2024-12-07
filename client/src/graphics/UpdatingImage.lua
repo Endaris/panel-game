@@ -1,6 +1,8 @@
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
+---@class UpdatingImage
+
 -- A image that can update allowing it to do various things like tile and animate.
 local UpdatingImage =
   class(

@@ -2,8 +2,8 @@ local logger = require("common.lib.logger")
 local class = require("common.lib.class")
 local tableUtils = require("common.lib.tableUtils")
 local Queue = require("common.lib.Queue")
-require("table.clear")
-require("table.new")
+table.clear = require("table.clear")
+table.new = require("table.new")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
 
 -- +1 to compensate for a compensation someone made

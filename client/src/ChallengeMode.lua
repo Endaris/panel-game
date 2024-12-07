@@ -7,11 +7,15 @@ local levelPresets = require("common.engine.LevelPresets")
 local Game1pChallenge = require("client.src.scenes.Game1pChallenge")
 require("client.src.BattleRoom")
 
+---@class ChallengeMode : BattleRoom
 
 -- Challenge Mode is a particular play through of the challenge mode in the game, it contains all the settings for the mode.
+---@class ChallengeMode
 local ChallengeMode =
   class(
   function(self, difficulty, stageIndex)
+    ---@class ChallengeMode
+    self = self
     self.mode = GameModes.getPreset("ONE_PLAYER_CHALLENGE")
     self.stages = self:createStages(difficulty)
     self.difficulty = difficulty

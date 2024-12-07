@@ -15,8 +15,15 @@ local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTran
 local Easings = require("client.src.Easings")
 local consts = require("common.engine.consts")
 
+---@class BattleRoom : Signal
+---@field players Player[]
+
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
-BattleRoom = class(function(self, mode, gameScene)
+---@class BattleRoom
+BattleRoom = class(
+function(self, mode, gameScene)
+  ---@class BattleRoom
+  self = self
   assert(mode)
   self.mode = mode
   self.players = {}

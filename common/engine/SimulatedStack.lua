@@ -8,8 +8,14 @@ local AttackEngine = require("common.engine.AttackEngine")
 -- TODO move graphics related functionality to client
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
+---@class SimulatedStack : StackBase
+
 -- A simulated stack sends attacks and takes damage from a player, it "loses" if it takes too many attacks.
-SimulatedStack = class(function(self, arguments)
+---@class SimulatedStack
+SimulatedStack = class(
+function(self, arguments)
+  ---@class SimulatedStack
+  self = self
   self.panels_dir = config.panels
   self.max_runs_per_frame = 1
   self.multiBarFrameCount = 240
@@ -23,7 +29,8 @@ SimulatedStack = class(function(self, arguments)
   self.difficultyQuads = {}
   -- somehow bad things happen if this is called in the base class constructor instead
   self:moveForRenderIndex(self.which)
-end, StackBase)
+end,
+StackBase)
 
 -- adds an attack engine to the simulated opponent
 function SimulatedStack:addAttackEngine(attackSettings, shouldPlayAttackSfx)

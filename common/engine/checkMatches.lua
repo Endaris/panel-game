@@ -3,7 +3,7 @@ local tableUtils = require("common.lib.tableUtils")
 local PanelGenerator = require("common.engine.PanelGenerator")
 local consts = require("common.engine.consts")
 local LevelData = require("common.engine.LevelData")
-require("table.clear")
+table.clear = require("table.clear")
 
 -- score lookup tables
 local SCORE_COMBO_PdP64 = {} --size 40
@@ -368,7 +368,7 @@ function Stack:matchGarbagePanels(garbagePanels, garbageMatchTime, isChain, onSc
   if self:canPlaySfx() then
     SFX_garbage_match_play = true
   end
-  
+
   for i = 1, #garbagePanels do
     local panel = garbagePanels[i]
     panel.y_offset = panel.y_offset - 1

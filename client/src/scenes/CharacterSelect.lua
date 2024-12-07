@@ -24,8 +24,14 @@ local Character = require("client.src.mods.Character")
 local Slider = require("client.src.ui.Slider")
 local Carousel = require("client.src.ui.Carousel")
 
+---@class CharacterSelect : Scene
+---@field backgroundImg love.Image?
+
 -- The character select screen scene
-local CharacterSelect = class(function(self)
+---@class CharacterSelect
+---@overload fun(): CharacterSelect
+local CharacterSelect = class(
+function(self)
   self.backgroundImg = themes[config.theme].images.bg_select_screen
   self.music = "select_screen"
   self.fallbackMusic = "main"
@@ -43,10 +49,6 @@ function CharacterSelect:customUpdate(sceneParams)
   -- error("The function customUpdate needs to be implemented on the scene")
 end
 
-function CharacterSelect:customDraw()
-
-end
-
 -- end abstract functions
 
 function CharacterSelect:load()
@@ -57,7 +59,10 @@ function CharacterSelect:load()
   self:customLoad()
 end
 
+---@param player Player | ChallengeModePlayer
+---@return PlayerIcon playerIcon
 function CharacterSelect:createPlayerIcon(player)
+  ---@class PlayerIcon : UiElement
   local playerIcon = UiElement({hFill = true, vFill = true})
 
   local selectedCharacterIcon = ImageContainer({
@@ -150,6 +155,7 @@ function CharacterSelect:createPlayerIcon(player)
   return playerIcon
 end
 
+---@return TextButton readyButton
 function CharacterSelect:createReadyButton()
   local readyButton = TextButton({
     hFill = true,
@@ -174,6 +180,7 @@ function CharacterSelect:createReadyButton()
   return readyButton
 end
 
+---@return TextButton readyButton
 function CharacterSelect:createLeaveButton()
   leaveButton = TextButton({
     hFill = true,
@@ -246,10 +253,14 @@ local super_select_pixelcode = [[
       }
   ]]
 
+---@class CharacterButton : Button
+
+  ---@return table<integer, Button> characterButtons 
 function CharacterSelect:getCharacterButtons()
   local characterButtons = {}
 
   for i = 0, #visibleCharacters do
+    ---@class CharacterButton
     local characterButton = Button({
       hFill = true,
       vFill = true,
@@ -915,7 +926,6 @@ end
 function CharacterSelect:draw()
   self.backgroundImg:draw()
   self.uiRoot:draw()
-  self:customDraw()
 end
 
 function CharacterSelect:leave()

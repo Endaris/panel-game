@@ -19,6 +19,10 @@ local GarbageQueue = require("common.engine.GarbageQueue")
 local prof = require("common.lib.jprof.jprof")
 local LevelData = require("common.engine.LevelData")
 
+---@class Stack : StackBase
+---@field panels Panel[][]
+---@field levelData LevelData
+
 -- Stuff defined in this file:
 --  . the data structures that store the configuration of
 --    the stack of panels
@@ -54,9 +58,12 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
 
 -- Represents the full panel stack for one player
-Stack =
-  class(
+---@class Stack
+---@overload fun(arguments: table): Stack
+Stack = class(
   function(s, arguments)
+    ---@class Stack
+    s = s
     local which = arguments.which or 1
     assert(arguments.match ~= nil)
     local match = arguments.match
@@ -625,7 +632,7 @@ function Stack.setPanelsForPuzzleString(self, puzzleString)
   local garbageStartRow = nil
   local garbageStartColumn = nil
   local isMetal = false
-  local connectedGarbagePanels = nil
+  local connectedGarbagePanels = {}
   local rowCount = string.len(puzzleString) / 6
   -- chunk the aprilstack into rows
   -- it is necessary to go bottom up because garbage block panels contain the offset relative to their bottom left corner
@@ -638,6 +645,7 @@ function Stack.setPanelsForPuzzleString(self, puzzleString)
           local color = string.sub(rowString, column, column)
           if not garbageStartRow and tonumber(color) then
             local panel = self:createPanelAt(row, column)
+---@diagnostic disable-next-line: assign-type-mismatch
             panel.color = tonumber(color)
           else
             -- start of a garbage block
@@ -1414,7 +1422,7 @@ function Stack.simulate(self)
     end
     if SFX_garbage_match_play then
       characters[self.character]:playGarbageMatchSfx()
-      SFX_garbage_match_play = nil
+      SFX_garbage_match_play = false
     end
     if SFX_Fanfare_Play == 0 then
       --do nothing
@@ -1857,6 +1865,7 @@ function Stack.new_row(self)
 
   for col = 1, self.width do
     local panel = panels[0][col]
+    ---@type string | integer
     local this_panel_color = string.sub(self.panel_buffer, col, col)
     --a capital letter for the place where the first shock block should spawn (if earned), and a lower case letter is where a second should spawn (if earned).  (color 8 is metal)
     if tonumber(this_panel_color) then
@@ -1918,7 +1927,10 @@ function Stack:getAttackPatternData()
   return data, state
 end
 
--- creates a new panel at the specified row+column and adds it to the Stack's panels table
+---@param self table
+---@param row integer
+---@param column integer
+---@return Panel panel New Panel at the specified row+column that has been added to the Stack's panels table and subscribed to for signals
 function Stack.createPanelAt(self, row, column)
   self.panelsCreatedCount = self.panelsCreatedCount + 1
   local panel = Panel(self.panelsCreatedCount, row, column, self.levelData.frameConstants)
@@ -1929,6 +1941,8 @@ function Stack.createPanelAt(self, row, column)
   return panel
 end
 
+---@param self table
+---@param panel Panel
 function Stack.onPop(self, panel)
   if panel.isGarbage then
     if config.popfx == true then
@@ -1964,12 +1978,16 @@ function Stack.onPop(self, panel)
   end
 end
 
+---@param self table
+---@param panel Panel
 function Stack.onPopped(self, panel)
   if self.panels_to_speedup then
     self.panels_to_speedup = self.panels_to_speedup - 1
   end
 end
 
+---@param self table
+---@param panel Panel
 function Stack.onLand(self, panel)
   if panel.isGarbage then
     self:onGarbageLand(panel)
@@ -1980,6 +1998,8 @@ function Stack.onLand(self, panel)
   end
 end
 
+---@param self table
+---@param panel Panel
 function Stack.onGarbageLand(self, panel)
   if panel.shake_time
     -- only parts of the garbage that are on the visible board can be considered for shake

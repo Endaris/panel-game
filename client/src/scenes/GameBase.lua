@@ -15,9 +15,14 @@ local Menu = require("client.src.ui.Menu")
 local MenuItem = require("client.src.ui.MenuItem")
 local FileUtils = require("client.src.FileUtils")
 
+---@class GameBase : Scene
+
 -- Scene template for running any type of game instance (endless, vs-self, replays, etc.)
+---@class GameBase
 local GameBase = class(
   function (self, sceneParams)
+    ---@class GameBase
+    self = self
     self.saveReplay = true
 
     -- set in load
@@ -332,9 +337,6 @@ function GameBase:draw()
     self:drawHUD()
     self:drawEndGameText()
     prof.pop("GameBase:drawHUD")
-    if self.customDraw then
-      self:customDraw()
-    end
     self:drawForegroundOverlay()
     prof.pop("GameBase:draw")
   end

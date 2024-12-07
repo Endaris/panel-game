@@ -6,13 +6,23 @@ local CharacterLoader = require("client.src.mods.CharacterLoader")
 local StageLoader = require("client.src.mods.StageLoader")
 local ModController = require("client.src.mods.ModController")
 
+---@class MatchParticipant : Signal
+---@field settings MatchParticipantSettings
+
+---@class MatchParticipantSettings
+
 -- a match participant represents the minimum spec for a what constitutes a "player" in a battleRoom / match
-local MatchParticipant = class(function(self)
+---@class MatchParticipant
+local MatchParticipant = class(
+function(self)
+  ---@class MatchParticipant
+  self = self
   self.name = "participant"
   self.wins = 0
   self.modifiedWins = 0
   self.winrate = 0
   self.expectedWinrate = 0
+  ---@class MatchParticipantSettings
   self.settings = {
     selectedCharacterId = consts.RANDOM_CHARACTER_SPECIAL_VALUE,
     selectedStageId = consts.RANDOM_STAGE_SPECIAL_VALUE,

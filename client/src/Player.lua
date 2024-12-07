@@ -9,13 +9,22 @@ local Stack = require("common.engine.Stack")
 local logger = require("common.lib.logger")
 require("client.src.graphics.Stack")
 
+---@class Player : MatchParticipant
+---@field settings PlayerSettings
+
+---@class PlayerSettings : MatchParticipantSettings
+
 -- A player is mostly a data representation of a Panel Attack player
 -- It holds data pertaining to their online status (like name, public id)
 -- It holds data pertaining to their client status (like character, stage, panels, level etc)
 -- Player implements a lot of setters that emit signals on changes, allowing other components to be notified about the changes by connecting a function to it
 -- Due to this, unless for a good reason, all properties on Player should be set using the setters
-local Player = class(function(self, name, publicId, isLocal)
+local Player = class(
+function(self, name, publicId, isLocal)
+  ---@class Player
+  self = self
   self.name = name
+  ---@class PlayerSettings
   self.settings = {
     -- these need to all be initialized so subscription works
     -- the gist is that all settings inside here are modifiable clientside for local players as part of match setup
@@ -23,7 +32,6 @@ local Player = class(function(self, name, publicId, isLocal)
     level = 1,
     difficulty = 1,
     speed = 1,
-    ---@type LevelData
     levelData = LevelPresets.getModern(1),
     style = GameModes.Styles.MODERN,
     characterId = "",

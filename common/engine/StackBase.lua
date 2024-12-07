@@ -4,6 +4,8 @@ local Signal = require("common.lib.signal")
 -- TODO: move graphics related functionality to client
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
+---@class StackBase : Signal
+
 -- Draws an image at the given spot while scaling all coordinate and scale values with stack.gfxScale
 local function drawGfxScaled(stack, img, x, y, rot, xScale, yScale)
   xScale = xScale or 1
@@ -11,7 +13,11 @@ local function drawGfxScaled(stack, img, x, y, rot, xScale, yScale)
   GraphicsUtil.draw(img, x * stack.gfxScale, y * stack.gfxScale, rot, xScale * stack.gfxScale, yScale * stack.gfxScale)
 end
 
-local StackBase = class(function(self, args)
+---@class StackBase
+local StackBase = class(
+function(self, args)
+  ---@class StackBase
+  self = self
   assert(args.which)
   assert(args.is_local ~= nil)
   assert(args.character)
