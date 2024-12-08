@@ -60,7 +60,9 @@ function CustomRun.sleep()
   -- don't sleep the entire remaining idle time though:
   -- calling sleep means to the OS "sleep for AT LEAST"
   -- that means it is never shorter and usually slightly longer
-  if idleTime > 0.001 then
+  -- SDL2 is limited to ms precision for sleep so only sleep if there is more than 1ms of idle time left
+  -- love internally casts the ms value to int
+  if idleTime > 0.0015 then
     local sleepTime = idleTime - 0.0005
     prof.push("sleep", sleepTime * 1000 .. "ms")
     love.timer.sleep(sleepTime)
@@ -109,6 +111,8 @@ function CustomRun.innerRun()
   if love.timer then
     dt = love.timer.step()
     CustomRun.runMetrics.dt = dt
+
+    leftover_time = leftover_time - CustomRun.FRAME_RATE + dt
   end
 
   -- Call update and draw
