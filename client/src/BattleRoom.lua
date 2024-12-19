@@ -1,14 +1,12 @@
 local logger = require("common.lib.logger")
 local Player = require("client.src.Player")
 local tableUtils = require("common.lib.tableUtils")
-local GameModes = require("common.engine.GameModes")
 local class = require("common.lib.class")
 local ServerMessages = require("client.src.network.ServerMessages")
 local Signal = require("common.lib.signal")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
 local ModController = require("client.src.mods.ModController")
 local ModLoader = require("client.src.mods.ModLoader")
-local Match = require("common.engine.Match")
 require("client.src.graphics.match_graphics")
 local GameBase = require("client.src.scenes.GameBase")
 local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTransition")
@@ -68,7 +66,7 @@ function BattleRoom.createFromServerMessage(message)
   local battleRoom
   -- two player versus being the only option so far
   -- in the future this information should be in the message!
-  local gameMode = GameModes.getPreset("TWO_PLAYER_VS")
+  local gameMode = {}-- GameModes.getPreset("TWO_PLAYER_VS")
 
   if message.spectate_request_granted then
     logger.debug("Joining a match as spectator")
@@ -110,7 +108,7 @@ function BattleRoom.createFromServerMessage(message)
     -- player 1 is always the local player so that data can be ignored in favor of local data
     battleRoom:addPlayer(GAME.localPlayer)
     GAME.localPlayer.playerNumber = message.players[1].playerNumber
-    GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
+    GAME.localPlayer:setStyle(1)--GameModes.Styles.MODERN)
     GAME.localPlayer:setRating(message.players[1].ratingInfo.new)
     GAME.localPlayer:setLeague(message.players[1].ratingInfo.league)
 
@@ -146,7 +144,7 @@ function BattleRoom.createLocalFromGameMode(gameMode, gameScene)
     end
   end
 
-  if gameMode.style ~= GameModes.Styles.CHOOSE then
+  if gameMode.style ~= 3 then--GameModes.Styles.CHOOSE then
     for i = 1, #battleRoom.players do
       battleRoom.players[i]:setStyle(gameMode.style)
     end
@@ -324,7 +322,7 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   match:setStage(stageId)
   match:setSeed(seed)
 
-  if (#match.players > 1 or match.stackInteraction == GameModes.StackInteractions.VERSUS) then
+  if (#match.players > 1 or match.stackInteraction == 2) then--GameModes.StackInteractions.VERSUS) then
     GAME.rich_presence:setPresence((match:hasLocalPlayer() and "Playing" or "Spectating") .. " a " .. (self.mode.richPresenceLabel or self.mode.gameScene) ..
                                        " match", match.players[1].name .. " vs " .. (match.players[2].name), true)
   else
@@ -363,7 +361,7 @@ end
 -- for now it's a battleRoom wide setting and players have to match
 function BattleRoom:setStyle(styleChoice)
   -- style could be configurable per play instead but let's not for now
-  if self.mode.style == GameModes.Styles.CHOOSE then
+  if self.mode.style == 3 then--GameModes.Styles.CHOOSE then
     self.style = styleChoice
     self.onStyleChanged(styleChoice)
   else

@@ -1,7 +1,6 @@
 local logger = require("common.lib.logger")
 local class = require("common.lib.class")
 local ChallengeModePlayer = require("client.src.ChallengeModePlayer")
-local GameModes = require("common.engine.GameModes")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
 local levelPresets = require("common.engine.LevelPresets")
 local Game1pChallenge = require("client.src.scenes.Game1pChallenge")
@@ -12,7 +11,7 @@ require("client.src.BattleRoom")
 local ChallengeMode =
   class(
   function(self, difficulty, stageIndex)
-    self.mode = GameModes.getPreset("ONE_PLAYER_CHALLENGE")
+    self.mode = {}--GameModes.getPreset("ONE_PLAYER_CHALLENGE")
     self.stages = self:createStages(difficulty)
     self.difficulty = difficulty
     self.difficultyName = loc("challenge_difficulty_" .. difficulty)
@@ -22,7 +21,7 @@ local ChallengeMode =
     self.challengeComplete = false
 
     self:addPlayer(GAME.localPlayer)
-    GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
+    GAME.localPlayer:setStyle(1)--GameModes.Styles.MODERN)
 
     self.player = ChallengeModePlayer(#self.players + 1)
     self.player.settings.difficulty = difficulty

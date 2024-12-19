@@ -6,11 +6,9 @@ require("client.src.globals")
 local touchHandler = require("client.src.ui.touchHandler")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
 local ClientMessages = require("common.network.ClientProtocol")
---local RunTimeGraph = require("client.src.RunTimeGraph")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local prof = require("common.lib.jprof.jprof")
-local Replay = require("common.engine.Replay")
 require("common.lib.util")
 
 local Game = require("client.src.Game")
@@ -170,14 +168,14 @@ function love.errorhandler(msg)
 
   -- if we crashed during a match that is likely cause of the issue
   -- we want it logged in a digestable form
-  if GAME.battleRoom and GAME.battleRoom.match then
-    pcall(function()
-      local match = GAME.battleRoom.match
-      match.aborted = true
-      Replay.finalizeReplay(match, match.replay)
-      logger.info("Replay of match during crash:\n" .. json.encode(match.replay))
-    end)
-  end
+  -- if GAME.battleRoom and GAME.battleRoom.match then
+  --   pcall(function()
+  --     local match = GAME.battleRoom.match
+  --     match.aborted = true
+  --     Replay.finalizeReplay(match, match.replay)
+  --     logger.info("Replay of match during crash:\n" .. json.encode(match.replay))
+  --   end)
+  -- end
 
   msg = tostring(msg)
   local sanitizedMessageLines = {}
