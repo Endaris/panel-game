@@ -10,6 +10,9 @@ local input = require("common.lib.inputManager")
 local fileUtils = require("client.src.FileUtils")
 local StartUp = require("client.src.scenes.StartUp")
 local tableUtils = require("common.lib.tableUtils")
+local Player = require("client.src.Player")
+local GameModes = require("common.engine.GameModes")
+local save = require("client.src.save")
 
 -- Provides a scale that is on .5 boundary to make sure it renders well.
 -- Useful for creating new canvas with a solid DPI
@@ -32,8 +35,6 @@ local Game = class(
     self.localization = Localization
     self.replay = {}
     self.currently_paused_tracks = {} -- list of tracks currently paused
-    -- self.rich_presence = RichPresence()
-    -- self.rich_presence:initialize("902897593049301004")
 
     self.muteSound = false
     self.canvasX = 0
@@ -82,10 +83,10 @@ function Game:load()
   else
     logger.debug("Launching game without updater")
   end
-  -- local user_input_conf = save.read_key_file()
-  -- if user_input_conf then
-  --   self.input:importConfigurations(user_input_conf)
-  -- end
+  local user_input_conf = save.read_key_file()
+  if user_input_conf then
+    self.input:importConfigurations(user_input_conf)
+  end
 
   self.navigationStack = require("client.src.NavigationStack")
   self.navigationStack:push(StartUp({setupRoutine = self.setupRoutine}))
@@ -215,7 +216,7 @@ function Game:setupRoutine()
   local analytics = require("client.src.analytics")
   analytics.init()
 
-  --SoundController:applyConfigVolumes()
+  SoundController:applyConfigVolumes()
 
   self:createDirectoriesIfNeeded()
 
@@ -229,7 +230,7 @@ function Game:setupRoutine()
     self:runPerformanceTests()
   end
 
-  --self:initializeLocalPlayer()
+  self:initializeLocalPlayer()
 end
 
 -- GAME.localPlayer is the standard player for battleRooms that don't get started from replays/spectate
@@ -357,8 +358,7 @@ function Game:update(dt)
   end
 
   self:updateMouseVisibility(dt)
-  --SoundController:update()
-  --self.rich_presence:runCallbacks()
+  SoundController:update()
 end
 
 function Game:draw()
@@ -440,75 +440,6 @@ function Game.errorData(errorString, traceBack)
   end
 
   return errorData
-end
-
-function Game.detailedErrorLogString(errorData)
-  local newLine = "\n"
-  local now = os.date("*t", to_UTC(os.time()))
-  local formattedTime = string.format("%04d-%02d-%02d %02d:%02d:%02d", now.year, now.month, now.day, now.hour, now.min, now.sec)
-
-  local detailedErrorLogString = 
-    "Stack Trace: " .. errorData.stack .. newLine ..
-    "Username: " .. errorData.name .. newLine ..
-    "Theme: " .. errorData.theme .. newLine ..
-    "Error Message: " .. errorData.error .. newLine ..
-    "Engine Version: " .. errorData.engine_version .. newLine ..
-    "Build Version: " .. errorData.release_version .. newLine ..
-    "Operating System: " .. errorData.operating_system .. newLine ..
-    "Love Version: " .. errorData.love_version .. newLine ..
-    "Renderer Info: " .. errorData.rendererInfo .. newLine ..
-    "UTC Time: " .. formattedTime .. newLine ..
-    "Scene: " .. (GAME.navigationStack.scenes[#GAME.navigationStack.scenes].name or "") .. newLine
-
-    if errorData.matchInfo and not errorData.matchInfo.ended then
-      detailedErrorLogString = detailedErrorLogString .. newLine ..
-      "Match Info: " .. newLine ..
-      "  Stage: " .. errorData.matchInfo.stage .. newLine ..
-      "  Stack Interaction: " .. errorData.matchInfo.stackInteraction
-      if errorData.matchInfo.timeLimit then
-        detailedErrorLogString = detailedErrorLogString .. newLine ..
-        "  Time Limit: " .. errorData.matchInfo.timeLimit
-      end
-      if errorData.matchInfo.doCountdown then
-        detailedErrorLogString = detailedErrorLogString .. newLine ..
-        "  Do Countdown: " .. tostring(errorData.matchInfo.doCountdown)
-      end
-      detailedErrorLogString = detailedErrorLogString .. newLine ..
-      "  Stacks: "
-      for i = 1, #errorData.matchInfo.stacks do
-        local stack = errorData.matchInfo.stacks[i]
-        detailedErrorLogString = detailedErrorLogString .. newLine ..
-        "    P" .. i .. ": " .. newLine ..
-        "      Player Number: " .. stack.playerNumber .. newLine ..
-        "      Character: " .. stack.character .. newLine ..
-        "      InputMethod: " .. stack.inputMethod .. newLine ..
-        "      Rollback Count: " .. stack.rollbackCount .. newLine ..
-        "      Rollback Frames Saved: " .. stack.rollbackCopyCount
-      end
-    elseif errorData.battleRoomInfo then
-      detailedErrorLogString = detailedErrorLogString .. newLine ..
-      "BattleRoom Info: " .. newLine ..
-      "  Online: " .. errorData.battleRoomInfo.online .. newLine ..
-      "  Spectating: " .. errorData.battleRoomInfo.spectating .. newLine ..
-      "  All assets loaded: " .. errorData.battleRoomInfo.allAssetsLoaded .. newLine ..
-      "  State: " .. errorData.battleRoomInfo.state .. newLine ..
-      "  Players: "
-      for i = 1, #errorData.battleRoomInfo.players do
-        local player = errorData.battleRoomInfo.players[i]
-        detailedErrorLogString = detailedErrorLogString .. newLine ..
-        "    P" .. i .. ": " .. newLine ..
-        "      Player Number: " .. player.playerNumber .. newLine ..
-        "      Panels: " .. player.panelId  .. newLine ..
-        "      Selected Character: " .. player.selectedCharacterId .. newLine ..
-        "      Character: " .. player.characterId  .. newLine ..
-        "      Selected Stage: " .. player.selectedStageId .. newLine ..
-        "      Stage: " .. player.stageId .. newLine ..
-        "      isLocal: " .. player.isLocal .. newLine ..
-        "      wantsReady: " .. player.wantsReady
-      end
-    end
-
-  return detailedErrorLogString
 end
 
 local loveVersionStringValue = nil

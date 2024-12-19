@@ -470,7 +470,7 @@ end
 
 function CharacterSelect:createPanelCarousel(player, height)
   local panelCarousel = PanelCarousel({hAlign = "center", vAlign = "top", hFill = true, height = height})
-  panelCarousel:setColorCount(player.settings.levelData.colors)
+  panelCarousel:setColorCount(5)
   panelCarousel:loadPanels()
 
   -- panel carousel

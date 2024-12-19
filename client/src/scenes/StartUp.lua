@@ -41,11 +41,11 @@ function StartUp:update(dt)
       love.graphics.setFont(GraphicsUtil.getGlobalFont())
       -- we need the indirection for the scenes here because startup initializes localization which following scenes need
       if themes[config.theme].images.bg_title then
-        --GAME.navigationStack:replace(require("client.src.scenes.TitleScreen")())
+        GAME.navigationStack:replace(require("client.src.scenes.TitleScreen")())
       else
-        --GAME.navigationStack:replace(require("client.src.scenes.MainMenu")())
+        GAME.navigationStack:replace(require("client.src.scenes.MainMenu")())
       end
-      self.message = "StartUp successful"
+      --self.message = "StartUp successful"
     else
       local success, status = coroutine.resume(self.setupRoutine, GAME)
       if success then

@@ -49,10 +49,6 @@ function CharacterSelectVsSelf:loadUserInterface()
   local oldOnValueChange = levelSlider.onValueChange
   levelSlider.onValueChange = function(ls)
     oldOnValueChange(ls)
-    self.lastScore = GAME.scores:lastVsScoreForLevel(ls.value)
-    self.record = GAME.scores:recordVsScoreForLevel(ls.value)
-    self.ui.recordBox:setLastResult(self.lastScore)
-    self.ui.recordBox:setRecord(self.record)
   end
   self.ui.levelSelection:addElement(levelSlider, player)
   self.ui.grid:createElementAt(6, 2, 3, 1, "levelSelection", self.ui.levelSelection)
@@ -83,9 +79,6 @@ function CharacterSelectVsSelf:loadUserInterface()
 end
 
 function CharacterSelectVsSelf:refresh()
-  local level = GAME.battleRoom.players[1].settings.level
-  self.lastScore = GAME.scores:lastVsScoreForLevel(level)
-  self.record = GAME.scores:recordVsScoreForLevel(level)
   self.ui.recordBox:setLastResult(self.lastScore)
   self.ui.recordBox:setRecord(self.record)
 end

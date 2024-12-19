@@ -3,16 +3,11 @@ local Player = require("client.src.Player")
 local tableUtils = require("common.lib.tableUtils")
 local GameModes = require("common.engine.GameModes")
 local class = require("common.lib.class")
-local ServerMessages = require("client.src.network.ServerMessages")
 local Signal = require("common.lib.signal")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
 local ModController = require("client.src.mods.ModController")
 local ModLoader = require("client.src.mods.ModLoader")
-local Match = require("common.engine.Match")
-require("client.src.graphics.match_graphics")
-local GameBase = require("client.src.scenes.GameBase")
 local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTransition")
-local Easings = require("client.src.Easings")
 local consts = require("common.engine.consts")
 
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
@@ -27,11 +22,6 @@ BattleRoom = class(function(self, mode, gameScene)
   self.state = 1
   self.matchesPlayed = 0
   self.gameScene = gameScene
-  -- this is a bit naive but effective for now
-  self.online = GAME.netClient:isConnected()
-  if self.online then
-    GAME.netClient:connectSignal("disconnect", self, self.onDisconnect)
-  end
 
   Signal.turnIntoEmitter(self)
   self:createSignal("rankedStatusChanged")
@@ -41,94 +31,6 @@ end)
 -- defining these here so they're available in network.BattleRoom too
 -- maybe splitting BattleRoom wasn't so smart after all
 BattleRoom.states = { Setup = 1, MatchInProgress = 2 }
-
-
-function BattleRoom.createFromMatch(match)
-  local gameMode = {}
-  gameMode.playerCount = #match.players
-  gameMode.doCountdown = match.doCountdown
-  gameMode.stackInteraction = match.stackInteraction
-  gameMode.winConditions = deepcpy(match.winConditions)
-  gameMode.gameOverConditions = deepcpy(match.gameOverConditions)
-
-  local battleRoom = BattleRoom(gameMode, GameBase)
-
-  for i = 1, #match.players do
-    battleRoom:addPlayer(match.players[i])
-  end
-
-  battleRoom.match = match
-  battleRoom.match:start()
-  battleRoom.state = BattleRoom.states.MatchInProgress
-
-  return battleRoom
-end
-
-function BattleRoom.createFromServerMessage(message)
-  local battleRoom
-  -- two player versus being the only option so far
-  -- in the future this information should be in the message!
-  local gameMode = GameModes.getPreset("TWO_PLAYER_VS")
-
-  if message.spectate_request_granted then
-    logger.debug("Joining a match as spectator")
-    message = ServerMessages.sanitizeSpectatorJoin(message)
-    if message.replay then
-      local replay = message.replay
-      -- if the server message lacks ENGINE_VERSION, the standard replay sanitization may conservatively guess v046
-      -- but since we're online and successfully connected we KNOW it has to be our engine version
-      replay.engineVersion = consts.ENGINE_VERSION
-      local match = Match.createFromReplay(replay, false)
-      for i, player in ipairs(match.players) do
-        player:updateSettings(message.players[i])
-      end
-      -- need this to make sure both have the same player tables
-      -- there's like one stupid reference to battleRoom in engine that breaks otherwise
-      battleRoom = BattleRoom.createFromMatch(match)
-      battleRoom.mode.gameScene = gameMode.gameScene
-      battleRoom.mode.setupScene = gameMode.setupScene
-      battleRoom.mode.richPresenceLabel = gameMode.richPresenceLabel
-    else
-      battleRoom = BattleRoom(gameMode, GameBase)
-      for i = 1, #message.players do
-        local player = Player(message.players[i].name, message.players[i].publicId or -i, false)
-        battleRoom:addPlayer(player)
-        player:updateSettings(message.players[i])
-      end
-    end
-    for i = 1, #battleRoom.players do
-      battleRoom.players[i]:setRating(message.players[i].ratingInfo.new)
-      battleRoom.players[i]:setLeague(message.players[i].ratingInfo.league)
-    end
-    if message.winCounts then
-      battleRoom:setWinCounts(message.winCounts)
-    end
-    battleRoom.spectating = true
-  else
-    battleRoom = BattleRoom(gameMode, GameBase)
-    message = ServerMessages.sanitizeCreateRoom(message)
-    -- player 1 is always the local player so that data can be ignored in favor of local data
-    battleRoom:addPlayer(GAME.localPlayer)
-    GAME.localPlayer.playerNumber = message.players[1].playerNumber
-    GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
-    GAME.localPlayer:setRating(message.players[1].ratingInfo.new)
-    GAME.localPlayer:setLeague(message.players[1].ratingInfo.league)
-
-    local player2 = Player(message.players[2].name, message.players[2].publicId or -2, false)
-    player2.playerNumber = message.players[2].playerNumber
-    player2:updateSettings(message.players[2])
-    player2:setRating(message.players[2].ratingInfo.new)
-    player2:setLeague(message.players[2].ratingInfo.league)
-    battleRoom:addPlayer(player2)
-  end
-
-  battleRoom:updateRankedStatus(message.ranked)
-
-  battleRoom:assignInputConfigurations()
-  GAME.netClient:registerPlayerUpdates(battleRoom)
-
-  return battleRoom
-end
 
 function BattleRoom.createLocalFromGameMode(gameMode, gameScene)
   local battleRoom = BattleRoom(gameMode, gameScene)
@@ -220,30 +122,6 @@ function BattleRoom:winningPlayer()
   end
 end
 
--- creates a match with the players in the BattleRoom
-function BattleRoom:createMatch()
-  local supportsPause = not self.online or #self.players == 1
-  local optionalArgs = { timeLimit = self.mode.timeLimit , ranked = self.ranked}
-
-  self.match = Match(
-    self.players,
-    self.mode.doCountdown,
-    self.mode.stackInteraction,
-    shallowcpy(self.mode.winConditions),
-    shallowcpy(self.mode.gameOverConditions),
-    supportsPause,
-    optionalArgs
-  )
-
-  self.match:connectSignal("matchEnded", self, self.onMatchEnded)
-
-  for _, player in ipairs(self.players) do
-    self.match:connectSignal("matchEnded", player, player.onMatchEnded)
-  end
-
-  return self.match
-end
-
 -- adds an existing Player to the BattleRoom
 function BattleRoom:addPlayer(player)
   if not player.playerNumber then
@@ -318,40 +196,7 @@ end
 
 -- creates a match based on the room and player settings, starts it up and switches to the Game scene
 function BattleRoom:startMatch(stageId, seed, replayOfMatch)
-  local match = self:createMatch()
-
-  match.replay = replayOfMatch
-  match:setStage(stageId)
-  match:setSeed(seed)
-
-  if (#match.players > 1 or match.stackInteraction == GameModes.StackInteractions.VERSUS) then
-    GAME.rich_presence:setPresence((match:hasLocalPlayer() and "Playing" or "Spectating") .. " a " .. (self.mode.richPresenceLabel or self.mode.gameScene) ..
-                                       " match", match.players[1].name .. " vs " .. (match.players[2].name), true)
-  else
-    GAME.rich_presence:setPresence("Playing " .. self.mode.richPresenceLabel .. " mode", nil, true)
-  end
-
-  if self.ranked and not match.room_ratings then
-    match.room_ratings = {}
-  end
-
-  match:start()
-  self.state = BattleRoom.states.MatchInProgress
-  local transition = BlackFadeTransition(GAME.timer, 0.4, Easings.getSineIn())
-  -- for touch android players load a different scene
-  if (love.system.getOS() == "Android" or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
-  --but only if they are the only local player cause for 2p vs local using portrait mode would be bad
-      tableUtils.count(self.players, function(p) return p.isLocal and p.human end) == 1 then
-    for _, player in ipairs(self.players) do
-      if player.isLocal and player.human and player.settings.inputMethod == "touch" then
-        GAME.navigationStack:push(require("client.src.scenes.PortraitGame")({match = self.match}), transition)
-        return
-      end
-    end
-  end
-  if self.gameScene then
-    GAME.navigationStack:push(self.gameScene({match = self.match}), transition)
-  end
+  --nope
 end
 
 -- sets the style of "level" presets the players select from
@@ -503,9 +348,6 @@ function BattleRoom:shutdown()
     self.match:deinit()
     self.match = nil
   end
-  if self.online then
-    GAME.netClient:leaveRoom()
-  end
   self.hasShutdown = true
   GAME:initializeLocalPlayer()
   GAME.battleRoom = nil
@@ -523,9 +365,6 @@ function BattleRoom:onMatchEnded(match)
     if #winners == 1 then
       -- increment win count on winning player if there is only one
       winners[1]:incrementWinCount()
-    end
-    if self.online and match:hasLocalPlayer() then
-      GAME.netClient:reportLocalGameResult(winners)
     end
   else
     -- match:deinit is the responsibility of the one switching out of the game scene

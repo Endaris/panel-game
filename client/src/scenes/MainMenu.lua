@@ -10,20 +10,12 @@ local PuzzleMenu = require("client.src.scenes.PuzzleMenu")
 local TimeAttackMenu = require("client.src.scenes.TimeAttackMenu")
 local CharacterSelectVsSelf = require("client.src.scenes.CharacterSelectVsSelf")
 local TrainingMenu = require("client.src.scenes.TrainingMenu")
-local ChallengeModeMenu = require("client.src.scenes.ChallengeModeMenu")
-local Lobby = require("client.src.scenes.Lobby")
 local CharacterSelect2p = require("client.src.scenes.CharacterSelect2p")
-local ReplayBrowser = require("client.src.scenes.ReplayBrowser")
 local InputConfigMenu = require("client.src.scenes.InputConfigMenu")
 local SetNameMenu = require("client.src.scenes.SetNameMenu")
 local OptionsMenu = require("client.src.scenes.OptionsMenu")
 local DesignHelper = require("client.src.scenes.DesignHelper")
-
-local TimeAttackGame = require("client.src.scenes.TimeAttackGame")
-local EndlessGame = require("client.src.scenes.EndlessGame")
-local VsSelfGame = require("client.src.scenes.VsSelfGame")
-local GameBase = require("client.src.scenes.GameBase")
-local PuzzleGame = require("client.src.scenes.PuzzleGame")
+local BattleRoom = require("client.src.BattleRoom")
 
 -- Scene for the main menu
 local MainMenu = class(function(self, sceneParams)
@@ -42,25 +34,25 @@ end
 function MainMenu:createMainMenu()
 
   local menuItems = {MenuItem.createButtonMenuItem("mm_1_endless", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_ENDLESS"), EndlessGame)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_ENDLESS"))
       if GAME.battleRoom then
         switchToScene(EndlessMenu())
       end
     end),
     MenuItem.createButtonMenuItem("mm_1_puzzle", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_PUZZLE"), PuzzleGame)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_PUZZLE"))
       if GAME.battleRoom then
         switchToScene(PuzzleMenu())
       end
     end),
     MenuItem.createButtonMenuItem("mm_1_time", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_TIME_ATTACK"), TimeAttackGame)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_TIME_ATTACK"))
       if GAME.battleRoom then
         switchToScene(TimeAttackMenu())
       end
     end),
     MenuItem.createButtonMenuItem("mm_1_vs", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_VS_SELF"), VsSelfGame)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("ONE_PLAYER_VS_SELF"))
       if GAME.battleRoom then
         switchToScene(CharacterSelectVsSelf())
       end
@@ -68,20 +60,11 @@ function MainMenu:createMainMenu()
     MenuItem.createButtonMenuItem("mm_1_training", nil, nil, function()
       switchToScene(TrainingMenu())
     end),
-    MenuItem.createButtonMenuItem("mm_1_challenge_mode", nil, nil, function()
-      switchToScene(ChallengeModeMenu())
-    end),
-    MenuItem.createButtonMenuItem("mm_2_vs_online", {""}, nil, function()
-      switchToScene(Lobby({serverIp = "panelattack.com"}))
-    end),
     MenuItem.createButtonMenuItem("mm_2_vs_local", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("TWO_PLAYER_VS"), GameBase)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("TWO_PLAYER_VS"))
       if GAME.battleRoom then
         switchToScene(CharacterSelect2p())
       end
-    end),
-    MenuItem.createButtonMenuItem("mm_replay_browser", nil, nil, function()
-      switchToScene(ReplayBrowser())
     end),
     MenuItem.createButtonMenuItem("mm_configure", nil, nil, function()
       switchToScene(InputConfigMenu())
@@ -106,9 +89,7 @@ function MainMenu:createMainMenu()
 
   local menu = Menu.createCenteredMenu(menuItems)
 
-  local debugMenuItems = {MenuItem.createButtonMenuItem("Beta Server", nil, nil, function() switchToScene(Lobby({serverIp = "betaserver.panelattack.com", serverPort = 59569})) end),
-                          MenuItem.createButtonMenuItem("Localhost Server", nil, nil, function() switchToScene(Lobby({serverIp = "Localhost"})) end)
-                        }
+  local debugMenuItems = {}
 
   local function addDebugMenuItems()
     if config.debugShowServers then

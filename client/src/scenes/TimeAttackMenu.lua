@@ -132,8 +132,6 @@ end
 
 function TimeAttackMenu:refresh()
   local difficulty = GAME.battleRoom.players[1].settings.difficulty
-  self.lastScore = GAME.scores:lastTimeAttack1PForLevel(difficulty)
-  self.record = GAME.scores:recordTimeAttack1PForLevel(difficulty)
   self.ui.recordBox:setLastResult(self.lastScore)
   self.ui.recordBox:setRecord(self.record)
 end

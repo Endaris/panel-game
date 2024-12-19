@@ -59,17 +59,9 @@ end
 -- Called every few fractions of a second to update the game
 -- dt is the amount of time in seconds that has passed.
 function love.update(dt)
-  -- if config.show_fps and config.debug_mode then
-  --   if CustomRun.runTimeGraph == nil then
-  --     CustomRun.runTimeGraph = RunTimeGraph()
-  --   end
-  -- else
-  --   CustomRun.runTimeGraph = nil
-  -- end
-
-  -- inputManager:update(dt)
-  -- inputFieldManager.update()
-  -- touchHandler:update(dt)
+  inputManager:update(dt)
+  inputFieldManager.update()
+  touchHandler:update(dt)
 
   GAME:update(dt)
 end
