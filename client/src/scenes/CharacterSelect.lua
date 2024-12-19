@@ -907,7 +907,6 @@ function CharacterSelect:update(dt)
   if GAME.battleRoom and GAME.battleRoom.spectating then
     if input.isDown["MenuEsc"] then
       GAME.theme:playCancelSfx()
-      GAME.netClient:leaveRoom()
       GAME.battleRoom.online = false
       GAME.navigationStack:pop(nil, function() GAME.battleRoom:shutdown() end)
     end

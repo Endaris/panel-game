@@ -8,10 +8,7 @@ local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local input = require("common.lib.inputManager")
 local fileUtils = require("client.src.FileUtils")
---local handleShortcuts = require("client.src.Shortcuts")
---local Player = require("client.src.Player")
 local StartUp = require("client.src.scenes.StartUp")
---local SoundController = require("client.src.music.SoundController")
 local tableUtils = require("common.lib.tableUtils")
 
 -- Provides a scale that is on .5 boundary to make sure it renders well.
@@ -30,8 +27,6 @@ local Game = class(
     self.backgroundImage = nil -- the background image for the game, should always be set to something with the proper dimensions
     self.droppedFrames = 0
     self.puzzleSets = {} -- all the puzzles loaded into the game
-    --self.netClient = NetClient()
-    -- self.server_queue = ServerQueue()
     self.main_menu_screen_pos = {consts.CANVAS_WIDTH / 2 - 108 + 50, consts.CANVAS_HEIGHT / 2 - 111}
     self.config = config
     self.localization = Localization
@@ -354,9 +349,6 @@ function Game:update(dt)
   if self.battleRoom then
     self.battleRoom:update(dt)
   end
-  --self.netClient:update(dt)
-
-  --handleShortcuts()
 
   self.navigationStack:update(dt)
 
