@@ -2,7 +2,6 @@ local consts = require("common.engine.consts")
 local input = require("common.lib.inputManager")
 local class = require("common.lib.class")
 local tableUtils = require("common.lib.tableUtils")
-local GameModes = require("common.engine.GameModes")
 local Scene = require("client.src.scenes.Scene")
 local StageCarousel = require("client.src.ui.StageCarousel")
 local LevelSlider = require("client.src.ui.LevelSlider")
@@ -77,7 +76,7 @@ function CharacterSelect:createPlayerIcon(player)
   playerIcon:addChild(selectedCharacterIcon)
 
   -- level icon
-  if player.settings.style == GameModes.Styles.MODERN and player.settings.level then
+  if player.settings.style == 1 and player.settings.level then
     local levelIcon = ImageContainer({
       image = themes[config.theme].images.IMG_levels[player.settings.level],
       hAlign = "right",
@@ -635,7 +634,7 @@ end
 
 function CharacterSelect:createStyleSelection(player, width)
   local styleSelector = BoolSelector({
-    startValue = (player.settings.style == GameModes.Styles.MODERN),
+    startValue = (player.settings.style == 1),
     vFill = true,
     width = width,
     vAlign = "center",
@@ -662,7 +661,7 @@ function CharacterSelect:createStyleSelection(player, width)
   end
 
   player:connectSignal("styleChanged", styleSelector, function(p, style)
-      if style == GameModes.Styles.MODERN then
+      if style == 1 then
         styleSelector:setValue(true)
       else
         styleSelector:setValue(false)

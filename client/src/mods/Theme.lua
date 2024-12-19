@@ -2,7 +2,6 @@ local consts = require("common.engine.consts")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local fileUtils = require("client.src.FileUtils")
-local levelPresets = require("common.engine.LevelPresets")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local ImageContainer = require("client.src.ui.ImageContainer")
 local Music = require("client.src.music.Music")
@@ -316,7 +315,7 @@ function Theme:loadSelectionGraphics()
   self.images.IMG_levels_unfocus = {}
   self.images.IMG_levels[1] = self:load_theme_img("level/level1")
   self.images.IMG_levels_unfocus[1] = nil -- meaningless by design
-  for i = 2, levelPresets.modernPresetCount do --which should equal the number of levels in the game
+  for i = 2, 11 do --which should equal the number of levels in the game
     self.images.IMG_levels[i] = self:load_theme_img("level/level" .. i .. "")
     self.images.IMG_levels_unfocus[i] = self:load_theme_img("level/level" .. i .. "unfocus")
   end

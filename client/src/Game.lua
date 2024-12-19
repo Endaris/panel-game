@@ -1,5 +1,4 @@
 require("common.lib.Queue")
--- require("client.src.server_queue")
 
 -- The main game object for tracking everything in Panel Attack.
 -- Not to be confused with "Match" which is the current battle / instance of the game.
@@ -13,7 +12,6 @@ local fileUtils = require("client.src.FileUtils")
 --local Player = require("client.src.Player")
 local StartUp = require("client.src.scenes.StartUp")
 --local SoundController = require("client.src.music.SoundController")
-local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
 
 -- Provides a scale that is on .5 boundary to make sure it renders well.
@@ -25,7 +23,6 @@ end
 
 local Game = class(
   function(self)
-    self.scores = require("client.src.scores")
     self.input = input
     self.match = nil -- Match - the current match going on or nil if inbetween games
     self.battleRoom = nil -- BattleRoom - the current room being used for battles
@@ -354,18 +351,14 @@ end
 function Game:update(dt)
   self.timer = love.timer.getTime()
 
-  prof.push("battleRoom update")
   if self.battleRoom then
     self.battleRoom:update(dt)
   end
-  prof.pop("battleRoom update")
   --self.netClient:update(dt)
 
   --handleShortcuts()
 
-  prof.push("navigationStack update")
   self.navigationStack:update(dt)
-  prof.pop("navigationStack update")
 
   if self.backgroundImage then
     self.backgroundImage:update(dt)

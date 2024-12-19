@@ -5,10 +5,8 @@ local inputManager = require("common.lib.inputManager")
 require("client.src.globals")
 local touchHandler = require("client.src.ui.touchHandler")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
-local ClientMessages = require("common.network.ClientProtocol")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local prof = require("common.lib.jprof.jprof")
 require("common.lib.util")
 
 local Game = require("client.src.Game")
@@ -119,9 +117,6 @@ end
 
 -- quit handling
 function love.quit()
-  if PROF_CAPTURE then
-    prof.write("prof.mpack")
-  end
   if GAME.netClient and GAME.netClient:isConnected() then
     GAME.netClient:logout()
   end

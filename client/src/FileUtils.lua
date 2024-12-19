@@ -1,5 +1,4 @@
 local logger = require("common.lib.logger")
-local Replay = require("common.engine.Replay")
 
 local PREFIX_OF_IGNORED_DIRECTORIES = "__"
 
@@ -173,7 +172,6 @@ function fileUtils.saveReplay(replay)
   local path = replay:generatePath("/")
   local filename = replay:generateFileName()
   local replayJson = json.encode(replay)
-  Replay.lastPath = path
   pcall(
     function()
       love.filesystem.createDirectory(path)

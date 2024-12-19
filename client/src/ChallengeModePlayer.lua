@@ -1,6 +1,5 @@
 local MatchParticipant = require("client.src.MatchParticipant")
 local class = require("common.lib.class")
-local SimulatedStack = require("common.engine.SimulatedStack")
 local CharacterLoader = require("client.src.mods.CharacterLoader")
 
 local ChallengeModePlayer = class(function(self, playerNumber)
