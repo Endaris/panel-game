@@ -19,8 +19,8 @@ local UiElement = require("client.src.ui.UIElement")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local ScrollText = require("client.src.ui.ScrollText")
 local util = require("common.lib.util")
+local ModManagement = require("client.src.scenes.ModManagement")
 
--- @module optionsMenu
 -- Scene for the options menu
 local OptionsMenu = class(function(self, sceneParams)
   self.music = "main"
@@ -124,8 +124,8 @@ function OptionsMenu:getSystemInfo()
   sysInfo[#sysInfo + 1] = {name = "Panel Attack Engine Version", value = consts.ENGINE_VERSION}
   sysInfo[#sysInfo + 1] = {name = "Panel Attack Release Version", value = GAME.updater and tostring(GAME.updater.activeVersion.version) or nil}
   sysInfo[#sysInfo + 1] = {name = "Save Data Directory Path", value = love.filesystem.getSaveDirectory()}
-  sysInfo[#sysInfo + 1] = {name = "Characters [Enabled/Total]", value = #characters_ids_for_current_theme .. "/" .. #characters_ids}
-  sysInfo[#sysInfo + 1] = {name = "Stages [Enabled/Total]", value = #stages_ids_for_current_theme .. "/" .. #stages_ids}
+  sysInfo[#sysInfo + 1] = {name = "Characters [Visible/Enabled]", value = #visibleCharacters .. "/" .. tableUtils.length(characters)}
+  sysInfo[#sysInfo + 1] = {name = "Stages [Visible/Enabled]", value = #visibleStages .. "/" .. tableUtils.length(stages)}
   sysInfo[#sysInfo + 1] = {name = "Total Panel Sets", value = #panels_ids}
   sysInfo[#sysInfo + 1] = {name = "Total Themes", value = #themeIds}
 
@@ -203,6 +203,10 @@ function OptionsMenu:loadBaseMenu()
           GAME.theme:playValidationSfx()
           self:switchToScreen("modifyUserIdMenu")
         end),
+      MenuItem.createButtonMenuItem("Manage Mods", nil, false, function()
+        GAME.theme:playValidationSfx()
+        GAME.navigationStack:push(ModManagement())
+      end),
       MenuItem.createButtonMenuItem("back", nil, nil, self.exit)
     }
 
@@ -341,8 +345,9 @@ function OptionsMenu:loadGraphicsMenu()
       GAME.theme = themes[value]
       SoundController:stopMusic()
       GraphicsUtil.setGlobalFont(themes[config.theme].font.path, themes[config.theme].font.size)
+      self:updateMenuLanguage()
       self.backgroundImage = themes[config.theme].images.bg_main
-      SoundController:playMusic(themes[config.theme].stageTracks.main)
+      self:applyMusic()
     end
   })
 
@@ -371,9 +376,10 @@ function OptionsMenu:loadGraphicsMenu()
     slider.maxText:set(slider.max / 100)
     slider.valueText:set(slider.value / 100)
     slider.setValue = function(s, value)
-      if value ~= s.value then
-        s.value = util.bound(s.min, value, s.max)
-        s.valueText:set(s.value / 100)
+      local changed = value ~= s.value
+      s.value = util.bound(s.min, value, s.max)
+      s.valueText:set(s.value / 100)
+      if changed then
         s:onValueChange()
       end
     end
@@ -384,12 +390,17 @@ function OptionsMenu:loadGraphicsMenu()
         s:setValue(s.value + 10)
       end
     end
-    local function touchDrag(s, x, y)
+    local function drag(s, x, y)
       local screenX, screenY = s:getScreenPos()
       s.valueText:set((math.floor((x - screenX) / s.tickLength) + s.min) / 100)
     end
-    slider.onTouch = touchDrag
-    slider.onDrag = touchDrag
+    local function touch(s, x, y)
+      s.preTouchValue = s.value
+      drag(s, x, y)
+    end
+
+    slider.onTouch = touch
+    slider.onDrag = drag
     return slider
   end
 
@@ -497,6 +508,7 @@ function OptionsMenu:loadSoundMenu()
     MenuItem.createSliderMenuItem("op_vol_music", nil, nil, createConfigSlider("music_volume", 0, 100, function()
         SoundController:applyConfigVolumes()
       end)),
+      MenuItem.createToggleButtonGroupMenuItem("op_menu_music", nil, nil, createToggleButtonGroup("enableMenuMusic", function() self:applyMusic() end)),
       MenuItem.createStepperMenuItem("op_use_music_from", nil, nil, musicFrequencyStepper),
       MenuItem.createToggleButtonGroupMenuItem("op_music_delay", nil, nil, createToggleButtonGroup("danger_music_changeback_delay")),
     MenuItem.createButtonMenuItem("mm_music_test", nil, nil, function()

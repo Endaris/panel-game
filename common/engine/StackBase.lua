@@ -36,8 +36,12 @@ local StackBase = class(function(self, args)
 
   -- graphics
   -- also relevant for the touch input controller method besides general drawing
+  self.baseWidth = 104
+  self.baseHeight = 204
   self.gfxScale = 3
-  self.canvas = love.graphics.newCanvas(104 * self.gfxScale, 204 * self.gfxScale, {dpiscale = GAME:newCanvasSnappedScale()})
+  -- stacks no longer have a canvas but some functions bool check it to determine whether they should run or not
+  -- mostly for tests / not running extra in some scenarios; should be removed once they have been adjusted
+  self.canvas = true
   self.portraitFade = config.portrait_darkness / 100 -- will be set back to 0 if count down happens
   self.healthQuad = GraphicsUtil:newRecycledQuad(0, 0, themes[config.theme].images.IMG_healthbar:getWidth(), themes[config.theme].images.IMG_healthbar:getHeight(), themes[config.theme].images.IMG_healthbar:getWidth(), themes[config.theme].images.IMG_healthbar:getHeight())
 end)
@@ -202,7 +206,7 @@ function StackBase:moveForRenderIndex(renderIndex)
       self.multiplication = 1
     end
     local centerX = (GAME.globalCanvas:getWidth() / 2)
-    local stackWidth = self:stackCanvasWidth()
+    local stackWidth = self:canvasWidth()
     local innerStackXMovement = 100
     local outerStackXMovement = stackWidth + innerStackXMovement
     self.panelOriginXOffset = 4
@@ -222,10 +226,21 @@ function StackBase:moveForRenderIndex(renderIndex)
     self.panelOriginY = self.frameOriginY + self.panelOriginYOffset
 end
 
-function StackBase:setCanvas()
-  love.graphics.setCanvas(self.canvas)
-  -- we want a transparent background
-  love.graphics.clear(0, 0, 0, 0)
+-- to be used in conjunction with resetDrawArea
+-- sets the draw area for the Stack by defining an area outside of which all draws are cut off
+--   and translating following draws to be relative to the top left origin of the area
+function StackBase:setDrawArea()
+  -- this used to be a canvas instead but turns out switching between canvases can be quite the overhead
+  love.graphics.setScissor(self.frameOriginX * self.gfxScale, self.frameOriginY * self.gfxScale, self.baseWidth * self.gfxScale, self.baseHeight * self.gfxScale)
+  love.graphics.push("transform")
+  love.graphics.translate(self.frameOriginX * self.gfxScale, self.frameOriginY * self.gfxScale)
+end
+
+-- to be used in conjunction with setDrawArea
+-- resets the draw area and removes the translation
+function StackBase:resetDrawArea()
+  love.graphics.pop()
+  love.graphics.setScissor()
 end
 
 function StackBase:drawCharacter()
@@ -252,8 +267,8 @@ function StackBase:drawFrame()
   local frameImage = themes[config.theme].images.frames[self.which]
 
   if frameImage then
-    local scaleX = self.canvas:getWidth() / frameImage:getWidth()
-    local scaleY = self.canvas:getHeight() / frameImage:getHeight()
+    local scaleX = self:canvasWidth() / frameImage:getWidth()
+    local scaleY = self:canvasHeight() / frameImage:getHeight()
     GraphicsUtil.draw(frameImage, 0, 0, 0, scaleX, scaleY)
   end
 end
@@ -291,25 +306,18 @@ function StackBase:drawCountdown()
   end
 end
 
-function StackBase:stackCanvasWidth()
-  local stackCanvasWidth = 0
-  if self.canvas then
-    stackCanvasWidth = math.floor(self.canvas:getWidth())
-  end
-  return stackCanvasWidth
+function StackBase:canvasWidth()
+  return self.baseWidth * self.gfxScale
 end
 
-function StackBase:drawCanvas()
-  love.graphics.setCanvas(GAME.globalCanvas)
-  love.graphics.setBlendMode("alpha", "premultiplied")
-  love.graphics.draw(self.canvas, self.frameOriginX * self.gfxScale, self.frameOriginY * self.gfxScale)
-  love.graphics.setBlendMode("alpha", "alphamultiply")
+function StackBase:canvasHeight()
+  return self.baseHeight * self.gfxScale
 end
 
-function StackBase:drawAbsoluteMultibar(stop_time, shake_time, framePos, barPos, overtimePos)
-  framePos = framePos or themes[config.theme].healthbar_frame_Pos
-  barPos = barPos or themes[config.theme].multibar_Pos
-  overtimePos = overtimePos or themes[config.theme].multibar_LeftoverTime_Pos
+function StackBase:drawAbsoluteMultibar(stop_time, shake_time, pre_stop_time)
+  local framePos = themes[config.theme].healthbar_frame_Pos
+  local barPos = themes[config.theme].multibar_Pos
+  local overtimePos = themes[config.theme].multibar_LeftoverTime_Pos
 
   self:drawLabel(themes[config.theme].images.healthbarFrames.absolute[self.which], framePos, themes[config.theme].healthbar_frame_Scale * (self.gfxScale / 3))
 
@@ -318,6 +326,7 @@ function StackBase:drawAbsoluteMultibar(stop_time, shake_time, framePos, barPos,
   local bottomOffset = 0
 
   local healthHeight = (self.health / multiBarFrameCount) * multiBarMaxHeight
+  healthHeight = math.min(healthHeight, multiBarMaxHeight)
   self:drawBar(themes[config.theme].images.IMG_healthbar, self.healthQuad, barPos, healthHeight, 0, 0, themes[config.theme].multibar_Scale)
 
   bottomOffset = healthHeight
@@ -325,7 +334,7 @@ function StackBase:drawAbsoluteMultibar(stop_time, shake_time, framePos, barPos,
   local stopHeight = 0
   local preStopHeight = 0
 
-  if shake_time > 0 and shake_time > (stop_time + self.pre_stop_time) then
+  if shake_time > 0 and shake_time > (stop_time + pre_stop_time) then
     -- shake is only drawn if it is greater than prestop + stop
     -- shake is always guaranteed to fit
     local shakeHeight = (shake_time / multiBarFrameCount) * multiBarMaxHeight
@@ -338,22 +347,23 @@ function StackBase:drawAbsoluteMultibar(stop_time, shake_time, framePos, barPos,
 
       bottomOffset = bottomOffset + stopHeight
     end
-    if self.pre_stop_time and self.pre_stop_time > 0 then
-      local totalInvincibility = self.health + self.stop_time + self.pre_stop_time
-      local remainingSeconds = 0
-      if totalInvincibility > multiBarFrameCount then
-        -- total invincibility exceeds what the multibar can display -> fill only the remaining space with prestop
-        preStopHeight = (1 - (self.health + stop_time) / multiBarFrameCount) * multiBarMaxHeight
-        remainingSeconds = (totalInvincibility - multiBarFrameCount) / 60
-      else
-        preStopHeight = self.pre_stop_time / multiBarFrameCount * multiBarMaxHeight
-      end
 
+    local totalInvincibility = self.health + stop_time + pre_stop_time
+    local remainingSeconds = 0
+    if totalInvincibility > multiBarFrameCount then
+      -- total invincibility exceeds what the multibar can display -> fill only the remaining space with prestop
+      preStopHeight = (1 - (self.health + stop_time) / multiBarFrameCount) * multiBarMaxHeight
+      remainingSeconds = (totalInvincibility - multiBarFrameCount) / 60
+    else
+      preStopHeight = pre_stop_time / multiBarFrameCount * multiBarMaxHeight
+    end
+
+    if pre_stop_time and pre_stop_time > 0 then
       self:drawBar(themes[config.theme].images.IMG_multibar_prestop_bar, self.multi_prestopQuad, barPos, preStopHeight, bottomOffset, 0, themes[config.theme].multibar_Scale)
+    end
 
-      if remainingSeconds > 0 then
-        self:drawString(string.format("%." .. themes[config.theme].multibar_LeftoverTime_Decimals .. "f", remainingSeconds), overtimePos, false, 20)
-      end
+    if remainingSeconds > 0 then
+      self:drawString(string.format("%." .. themes[config.theme].multibar_LeftoverTime_Decimals .. "f", remainingSeconds), overtimePos, false, 20)
     end
   end
 end

@@ -43,8 +43,8 @@ function CustomRun.sleep()
   -- and only while not profiling for memory allocations
   if not PROFILE_MEMORY and GAME and GAME.battleRoom and GAME.battleRoom.match and GAME.focused and not GAME.battleRoom.match.isPaused then
     local manualGcTime = math.max(0.001, idleTime * config.activeGarbageCollectionPercent)
-    prof.push("manual gc", tostring(manualGcTime * 1000) .. "ms")
-    -- Spend as much time as necessary collecting garbage, but at least 0.1ms
+    prof.push("manual gc")--, tostring(manualGcTime * 1000) .. "ms")
+    -- Spend as much time as necessary collecting garbage, but at least 1ms
     -- manualGc itself has a ceiling at which it will stop
     manualGc(manualGcTime)
     currentTime = love.timer.getTime()
@@ -60,9 +60,12 @@ function CustomRun.sleep()
   -- don't sleep the entire remaining idle time though:
   -- calling sleep means to the OS "sleep for AT LEAST"
   -- that means it is never shorter and usually slightly longer
+  -- SDL2 is limited to ms precision for sleep so only sleep if there is more than 1ms of idle time left
+  -- love internally casts the ms value to int
+  -- SDL3 has ns precision sleep so always specify our sleep as 1ms shorter to increase our odds of not oversleeping
   if idleTime > 0.001 then
-    local sleepTime = idleTime - 0.0005
-    prof.push("sleep", sleepTime * 1000 .. "ms")
+    local sleepTime = idleTime - 0.001
+    prof.push("sleep")--, sleepTime * 1000 .. "ms")
     love.timer.sleep(sleepTime)
     prof.pop("sleep")
   end
@@ -109,6 +112,8 @@ function CustomRun.innerRun()
   if love.timer then
     dt = love.timer.step()
     CustomRun.runMetrics.dt = dt
+
+    leftover_time = (leftover_time - CustomRun.FRAME_RATE + dt) % CustomRun.FRAME_RATE
   end
 
   -- Call update and draw
@@ -181,10 +186,20 @@ end
 -- We have broken it up into calling a inner function so we can change the inner function in the game love file to override behavior
 -- If you change this function also change DefaultLoveRunFunction's equivalent method
 function CustomRun.run()
-  if love.load then love.load(love.parsedGameArguments, love.rawGameArguments) end
+  if love.load then
+    local loveMajor = love.getVersion()
+
+    if loveMajor >= 12 then
+      love.load(love.parsedGameArguments, love.rawGameArguments)
+    else
+      love.load(love.arg.parseGameArguments(arg), arg)
+    end
+  end
 
 	-- We don't want the first frame's dt to include time taken by love.load.
-	if love.timer then love.timer.step() end
+	if love.timer then
+    love.timer.step()
+  end
 
   dt = 0
 

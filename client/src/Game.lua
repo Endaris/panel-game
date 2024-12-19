@@ -353,11 +353,6 @@ end
 -- dt is the amount of time in seconds that has passed.
 function Game:update(dt)
   self.timer = love.timer.getTime()
-  if GAME.navigationStack.transition then
-    leftover_time = leftover_time + dt
-  else
-    leftover_time = 0
-  end
 
   prof.push("battleRoom update")
   if self.battleRoom then
@@ -383,7 +378,7 @@ end
 
 function Game:draw()
   -- Setting the canvas means everything we draw is drawn to the canvas instead of the screen
-  love.graphics.setCanvas(self.globalCanvas)
+  love.graphics.setCanvas({self.globalCanvas, stencil = true})
   love.graphics.setBackgroundColor(unpack(self.backgroundColor))
   love.graphics.clear()
 
@@ -612,7 +607,7 @@ function Game:refreshCanvasAndImagesForNewScale()
   panels_init()
   -- Reload characters to get the new resolution assets
   characters_reload_graphics()
-  
+
   -- Reload loc to get the new font
   self.setLanguage(config.language_code)
 end

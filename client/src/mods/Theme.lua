@@ -2,7 +2,7 @@ local consts = require("common.engine.consts")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local fileUtils = require("client.src.FileUtils")
-local levelPresets = require("client.src.LevelPresets")
+local levelPresets = require("common.engine.LevelPresets")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local ImageContainer = require("client.src.ui.ImageContainer")
 local Music = require("client.src.music.Music")
@@ -44,6 +44,10 @@ Theme =
     self.main_menu_max_height = 0
   end
 )
+
+Theme.TYPE = "theme"
+-- name of the top level save directory for mods of this type
+Theme.SAVE_DIR = "themes"
 
 -- Returns a list of keys and their type allowed in theme config files
 function Theme:configurableKeys() 
@@ -232,7 +236,7 @@ function Theme:loadVersion3DefaultValues()
     self.winLabel_Pos = {318, -246}
     self.win_Scale = 0.75
     self.win_Pos = {260, -112}
-    self.gameover_text_Pos = {640, 620}
+    self.gameover_text_Pos = {640, 60}
     self.healthbar_frame_Pos = {-51, -12}
     self.healthbar_frame_Scale = 1
     self.healthbar_Pos = {-39, 68}
@@ -781,6 +785,32 @@ function Theme:comboImage(comboAmount)
   return cardImage
 end
 
+function Theme:defaultModInit()
+  self:loadDefaultStage()
+end
+
+function Theme:loadDefaultStage()
+  local stagePath = self.path .. "/default/stage"
+  local defaultStage
+  if love.filesystem.getInfo(stagePath, "directory") then
+    defaultStage = require("client.src.mods.Stage")(stagePath, "__default")
+    -- we don't want to do a full json init but we need to find out the music style of the default stage
+    local read_data = fileUtils.readJsonFile(defaultStage.path .. "/config.json")
+    if read_data and read_data.music_style and type(read_data.music_style) == "string" then
+      defaultStage.music_style = read_data.music_style
+    end
+    defaultStage:preload()
+    defaultStage:load(true)
+  elseif self.id ~= consts.DEFAULT_THEME_DIRECTORY then
+    defaultStage = themes[consts.DEFAULT_THEME_DIRECTORY]:loadDefaultStage()
+  else
+    error("No default stage available")
+  end
+
+  self.defaultStage = defaultStage
+  return defaultStage
+end
+
 -- loads a theme into the game
 function Theme:load()
   logger.debug("loading theme " .. self.name)
@@ -788,6 +818,7 @@ function Theme:load()
   self:graphics_init(true)
   self:sound_init(true)
   self:final_init()
+  self:defaultModInit()
   self.fullyLoaded = true
   logger.debug("loaded theme " .. self.name)
 end
@@ -821,6 +852,9 @@ function theme_init()
   themes[consts.DEFAULT_THEME_DIRECTORY] = Theme(Theme.defaultThemeDirectoryPath, consts.DEFAULT_THEME_DIRECTORY)
 
   themes[config.theme]:load()
+  if themes[config.theme].font then
+    GraphicsUtil.setGlobalFont(themes[config.theme].font.path, themes[config.theme].font.size)
+  end
 end
 
 function Theme:playCancelSfx()

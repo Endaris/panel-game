@@ -24,7 +24,6 @@ local Character = require("client.src.mods.Character")
 local Slider = require("client.src.ui.Slider")
 local Carousel = require("client.src.ui.Carousel")
 
--- @module CharacterSelect
 -- The character select screen scene
 local CharacterSelect = class(function(self)
   self.backgroundImg = themes[config.theme].images.bg_select_screen
@@ -250,7 +249,7 @@ local super_select_pixelcode = [[
 function CharacterSelect:getCharacterButtons()
   local characterButtons = {}
 
-  for i = 0, #characters_ids_for_current_theme do
+  for i = 0, #visibleCharacters do
     local characterButton = Button({
       hFill = true,
       vFill = true,
@@ -258,9 +257,9 @@ function CharacterSelect:getCharacterButtons()
 
     local character
     if i == 0 then
-      character = Character.getRandomCharacter()
+      character = Character.getRandom()
     else
-      character = characters[characters_ids_for_current_theme[i]]
+      character = characters[visibleCharacters[i]]
     end
 
     characterButton.characterId = character.id
@@ -462,7 +461,10 @@ function CharacterSelect:createCursor(grid, player)
       cursor:updatePosition(9, 6)
     end
   end
-  self.uiRoot:addChild(cursor)
+
+  player:connectSignal("wantsReadyChanged", cursor, cursor.trap)
+
+  grid:addChild(cursor)
 
   return cursor
 end
@@ -843,6 +845,7 @@ function CharacterSelect:createSpeedSlider(player, height, min)
     value = player.settings.speed,
     onValueChange = function(slider)
       player:setSpeed(slider.value)
+      GAME.theme:playMoveSfx()
     end,
     hAlign = "center",
     vAlign = "center",
@@ -856,6 +859,7 @@ function CharacterSelect:createSpeedSlider(player, height, min)
   Focusable(uiElement)
   uiElement.speedSlider = speedSlider
   uiElement.speedSlider.yieldFocus = function()
+    GAME.theme:playValidationSfx()
     uiElement:yieldFocus()
   end
   uiElement:addChild(speedSlider)
@@ -884,6 +888,7 @@ function CharacterSelect:createDifficultyCarousel(player, height)
 
   difficultyCarousel.onPassengerUpdateCallback = function(carousel, selectedPassenger)
     player:setDifficulty(selectedPassenger.id)
+    GAME.theme:playMoveSfx()
     self:refresh()
   end
 

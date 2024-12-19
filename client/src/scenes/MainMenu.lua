@@ -22,11 +22,9 @@ local DesignHelper = require("client.src.scenes.DesignHelper")
 local TimeAttackGame = require("client.src.scenes.TimeAttackGame")
 local EndlessGame = require("client.src.scenes.EndlessGame")
 local VsSelfGame = require("client.src.scenes.VsSelfGame")
-local Game2pVs = require("client.src.scenes.Game2pVs")
+local GameBase = require("client.src.scenes.GameBase")
 local PuzzleGame = require("client.src.scenes.PuzzleGame")
 
-
--- @module MainMenu
 -- Scene for the main menu
 local MainMenu = class(function(self, sceneParams)
   self.music = "main"
@@ -77,7 +75,7 @@ function MainMenu:createMainMenu()
       switchToScene(Lobby({serverIp = "panelattack.com"}))
     end),
     MenuItem.createButtonMenuItem("mm_2_vs_local", nil, nil, function()
-      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("TWO_PLAYER_VS"), Game2pVs)
+      GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("TWO_PLAYER_VS"), GameBase)
       if GAME.battleRoom then
         switchToScene(CharacterSelect2p())
       end
@@ -180,15 +178,29 @@ function MainMenu:draw()
     if updateAvailable then
       version = "New " .. GAME.updater.activeReleaseStream.name .. " version available! Restart the game to download!"
     else
-      version = "PA Version: " .. GAME.updater.activeReleaseStream.name .. " " .. (GAME.updater.activeVersion and GAME.updater.activeVersion.version or "dev")
+      if DEBUG_ENABLED then
+        version = "PA Version: debug"
+      else
+        version = "PA Version: " .. GAME.updater.activeReleaseStream.name .. " " .. (GAME.updater.activeVersion and GAME.updater.activeVersion.version or "dev")
+      end
     end
     GraphicsUtil.printf(version, -5, infoYPosition, consts.CANVAS_WIDTH, "right")
     infoYPosition = infoYPosition - fontHeight
 
-    if GAME.updater.version.major < 1 then
-      GraphicsUtil.printf(loc("auto_updater_version_warning") .. " https://panelattack.com", -5, infoYPosition, consts.CANVAS_WIDTH, "right")
-      infoYPosition = infoYPosition - fontHeight
-    elseif GAME.updater.version.major == 1 and GAME.updater.version.minor < 1 then
+
+    local showUpdaterUpdateWarning = false
+    if GAME.updater.version.major < 1 or (GAME.updater.version.major == 1 and GAME.updater.version.minor < 1) then
+      showUpdaterUpdateWarning = true
+    elseif GAME.updater.version.major == 1 and GAME.updater.version.minor < 2 then
+      local _, _, vendor, _ = love.graphics.getRendererInfo( )
+      local systemIsAffected = (love.system.getOS() == "Windows" and (vendor == "ATI Technologies Inc." or vendor == "AMD"))
+      -- only contains a startup fix for the related systems so everyone else shouldn't have to update
+      if systemIsAffected then
+        showUpdaterUpdateWarning = true
+      end
+    end
+
+    if showUpdaterUpdateWarning then
       GraphicsUtil.printf(loc("auto_updater_version_warning") .. " https://panelattack.com", -5, infoYPosition, consts.CANVAS_WIDTH, "right")
       infoYPosition = infoYPosition - fontHeight
     end

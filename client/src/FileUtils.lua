@@ -1,8 +1,8 @@
 local logger = require("common.lib.logger")
+local Replay = require("common.engine.Replay")
 
 local PREFIX_OF_IGNORED_DIRECTORIES = "__"
 
---@module FileUtils
 -- Collection of functions for file operations
 local fileUtils = {}
 
@@ -137,7 +137,7 @@ end
 
 function fileUtils.soundFileExists(soundName, path)
   for _, extension in pairs(SUPPORTED_SOUND_FORMATS) do
-    if love.filesystem.exists(path .. "/" .. soundName .. extension) then
+    if love.filesystem.getInfo(path .. "/" .. soundName .. extension, "file") then
       return true
     end
   end
@@ -146,9 +146,40 @@ function fileUtils.soundFileExists(soundName, path)
 end
 
 function fileUtils.saveTextureToFile(texture, filePath, format)
-  local imageData = love.graphics.readbackTexture(texture)
+  local loveMajor = love.getVersion()
+
+  local imageData
+  if loveMajor >= 12 then
+    imageData = love.graphics.readbackTexture(texture)
+  else
+    -- this code branch is untested but the function is also not used in production at the moment
+    if texture:typeOf("Canvas") then
+      imageData = texture:newImageData()
+    else
+      local canvas = love.graphics.newCanvas(texture:getDimensions())
+      local currentCanvas = love.graphics.getCanvas()
+      love.graphics.setCanvas(canvas)
+      love.graphics.draw(texture)
+      love.graphics.setCanvas(currentCanvas)
+      imageData = canvas:newImageData()
+    end
+  end
+
   local data = imageData:encode(format)
   love.filesystem.write(filePath .. "." .. format, data)
+end
+
+function fileUtils.saveReplay(replay)
+  local path = replay:generatePath("/")
+  local filename = replay:generateFileName()
+  local replayJson = json.encode(replay)
+  Replay.lastPath = path
+  pcall(
+    function()
+      love.filesystem.createDirectory(path)
+      love.filesystem.write(path .. "/" .. filename .. ".json", replayJson)
+    end
+  )
 end
 
 return fileUtils

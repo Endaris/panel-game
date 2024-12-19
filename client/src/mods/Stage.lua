@@ -22,7 +22,6 @@ local basic_musics = {}
 local other_musics = {"normal_music", "danger_music", "normal_music_start", "danger_music_start"}
 local defaulted_musics = {} -- those musics will be defaulted if missing
 
-local default_stage = nil -- holds default assets fallbacks
 local randomStage = nil -- acts as the bundle stage for all theme stages
 
 local Stage =
@@ -31,17 +30,17 @@ local Stage =
     s.path = full_path -- string | path to the stage folder content
     s.id = folder_name -- string | id of the stage, specified in config.json
     s.display_name = s.id -- string | display name of the stage
-    s.sub_stages = {} -- string | either empty or with two elements at least; holds the sub stages IDs for bundle stages
     s.images = {} -- images 
     s.musics = {} -- music
-    s.fully_loaded = false
-    s.is_visible = true
     s.music_style = "normal"
     s.stageTrack = nil
-    s.TYPE = "stage"
   end,
   Mod
 )
+
+Stage.TYPE = "stage"
+-- name of the top level save directory for mods of this type
+Stage.SAVE_DIR = "stages"
 
 function Stage.json_init(self)
   local read_data = fileUtils.readJsonFile(self.path .. "/config.json")
@@ -52,7 +51,7 @@ function Stage.json_init(self)
 
       -- sub ids for bundles
       if read_data.sub_ids and type(read_data.sub_ids) == "table" then
-        self.sub_stages = read_data.sub_ids
+        self.subIds = read_data.sub_ids
       end
 
       -- display name
@@ -61,9 +60,9 @@ function Stage.json_init(self)
       end
       -- is visible
       if read_data.visible ~= nil and type(read_data.visible) == "boolean" then
-        self.is_visible = read_data.visible
+        self.isVisible = read_data.visible
       elseif read_data.visible and type(read_data.visible) == "string" then
-        self.is_visible = read_data.visible == "true"
+        self.isVisible = read_data.visible == "true"
       end
 
       --music style
@@ -89,7 +88,7 @@ end
 function Stage.load(self, instant)
   self:graphics_init(true, (not instant))
   self:sound_init(true, (not instant))
-  self.fully_loaded = true
+  self.fullyLoaded = true
   logger.debug("loaded stage " .. self.id)
 end
 
@@ -98,46 +97,57 @@ function Stage.unload(self)
   logger.debug("unloading stage " .. self.id)
   self:graphics_uninit()
   self:sound_uninit()
-  self.fully_loaded = false
+  self.fullyLoaded = false
   logger.debug("unloaded stage " .. self.id)
 end
 
 -- for reloading the graphics if the window was resized
 function stages_reload_graphics()
-  -- lazy load everything
-  for _, stage in pairs(stages) do
-    stage:graphics_init(false, false)
-  end
-  require("client.src.mods.StageLoader").loadBundleThumbnails()
+  if stages then
+    -- lazy load everything
+    for _, stage in pairs(stages) do
+      stage:graphics_init(false, false)
+    end
+    require("client.src.mods.StageLoader").loadBundleThumbnails()
 
-  -- reload the current stage graphics immediately
-  local match = GAME.battleRoom and GAME.battleRoom.match
-  if match and match.stageId then
-    if stages[match.stageId] then
-      stages[match.stageId]:graphics_init(true, false)
-      -- for reasons, this is not drawn directly from the stage but from background image
-      -- so override this while in a match
-      GAME.backgroundImage = UpdatingImage(stages[match.stageId].images.background, false, 0, 0, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
+    -- reload the current stage graphics immediately
+    local match = GAME.battleRoom and GAME.battleRoom.match
+    if match and match.stageId then
+      if stages[match.stageId] then
+        stages[match.stageId]:graphics_init(true, false)
+        -- for reasons, this is not drawn directly from the stage but from background image
+        -- so override this while in a match
+        GAME.backgroundImage = UpdatingImage(stages[match.stageId].images.background, false, 0, 0, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
+      end
     end
   end
 end
 
--- whether or not a stage is part of a bundle or not
-function Stage.is_bundle(self)
-  return #self.sub_stages > 1
-end
-
 function Stage:getSubMods()
   local m = {}
-  for _, id in ipairs(self.sub_stages) do
-    m[#m + 1] = stages[id]
+  for _, id in ipairs(self.subIds) do
+    if stages[id] then
+      m[#m + 1] = stages[id]
+    end
   end
+  return m
 end
 
-function Stage.loadDefaultStage()
-  default_stage = Stage("client/assets/stages/__default", "__default")
-  default_stage:preload()
-  default_stage:load(true)
+function Stage:enable(enable)
+  if enable and not stages[self.id] then
+    stages[self.id] = self
+    visibleStages[#visibleStages+1] = self.id
+  elseif not enable and stages[self.id] then
+    local i = tableUtils.indexOf(visibleStages, self.id)
+    table.remove(visibleStages, i)
+    stages[self.id] = nil
+  end
+
+  require("client.src.mods.ModLoader").updateBlacklist(self, enable)
+end
+
+function Stage.loadDefaultMod()
+  themes[config.theme]:loadDefaultStage()
 end
 
 -- initalizes stage graphics
@@ -145,8 +155,8 @@ function Stage.graphics_init(self, full, yields)
   local stage_images = full and allImages or basic_images
   for _, image_name in ipairs(stage_images) do
     self.images[image_name] = GraphicsUtil.loadImageFromSupportedExtensions(self.path .. "/" .. image_name)
-    if not self.images[image_name] and defaulted_images[image_name] and not self:is_bundle() then
-      self.images[image_name] = default_stage.images[image_name]
+    if not self.images[image_name] and defaulted_images[image_name] and not self:isBundle() then
+      self.images[image_name] = themes[config.theme].defaultStage.images[image_name]
       if not self.images[image_name] then
         error("Could not find default stage image")
       end
@@ -158,12 +168,12 @@ function Stage.graphics_init(self, full, yields)
 end
 
 -- bundles without stage thumbnail display up to 4 thumbnails of their substages
-function Stage:createThumbnail()
+function Stage:createBundleThumbnail()
   local canvas = love.graphics.newCanvas(2 * 80, 2 * 45)
   canvas:renderTo(function()
-    for i, substageId in ipairs(self.sub_stages) do
-      if i <= 4 then
-        local stage = stages[substageId]
+    for i, substageId in ipairs(self.subIds) do
+      if i <= 4 and (stages[substageId] or (allStages[substageId] and #self:getSubMods() == 0)) then
+        local stage = allStages[substageId]
         local x = 0
         local y = 0
         if i % 2 == 0 then
@@ -196,7 +206,8 @@ end
 
 -- initializes stage music
 function Stage.sound_init(self, full, yields)
-  if self:is_bundle() then
+  self.hasMusic = fileUtils.soundFileExists("normal_music", self.path)
+  if self:isBundle() then
     return
   end
   local stage_musics = full and other_musics or basic_musics
@@ -211,7 +222,7 @@ function Stage.sound_init(self, full, yields)
         self.musics[music]:setLooping(false)
       end
     elseif not self.musics[music] and defaulted_musics[music] then
-      self.musics[music] = default_stage.musics[music] or themes[config.theme].zero_sound
+      self.musics[music] = themes[config.theme].zero_sound
     end
 
     if yields then
@@ -264,18 +275,26 @@ function Stage:validate()
   end
 end
 
-local function loadRandomStage()
+local function loadRandomStage(visibleStages)
   local randomStage = Stage("stages/__default", consts.RANDOM_STAGE_SPECIAL_VALUE)
-  randomStage.images["thumbnail"] = themes[config.theme].images.IMG_random_stage
+  randomStage.images.thumbnail = themes[config.theme].images.IMG_random_stage
   randomStage.display_name = "random"
-  randomStage.sub_stages = stages_ids_for_current_theme
+  randomStage.subIds = visibleStages
+  -- we need to shadow some stage functions to correct load behaviour for the random stage
   randomStage.preload = function() end
+  randomStage.load = function() end
+  randomStage.unload = function() end
+  randomStage.graphics_init = function(stage, full, yields)
+    stage.images.thumbnail = themes[config.theme].images.IMG_random_stage
+  end
   return randomStage
 end
 
-function Stage.getRandomStage()
+function Stage.getRandom(visibleStages)
   if not randomStage then
-    randomStage = loadRandomStage()
+    randomStage = loadRandomStage(visibleStages)
+  elseif visibleStages then
+    randomStage.subIds = visibleStages
   end
 
   return randomStage

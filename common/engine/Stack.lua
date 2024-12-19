@@ -17,6 +17,7 @@ local class = require("common.lib.class")
 local Panel = require("common.engine.Panel")
 local GarbageQueue = require("common.engine.GarbageQueue")
 local prof = require("common.lib.jprof.jprof")
+local LevelData = require("common.engine.LevelData")
 
 -- Stuff defined in this file:
 --  . the data structures that store the configuration of
@@ -74,7 +75,7 @@ Stack =
 
     local inputMethod = arguments.inputMethod or "controller" --"touch" or "controller"
     local player_number = arguments.player_number or which
-  
+
     local character = arguments.character or config.character
     local theme = arguments.theme or themes[config.theme]
     s.allowAdjacentColors = arguments.allowAdjacentColors
@@ -106,7 +107,7 @@ Stack =
     s.level = level
     s.levelData = levelData
     s.speed = s.levelData.startingSpeed
-    if s.levelData.speedIncreaseMode == 1 then
+    if s.levelData.speedIncreaseMode == LevelData.SPEED_INCREASE_MODES.TIME_INTERVAL then
       -- mode 1: increase speed based on fixed intervals
       s.nextSpeedIncreaseClock = DT_SPEED_INCREASE
     else
@@ -148,6 +149,8 @@ Stack =
     -- used for giving a unique identifier to each new garbage block
     s.garbageCreatedCount = 0
     s.garbageLandedThisFrame = {}
+    -- tracks the highest id of garbage matched so far; used for resolving edge cases when matching offscreen garbage
+    s.highestGarbageIdMatched = 0
     -- The number of individual panels created on this stack
     -- used for giving new panels their own unique identifier
     s.panelsCreatedCount = 0
@@ -222,7 +225,7 @@ Stack =
     s.cur_col = 3 -- the column the left half of the cursor's on
     s.queuedSwapColumn = 0 -- the left column of the two columns to swap or 0 if no swap queued
     s.queuedSwapRow = 0 -- the row of the queued swap or 0 if no swap queued
-    s.top_cur_row = s.height + (s.puzzle and 0 or -1)
+    s.top_cur_row = s.height - 1
 
     s.poppedPanelIndex = s.poppedPanelIndex or 1
     s.panels_cleared = s.panels_cleared or 0
@@ -440,6 +443,7 @@ function Stack.rollbackCopy(source, other)
   other.panels_cleared = source.panels_cleared
   other.danger_timer = source.danger_timer
   other.game_over_clock = source.game_over_clock
+  other.highestGarbageIdMatched = source.highestGarbageIdMatched
   prof.pop("rollback copy the rest")
   prof.push("rollback copy analytics")
   other.analytic = deepcpy(source.analytic)
@@ -553,7 +557,7 @@ end
 -- frameOriginX
 -- frameOriginY
 -- mirror_x
--- stackCanvasWidth
+-- canvasWidth
 function Stack.setGarbageTarget(self, newGarbageTarget)
   if newGarbageTarget ~= nil then
     -- the abstract notion of a garbage target
@@ -561,7 +565,7 @@ function Stack.setGarbageTarget(self, newGarbageTarget)
     assert(newGarbageTarget.frameOriginX ~= nil)
     assert(newGarbageTarget.frameOriginY ~= nil)
     assert(newGarbageTarget.mirror_x ~= nil)
-    assert(newGarbageTarget.stackCanvasWidth ~= nil)
+    assert(newGarbageTarget.canvasWidth ~= nil)
     assert(newGarbageTarget.incomingGarbage ~= nil)
   end
   self.garbageTarget = newGarbageTarget
@@ -584,6 +588,8 @@ function Stack.set_puzzle_state(self, puzzle)
   puzzle.stack = puzzle:fillMissingPanelsInPuzzleString(self.width, self.height)
 
   self.puzzle = puzzle
+  -- by default row 12 is initially blocked so unblock it for puzzles
+  self.top_cur_row = self.height
   self:setPanelsForPuzzleString(puzzle.stack)
   self.do_countdown = puzzle.doCountdown or false
   self.puzzle.remaining_moves = puzzle.moves
@@ -618,7 +624,7 @@ end
 
 function Stack.setPanelsForPuzzleString(self, puzzleString)
   local panels = self.panels
-  local garbageId = 0
+
   local garbageStartRow = nil
   local garbageStartColumn = nil
   local isMetal = false
@@ -642,13 +648,16 @@ function Stack.setPanelsForPuzzleString(self, puzzleString)
               garbageStartRow = row
               garbageStartColumn = column
               connectedGarbagePanels = {}
+              -- use the stack prop to avoid collisions in garbage id
+              self.garbageCreatedCount = self.garbageCreatedCount + 1
               if color == "}" then
                 isMetal = true
+              else
+                isMetal = false
               end
             end
             local panel = self:createPanelAt(row, column)
-            panel.garbageId = garbageId
-            garbageId = garbageId + 1
+            panel.garbageId = self.garbageCreatedCount
             panel.isGarbage = true
             panel.color = 9
             panel.y_offset = row - garbageStartRow
@@ -670,7 +679,7 @@ function Stack.setPanelsForPuzzleString(self, puzzleString)
                 connectedGarbagePanels[i].height = height
                 connectedGarbagePanels[i].width = width
                 connectedGarbagePanels[i].shake_time = shake_time
-                connectedGarbagePanels[i].garbageId = garbageId
+                connectedGarbagePanels[i].garbageId = self.garbageCreatedCount
                 -- panels are already in the main table and they should already be updated by reference
               end
               garbageStartRow = nil
@@ -1304,6 +1313,8 @@ function Stack.simulate(self)
         end
       elseif not self.manual_raise_yet then
         self.manual_raise = false
+      elseif self:has_falling_garbage() then
+        self.manual_raise = false
       end
     -- if the stack is rise locked when you press the raise button,
     -- the raising is cancelled
@@ -1916,6 +1927,10 @@ function Stack:getAttackPatternData()
 end
 
 -- creates a new panel at the specified row+column and adds it to the Stack's panels table
+---@param self table
+---@param row integer
+---@param column integer
+---@return Panel panel New Panel at the specified row+column that has been added to the Stack's panels table and subscribed to for signals
 function Stack.createPanelAt(self, row, column)
   self.panelsCreatedCount = self.panelsCreatedCount + 1
   local panel = Panel(self.panelsCreatedCount, row, column, self.levelData.frameConstants)
@@ -1926,6 +1941,7 @@ function Stack.createPanelAt(self, row, column)
   return panel
 end
 
+---@param panel Panel
 function Stack.onPop(self, panel)
   if panel.isGarbage then
     if config.popfx == true then
@@ -1961,12 +1977,14 @@ function Stack.onPop(self, panel)
   end
 end
 
+---@param panel Panel
 function Stack.onPopped(self, panel)
   if self.panels_to_speedup then
     self.panels_to_speedup = self.panels_to_speedup - 1
   end
 end
 
+---@param panel Panel
 function Stack.onLand(self, panel)
   if panel.isGarbage then
     self:onGarbageLand(panel)
@@ -1977,6 +1995,7 @@ function Stack.onLand(self, panel)
   end
 end
 
+---@param panel Panel
 function Stack.onGarbageLand(self, panel)
   if panel.shake_time
     -- only parts of the garbage that are on the visible board can be considered for shake
