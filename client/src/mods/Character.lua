@@ -200,7 +200,6 @@ end
 local function loadRandomCharacter(visibleCharacters)
   local randomCharacter = Character("characters/__default", consts.RANDOM_CHARACTER_SPECIAL_VALUE)
   randomCharacter.images["icon"] = themes[config.theme].images.IMG_random_character
-  randomCharacter.sounds["selection"] = {}
   randomCharacter.display_name = "random"
   randomCharacter.subIds = visibleCharacters
   -- we need to shadow some character functions to correct load behaviour for the random character
@@ -587,7 +586,7 @@ function Character.reassignLegacySfx(self)
 
   if #self.sounds.shock > 0 then
     -- combo_echo won't get used if shock is present, so it shouldn't show up in sound test any longer
-    self.sounds.combo_echo = {}
+    self.sounds.combo_echo = nil
   end
 end
 
@@ -671,8 +670,8 @@ function Character.fillInMissingSounds(self, sfxTable,  name, maxIndex)
       if i >= perSizeSfxStart[name] then
         sfxTable[i] = fillUpSound
       else
-        -- leave it empty so it doesn't show up in sound test
-        sfxTable[i] = {}
+        -- leave it empty
+        sfxTable[i] = nil
       end
     end
   end
@@ -717,6 +716,7 @@ function Character.playComboSfx(self, size)
       self.sounds.combo[rolledIndex]:play()
     else
       -- use fallback sound if the combo size is higher than the highest combo sfx
+      -- an alternative scenario is if in per_combo style the shock sfx redirects here for a 3 shock match
       if self.sounds.combo[size] then
         self.sounds.combo[size]:play()
       else
@@ -763,7 +763,7 @@ function Character.playAttackSfx(self, attack)
       for _, v in pairs(self.sounds.shock) do
         SoundController:stopSfx(v)
       end
-    else
+    elseif self.sounds.combo_echo then
       SoundController:stopSfx(self.sounds.combo_echo)
     end
 
