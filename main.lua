@@ -29,6 +29,23 @@ end
 -- Called at the beginning to load the game
 -- Either called directly or from auto_updater
 function love.load(args, rawArgs)
+  local betaIdPath = "servers/betaserver.panelattack.com/user_id.txt"
+  local fileInfo = love.filesystem.getInfo(betaIdPath, "file")
+
+  if fileInfo then
+    -- The timestamp for October 9th, 2024
+    local cutoffTime = os.time({year = 2024, month = 9, day = 24, hour = 0, min = 0, sec = 0})
+
+    if not fileInfo.modtime then
+      love.filesystem.remove(betaIdPath)
+    elseif fileInfo.modtime < cutoffTime then
+      -- The file was edited before October 9th, 2024
+      love.filesystem.remove(betaIdPath)
+    else
+      -- We got a freshly edited user ID, so we can keep it!
+    end
+  end
+
   love.keyboard.setTextInput(false)
 
   -- there is a bug on windows that causes the game to start with a size equal to the desktop causing the window handle to be offscreen
