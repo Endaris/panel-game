@@ -72,7 +72,7 @@ function MainMenu:createMainMenu()
       switchToScene(ChallengeModeMenu())
     end),
     MenuItem.createButtonMenuItem("mm_2_vs_online", {""}, nil, function()
-      switchToScene(Lobby({serverIp = "panelattack.com"}))
+      switchToScene(Lobby({serverIp = "betaserver.panelattack.com", serverPort = 59569}))
     end),
     MenuItem.createButtonMenuItem("mm_2_vs_local", nil, nil, function()
       GAME.battleRoom = BattleRoom.createLocalFromGameMode(GameModes.getPreset("TWO_PLAYER_VS"), GameBase)
@@ -106,7 +106,7 @@ function MainMenu:createMainMenu()
 
   local menu = Menu.createCenteredMenu(menuItems)
 
-  local debugMenuItems = {MenuItem.createButtonMenuItem("Beta Server", nil, nil, function() switchToScene(Lobby({serverIp = "betaserver.panelattack.com", serverPort = 59569})) end),
+  local debugMenuItems = {--MenuItem.createButtonMenuItem("Beta Server", nil, nil, function() switchToScene(Lobby({serverIp = "betaserver.panelattack.com", serverPort = 59569})) end),
                           MenuItem.createButtonMenuItem("Localhost Server", nil, nil, function() switchToScene(Lobby({serverIp = "Localhost"})) end)
                         }
 
