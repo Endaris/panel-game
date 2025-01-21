@@ -104,8 +104,9 @@ local function processGameResultMessage(self, message)
     roomPlayer:setWinCount(messagePlayer.winCount)
 
     if messagePlayer.ratingInfo then
-      roomPlayer:setRating(messagePlayer.ratingInfo.new)
-      roomPlayer:setLeague(messagePlayer.ratingInfo.league)
+      local ratingInfo = messagePlayer.ratingInfo
+      roomPlayer:setRating(ratingInfo.placement_match_progress or ratingInfo.new)
+      roomPlayer:setLeague(ratingInfo.league)
     end
   end
 
@@ -542,7 +543,7 @@ function NetClient:update()
       else
         self.loginState = result.message
         self:setState(states.OFFLINE)
-        end
+      end
       self:emitSignal("loginFinished", result)
     end
   end
