@@ -31,6 +31,7 @@ function system.isCompatible()
   return true
 end
 
+---@return boolean
 function system.supportsFileBrowserOpen()
   local osString = love.system.getOS()
 
@@ -42,6 +43,7 @@ function system.supportsFileBrowserOpen()
   return true
 end
 
+---@return boolean
 function system.supportsSaveDirectoryOpen()
   local osString = love.system.getOS()
 
@@ -52,6 +54,7 @@ function system.supportsSaveDirectoryOpen()
   return system.supportsFileBrowserOpen()
 end
 
+---@return string
 function system.getPathSeparator()
   return package.config:sub(1, 1)
 end
@@ -66,6 +69,24 @@ function system.startDebugger()
     require("mobdebug").start()
     require('mobdebug').coro()
   end
+end
+
+local loveVersionStringValue = nil
+
+---@return string
+function system.loveVersionString()
+  if loveVersionStringValue then
+    return loveVersionStringValue
+  end
+  local major, minor, revision, codename = love.getVersion()
+
+  loveVersionStringValue = string.format("%d.%d.%d", major, minor, revision)
+  return loveVersionStringValue
+end
+
+---@return string
+function system.getOsInfo()
+  return "OS: " .. (love.system.getOS() or "Unknown")
 end
 
 return system

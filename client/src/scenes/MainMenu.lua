@@ -18,6 +18,7 @@ local InputConfigMenu = require("client.src.scenes.InputConfigMenu")
 local SetNameMenu = require("client.src.scenes.SetNameMenu")
 local OptionsMenu = require("client.src.scenes.OptionsMenu")
 local DesignHelper = require("client.src.scenes.DesignHelper")
+local system = require("client.src.system")
 
 local TimeAttackGame = require("client.src.scenes.TimeAttackGame")
 local EndlessGame = require("client.src.scenes.EndlessGame")
@@ -167,7 +168,7 @@ function MainMenu:draw()
   local fontHeight = GraphicsUtil.getGlobalFont():getHeight()
   local infoYPosition = 705 - fontHeight / 2
 
-  local loveString = GAME:loveVersionString()
+  local loveString = system.loveVersionString()
   if loveString == "11.3.0" then
     GraphicsUtil.printf(loc("love_version_warning"), -5, infoYPosition, consts.CANVAS_WIDTH, "right")
     infoYPosition = infoYPosition - fontHeight

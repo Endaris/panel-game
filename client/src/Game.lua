@@ -425,8 +425,8 @@ function Game:drawScaleInfo()
 end
 
 function Game.errorData(errorString, traceBack)
-  local systemInfo = "OS: " .. (love.system.getOS() or "Unknown")
-  local loveVersion = Game.loveVersionString() or "Unknown"
+  local systemInfo = system.getOsInfo()
+  local loveVersion = system.loveVersionString()
   local username = config.name or "Unknown"
   local buildVersion
   if GAME.updater then
@@ -529,17 +529,6 @@ function Game.detailedErrorLogString(errorData)
     end
 
   return detailedErrorLogString
-end
-
-local loveVersionStringValue = nil
-
-function Game.loveVersionString()
-  if loveVersionStringValue then
-    return loveVersionStringValue
-  end
-  local major, minor, revision, codename = love.getVersion()
-  loveVersionStringValue = string.format("%d.%d.%d", major, minor, revision)
-  return loveVersionStringValue
 end
 
 -- Calculates the proper dimensions to not stretch the game for various sizes
