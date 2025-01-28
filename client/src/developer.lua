@@ -1,4 +1,4 @@
--- Put any local development changes you need in here that you don't want commited.
+local system = require("client.src.system")
 
 local function enableProfiler()
   PROF_CAPTURE = true
@@ -9,10 +9,8 @@ end
 
 for _, value in pairs(arg) do
   if value == "debug" then
-    if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
-      require("lldebugger").start()
-      DEBUG_ENABLED = 1
-    end
+    DEBUG_ENABLED = 1
+    system.startDebugger()
   elseif value == "profileFrameTimes" then
     enableProfiler()
 

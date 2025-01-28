@@ -25,6 +25,7 @@ local SoundController = require("client.src.music.SoundController")
 require("client.src.BattleRoom")
 local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
+local system = require("client.src.system")
 
 local RichPresence = require("client.lib.rich_presence.RichPresence")
 
@@ -126,17 +127,12 @@ function Game:load()
 end
 
 local function detectHardwareProblems()
-  local OS = love.system.getOS()
-  if OS == "Windows" then
-    local version, vendor = select(2, love.graphics.getRendererInfo())
-    if vendor == "ATI Technologies Inc." and
-		(version:find("22.7.1", 1, true) or version:find(".2207", 1, true)) then
-      love.window.showMessageBox(
-        "AMD driver 22.7.1 detected",
-        "AMD driver 22.7.1 is known to have problems with running LÖVE (this includes Panel Attack). If the game fails to render its visuals, it is recommended to upgrade or downgrade your AMD GPU drivers.",
-        "warning"
-      )
-    end
+  local compatible, problem, reason = system.isCompatible()
+
+  if not compatible then
+    ---@cast problem -nil
+    ---@cast reason -nil
+    love.window.showMessageBox(problem, reason, "warning")
   end
 end
 

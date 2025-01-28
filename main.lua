@@ -13,6 +13,7 @@ local prof = require("common.lib.jprof.jprof")
 local Replay = require("common.data.Replay")
 require("common.lib.util")
 local consts = require("common.engine.consts")
+local system = require("client.src.system")
 
 local Game = require("client.src.Game")
 -- move to load once global dependencies have been resolved
@@ -37,7 +38,7 @@ function love.load(args, rawArgs)
   local desktopWidth, desktopHeight = love.window.getDesktopDimensions(displayIndex)
   local w, windowHeight, flags = love.window.getMode()
 
-  if not flags.fullscreen and not flags.borderless and love.system.getOS() ~= "Android" then
+  if not flags.fullscreen and not flags.borderless and not system.isMobileOS() then
     if y == 0 and windowHeight >= desktopHeight then
       if love.window.isMaximized() then
         love.window.restore()
