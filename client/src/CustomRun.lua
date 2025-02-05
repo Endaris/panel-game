@@ -1,5 +1,5 @@
 local manualGc = require("client.lib.batteries.manual_gc")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 
 local CustomRun = {}
 CustomRun.FRAME_RATE = 1 / 60
@@ -47,7 +47,7 @@ function CustomRun.sleep()
     prof.push("manual gc")--, tostring(manualGcTime * 1000) .. "ms")
     -- Spend as much time as necessary collecting garbage, but at least 1ms
     -- manualGc itself has a ceiling at which it will stop
-    manualGc(manualGcTime)
+    manualGc(manualGcTime, nil, true)
     currentTime = love.timer.getTime()
     CustomRun.runMetrics.gcDuration = currentTime - originalTime
     originalTime = currentTime

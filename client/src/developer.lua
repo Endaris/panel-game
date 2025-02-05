@@ -1,7 +1,9 @@
 -- Put any local development changes you need in here that you don't want commited.
 
-local function enableProfiler()
-  PROF_CAPTURE = true
+local function enableProfiler(t)
+  local profiler = require("common.lib.zoneProfiler")
+  profiler.enable(true)
+  profiler.setDurationFilter(t)
   -- we want to optimize in a way that our weakest platforms benefit
   -- on our weakest platform (android), jit is default disabled
   jit.off()
@@ -14,13 +16,13 @@ for _, value in pairs(arg) do
       DEBUG_ENABLED = 1
     end
   elseif value == "profileFrameTimes" then
-    enableProfiler()
+    enableProfiler(0.018)
 
-    if not collectgarbage("isrunning") then
-      collectgarbage("restart")
-    end
+    -- if not collectgarbage("isrunning") then
+    --   collectgarbage("restart")
+    -- end
   elseif value == "profileMemory" then
-    enableProfiler()
+    enableProfiler(0.018)
     -- the garbage collector is a primary source of frame spikes
     -- thus one goal of profiling is to identify where memory is allocated
     -- because the less memory is allocated, the less the garbage collector runs 

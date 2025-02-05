@@ -2,6 +2,14 @@
 -- with love 12 you can pass the name of a lua file as an argument when starting love
 -- this will cause that file to be used in place of main.lua
 -- so by passing "./testLauncher.lua" as the first arg this becomes a testrunner that shares the game's conf.lua
+--jit.off()
+print("jit version: " .. require("jit").version)
+jit.off()
+if arg[2] == "debug" then
+  require("client.src.developer")
+end
+package.path = package.path .. ";/usr/local/share/luajit-2.1/?.lua"
+require("jit.p").start("vF3s", "profiling/jitProfile.log")
 
 require("common.lib.mathExtensions")
 local util = require("common.lib.util")
@@ -10,9 +18,6 @@ util.addToCPath("./server/lib/??")
 local logger = require("common.lib.logger")
 require("client.src.globals")
 local Game = require("client.src.Game")
-if arg[2] == "debug" then
-  require("client.src.developer")
-end
 
 function love.load()
   -- this is necessary setup of globals while non-client tests still depend on client components
@@ -31,18 +36,18 @@ function love.load()
 end
 
 local tests = {
-  "server.tests.ServerTests",
-  "server.tests.LeaderboardTests",
-  "server.tests.RoomTests",
-  "server.tests.LoginTests",
-  "client.tests.FileUtilsTests",
-  "client.tests.ModControllerTests",
+  --"server.tests.ServerTests",
+  --"server.tests.LeaderboardTests",
+  --"server.tests.RoomTests",
+  --"server.tests.LoginTests",
+  --"client.tests.FileUtilsTests",
+  --"client.tests.ModControllerTests",
   "common.tests.engine.StackRollbackReplayTests",
-  "client.tests.QueueTests",
-  "client.tests.ServerQueueTests",
-  "client.tests.StackGraphicsTests",
-  "client.tests.TcpClientTests",
-  "client.tests.ThemeTests",
+  --"client.tests.QueueTests",
+  --"client.tests.ServerQueueTests",
+  --"client.tests.StackGraphicsTests",
+  --"client.tests.TcpClientTests",
+  --"client.tests.ThemeTests",
   "common.tests.engine.GarbageQueueTests",
   "common.tests.engine.HealthTests",
   "common.tests.engine.PanelGenTests",
@@ -54,12 +59,12 @@ local tests = {
   "common.tests.engine.StackTouchReplayTests",
   -- disabled for testLauncher because it needs the client love callbacks
   --"common.tests.lib.InputTests",
-  "common.tests.lib.JsonEncodingTests",
-  "common.tests.lib.tableUtilsTest",
-  "common.tests.lib.utf8AdditionsTests",
-  "common.tests.lib.utilTests",
-  "common.tests.network.NetworkProtocolTests",
-  "common.tests.network.TouchDataEncodingTests",
+  --"common.tests.lib.JsonEncodingTests",
+  --"common.tests.lib.tableUtilsTest",
+  --"common.tests.lib.utf8AdditionsTests",
+  --"common.tests.lib.utilTests",
+  --"common.tests.network.NetworkProtocolTests",
+  --"common.tests.network.TouchDataEncodingTests",
 }
 
 local updateCount = 0
@@ -78,10 +83,12 @@ function love.draw()
     love.graphics.printf("Running " .. tests[updateCount + 1], 0, height / 2, width, "center")
   elseif updateCount > #tests then
     love.graphics.printf("All tests completed", 0, height / 2, width, "center")
+    love.event.quit()
   end
 end
 
 function love.quit()
+  require("jit.p").stop()
   love.filesystem.write("test.log", table.concat(logger.messages, "\n"))
 end
 

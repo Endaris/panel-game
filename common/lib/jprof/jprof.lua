@@ -23,6 +23,8 @@ local profiler = {}
 -- the memory consumption we determine using collectgarbage("count"))
 -- since no allocations/deallocations are triggered by them anymore
 local zoneStack = table.new(16, 0)
+local eventCount = 0
+local frameCount = 0
 local profData
 if PROF_CAPTURE then
     -- if not preallocating profData will frequently rehash early on which may cause spikes in frame time
@@ -37,6 +39,8 @@ local profEnabled = true
 -- which is then subtracted from collectgarbage("count"),
 -- to measure the jprof-less (i.e. "real") memory consumption
 local profMem
+
+local minimumDuration = 0
 
 local function getByte(n, byte)
     return bit.rshift(bit.band(n, bit.lshift(0xff, 8*byte)), 8*byte)
@@ -64,11 +68,14 @@ local function msgpackListIntoFile(list, file)
 end
 
 local function addEvent(name, memCount, time, annot)
-    local event = {name, time, memCount, annot}
-    if profData then
-        profData[#profData+1] = event
+    eventCount = eventCount + 1
+    local event = profData[eventCount] or {}
+    event[1] = name
+    event[2] = time
+    event[3] = memCount
+    event[4] = annot
+    profData[eventCount] = event
         --table.insert(profData, event)
-    end
     -- if netBuffer then
     --     table.insert(netBuffer, event)
     -- end
@@ -80,12 +87,13 @@ if PROF_CAPTURE then
 
         if #zoneStack == 0 then
             assert(name == "frame", "(jprof) You may only push the 'frame' zone onto an empty stack")
+            frameCount = frameCount + 1
         end
 
         local memCount = collectgarbage("count")
         --table.insert(zoneStack, name)
         zoneStack[#zoneStack+1] = name
-        addEvent(name, memCount - profMem, love.timer.getTime(), annotation)
+        addEvent(name, memCount - profMem, love.timer.getTime(), frameCount)
 
         -- Usually keeping count of the memory used by jprof is easy, but when realtime profiling is used
         -- netFlush also frees memory for garbage collection, which might happen at unknown points in time
@@ -111,6 +119,9 @@ if PROF_CAPTURE then
         zoneStack[#zoneStack] = nil
         --table.remove(zoneStack)
         addEvent("pop", memCount - profMem, t)
+        if #zoneStack == 0 then
+            profiler.checkCurrentFrameForDiscard()
+        end
         -- if profiler.socket and #zoneStack == 0 then
         --     profiler.netFlush()
         -- end
@@ -131,6 +142,9 @@ if PROF_CAPTURE then
         if not profData then
             print("(jprof) No profiling data saved (probably because you called prof.connect())")
         else
+            for i = #profData, eventCount + 1, -1 do
+                profData[i] = nil
+            end
             local file, msg = love.filesystem.newFile(filename, "w")
             assert(file, msg)
             msgpackListIntoFile(profData, file)
@@ -197,6 +211,23 @@ if PROF_CAPTURE then
             netBuffer = {}
         end
     end
+
+    function profiler.setMinimumDuration(duration)
+        minimumDuration = duration
+    end
+
+    function profiler.checkCurrentFrameForDiscard()
+        for i = eventCount, 1, -1 do
+            if profData[i][1] == "frame" then
+                local dt = profData[eventCount][2] - profData[i][2]
+                if dt < minimumDuration then
+                    -- tables are kept around for reuse
+                    eventCount = i - 1
+                end
+                break
+            end
+        end
+    end
 else
     local noop = function() end
 
@@ -206,6 +237,7 @@ else
     profiler.enabled = noop
     profiler.connect = noop
     profiler.netFlush = noop
+    profiler.setMinimumDuration = noop
 end
 
 -- only measure after all allocations
