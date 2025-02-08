@@ -108,9 +108,6 @@ function Server:start()
     error("Failed to create server socket. Check if there are any other instances blocking the port")
   end
   self.socket:settimeout(0)
-  if TCP_NODELAY_ENABLED then
-    self.socket:setoption("tcp-nodelay", true)
-  end
 
   logger.debug(os.time())
 end
@@ -303,6 +300,15 @@ function Server:create_room(gameMode, ...)
   if self.leaderboard and deep_content_equal(gameMode, self.leaderboard.gameMode) then
     leaderboard = self.leaderboard
   end
+
+  if #players > 1 then
+    -- no delay is enabled only to reduce the chances of hitting rollback and rollback only exists in multiplayer
+    for _, player in ipairs(players) do
+---@diagnostic disable-next-line: invisible
+      player.connection:enableNoDelay(true)
+    end
+  end
+
   local newRoom = Room(self.roomNumberIndex, players, gameMode, leaderboard)
   newRoom:connectSignal("matchStart", self, self.setLobbyChanged)
   newRoom:connectSignal("matchEnd", self, self.processGameEnd)
@@ -312,6 +318,26 @@ function Server:create_room(gameMode, ...)
     self:clearProposals(player)
     self.playerToRoom[player] = newRoom
   end
+end
+
+---@param room Room
+function Server:closeRoom(room, reason)
+  for _, player in ipairs(room.players) do
+    self.playerToRoom[player] = nil
+    ---@diagnostic disable-next-line: invisible
+    player.connection:enableNoDelay(false)
+  end
+
+  for _, player in ipairs(room.spectators) do
+    self.spectatorToRoom[player] = nil
+  end
+
+  if self.rooms[room.roomNumber] then
+    self.rooms[room.roomNumber] = nil
+  end
+
+  room:close(reason)
+  self:setLobbyChanged()
 end
 
 ---@param roomNr integer
@@ -364,24 +390,6 @@ function Server:insertBan(ip, reason, completionTime)
   return self.database:insertBan(ip, reason, completionTime)
 end
 
----@param room Room
-function Server:closeRoom(room, reason)
-  for _, player in ipairs(room.players) do
-    self.playerToRoom[player] = nil
-  end
-
-  for _, player in ipairs(room.spectators) do
-    self.spectatorToRoom[player] = nil
-  end
-
-  if self.rooms[room.roomNumber] then
-    self.rooms[room.roomNumber] = nil
-  end
-
-  room:close(reason)
-  self:setLobbyChanged()
-end
-
 function Server:update()
 
   if not self._shuttingDown then
@@ -408,9 +416,6 @@ function Server:acceptNewConnections()
   local newConnectionSocket = self.socket:accept()
   if newConnectionSocket then
     newConnectionSocket:settimeout(0)
-    if TCP_NODELAY_ENABLED then
-      newConnectionSocket:setoption("tcp-nodelay", true)
-    end
     logger.debug("Accepted connection " .. self.connectionNumberIndex)
     local connection = Connection(newConnectionSocket, self.connectionNumberIndex)
     self.socketToConnectionIndex[newConnectionSocket] = self.connectionNumberIndex
