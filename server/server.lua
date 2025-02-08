@@ -427,14 +427,23 @@ end
 function Server:updateConnections()
   -- Make a list of all the sockets to listen to
   local socketsToRead = {self.socket}
+  -- Make a list of all the sockets we want to send messages to
+  -- the server socket cannot "send" in the traditional sense, only accept incoming connections (which is in the read domain) so it is not added here
+  local socketsToSend = {}
   for _, v in pairs(self.connections) do
+    if v.outgoingMessageQueue:len() > 0 then
+      -- socket.select(_, socketsToSend) only checks if at least one socket in the table is generally ready to send even if there is no data to be sent
+      -- predictably that is immediately true for most client sockets most of the time
+      -- so only check for sockets we actually have something to send for because sockets ready for sending will make the select return instantly
+      --  causing us to loop very busily even though there is possibly nothing to do
+      socketsToSend[#socketsToSend+1] = v.socket
+    end
+    -- whereas for read, we can check for all of them because they will only make select return if there is actually something to read
     socketsToRead[#socketsToRead + 1] = v.socket
   end
 
-  local socketsToSend = shallowcpy(socketsToRead)
-
   -- Wait for up to 1 second to see if there is any socket to read / write on
-  -- as far as I understand the waiting time is only until at least one socket has data so it's not actually stalling unless there is no data anyway
+  -- the waiting time is only until at least one socket has data to read or a socket we want to send data on is ready so it's not actually stalling unless there is no data anyway
   socketsToRead, socketsToSend = socket.select(socketsToRead, socketsToSend, 1)
 
   for _, connection in pairs(self.connections) do
