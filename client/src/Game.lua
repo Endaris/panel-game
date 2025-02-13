@@ -25,6 +25,7 @@ local SoundController = require("client.src.music.SoundController")
 require("client.src.BattleRoom")
 local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
+local system = require("client.src.system")
 
 local RichPresence = require("client.lib.rich_presence.RichPresence")
 
@@ -129,17 +130,12 @@ function Game:load()
 end
 
 local function detectHardwareProblems()
-  local OS = love.system.getOS()
-  if OS == "Windows" then
-    local version, vendor = select(2, love.graphics.getRendererInfo())
-    if vendor == "ATI Technologies Inc." and
-		(version:find("22.7.1", 1, true) or version:find(".2207", 1, true)) then
-      love.window.showMessageBox(
-        "AMD driver 22.7.1 detected",
-        "AMD driver 22.7.1 is known to have problems with running LÖVE (this includes Panel Attack). If the game fails to render its visuals, it is recommended to upgrade or downgrade your AMD GPU drivers.",
-        "warning"
-      )
-    end
+  local compatible, problem, reason = system.isCompatible()
+
+  if not compatible then
+    ---@cast problem -nil
+    ---@cast reason -nil
+    love.window.showMessageBox(problem, reason, "warning")
   end
 end
 
@@ -432,8 +428,8 @@ function Game:drawScaleInfo()
 end
 
 function Game.errorData(errorString, traceBack)
-  local systemInfo = "OS: " .. (love.system.getOS() or "Unknown")
-  local loveVersion = Game.loveVersionString() or "Unknown"
+  local systemInfo = system.getOsInfo()
+  local loveVersion = system.loveVersionString()
   local username = config.name or "Unknown"
   local buildVersion
   if GAME.updater then
@@ -536,17 +532,6 @@ function Game.detailedErrorLogString(errorData)
     end
 
   return detailedErrorLogString
-end
-
-local loveVersionStringValue = nil
-
-function Game.loveVersionString()
-  if loveVersionStringValue then
-    return loveVersionStringValue
-  end
-  local major, minor, revision, codename = love.getVersion()
-  loveVersionStringValue = string.format("%d.%d.%d", major, minor, revision)
-  return loveVersionStringValue
 end
 
 -- Calculates the proper dimensions to not stretch the game for various sizes

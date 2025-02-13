@@ -20,6 +20,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 local ScrollText = require("client.src.ui.ScrollText")
 local util = require("common.lib.util")
 local ModManagement = require("client.src.scenes.ModManagement")
+local system = require("client.src.system")
 
 -- Scene for the options menu
 local OptionsMenu = class(function(self, sceneParams)
@@ -120,7 +121,7 @@ function OptionsMenu:getSystemInfo()
   sysInfo[#sysInfo + 1] = {name = "Operating System", value = love.system.getOS()}
   sysInfo[#sysInfo + 1] = {name = "Renderer", value = rendererName .. " " .. rendererVersion}
   sysInfo[#sysInfo + 1] = {name = "Graphics Card", value = graphicsCardName}
-  sysInfo[#sysInfo + 1] = {name = "LOVE Version", value = GAME:loveVersionString()}
+  sysInfo[#sysInfo + 1] = {name = "LOVE Version", value = system.loveVersionString()}
   sysInfo[#sysInfo + 1] = {name = "Panel Attack Engine Version", value = consts.ENGINE_VERSION}
   sysInfo[#sysInfo + 1] = {name = "Panel Attack Release Version", value = GAME.updater and tostring(GAME.updater.activeVersion.version) or nil}
   sysInfo[#sysInfo + 1] = {name = "Save Data Directory Path", value = love.filesystem.getSaveDirectory()}

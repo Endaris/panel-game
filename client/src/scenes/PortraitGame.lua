@@ -8,6 +8,7 @@ local TextButton = require("client.src.ui.TextButton")
 local Label = require("client.src.ui.Label")
 local input = require("client.src.inputManager")
 local tableUtils = require("common.lib.tableUtils")
+local system = require("client.src.system")
 
 local PortraitGame = class(function(self, sceneParams)
 end,
@@ -197,7 +198,7 @@ function PortraitGame:flipToPortrait()
   GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_HEIGHT, consts.CANVAS_WIDTH, {dpiscale=GAME:newCanvasSnappedScale()})
 
   local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" or DEBUG_ENABLED then
+  if system.isMobileOS() or DEBUG_ENABLED then
     -- flip the window dimensions to portrait
     love.window.updateMode(height, width, {})
     love.window.setFullscreen(true)
@@ -251,7 +252,7 @@ function PortraitGame:returnToLandscape()
   GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT, {dpiscale=GAME:newCanvasSnappedScale()})
   -- flip the window dimensions to landscape
   local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" or DEBUG_ENABLED then
+  if system.isMobileOS() or DEBUG_ENABLED then
     love.window.updateMode(height, width, {})
     love.window.setFullscreen(false)
     --GAME:updateCanvasPositionAndScale(width, height)

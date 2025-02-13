@@ -1,3 +1,4 @@
+local system = require("client.src.system")
 ---@diagnostic disable: duplicate-set-field
 
 -- Put any local development changes you need in here that you don't want commited.
@@ -14,10 +15,7 @@ local developerTools = {}
 function developerTools.processArgs(args)
   for _, value in pairs(args) do
     if value == "debug" then
-      if os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") == "1" then
-        require("lldebugger").start()
-        DEBUG_ENABLED = 1
-      end
+      system.startDebugger()
     elseif value == "profileFrameTimes" then
       enableProfiler()
 
