@@ -8,8 +8,9 @@ jit.off()
 if arg[2] == "debug" then
   require("client.src.developer")
 end
+local t = love.timer.getTime()
 package.path = package.path .. ";/usr/local/share/luajit-2.1/?.lua"
-require("jit.p").start("vF3s", "profiling/jitProfile.log")
+require("jit.p").start("vFi1m1", "profiling/jitProfile.log")
 
 require("common.lib.mathExtensions")
 local util = require("common.lib.util")
@@ -88,6 +89,7 @@ function love.draw()
 end
 
 function love.quit()
+  print(love.timer.getTime() - t .. "s elapsed")
   require("jit.p").stop()
   love.filesystem.write("test.log", table.concat(logger.messages, "\n"))
 end
