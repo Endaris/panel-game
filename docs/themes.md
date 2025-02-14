@@ -1,6 +1,3 @@
-You can also find this file with prettier formatting at 
-https://github.com/panel-attack/panel-game/blob/beta/docs/themes.md  
-
 This README consists of 2 parts.  
 In part 1 some general thoughts on theme creation are discussed.  
 In part 2 you can find an exhaustive list of all assets used for theme.  

@@ -543,27 +543,27 @@ function OptionsMenu:loadAboutMenu()
   local aboutMenuOptions = {
     ui.MenuItem.createButtonMenuItem("op_about_themes", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("aboutThemes")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/themes.md")
         end),
     ui.MenuItem.createButtonMenuItem("op_about_characters", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("aboutCharacters")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/characters.md")
         end),
     ui.MenuItem.createButtonMenuItem("op_about_stages", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("aboutStages")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/stages.md")
         end),
     ui.MenuItem.createButtonMenuItem("op_about_panels", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("aboutPanels")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/panels.md")
         end),
     ui.MenuItem.createButtonMenuItem("About Attack Files", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("aboutAttackFiles")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/training.txt")
         end),
     ui.MenuItem.createButtonMenuItem("Installing Mods", nil, nil, function()
           GAME.theme:playValidationSfx()
-          self:switchToScreen("installingMods")
+          love.system.openURL("https://github.com/panel-attack/panel-game/blob/beta/docs/installMods.md")
         end),
     ui.MenuItem.createButtonMenuItem("System Info", nil, nil, function()
           GAME.theme:playValidationSfx()
