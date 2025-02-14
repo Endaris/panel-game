@@ -1,5 +1,7 @@
 local class = require("common.lib.class")
-table.new = require("table.new")
+if love then
+  table.new = require("table.new")
+end
 
 --- A simple class for limiting the amount of memory taken up by transient data (e.g. logs)
 ---@class RingBuffer
@@ -10,7 +12,11 @@ local RingBuffer = class(
 function(self, size)
   self.size = size
   self.currentIndex = 1
-  self.content = table.new(size, 0)
+  if love then
+    self.content = table.new(size, 0)
+  else
+    self.content = {}
+  end
 end)
 
 function RingBuffer:push(item)
