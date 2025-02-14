@@ -178,12 +178,12 @@ end
 
 -- this is a function that exists to address issue https://github.com/panel-attack/panel-game/issues/190
 -- analytics - per standard - increment the values on number indices such as used_combos[4] = used_combos[4] + 1
--- for unknown reasons, at some point in time, some combos started to get saved as string values - and they are loaded every time on analytics.init
--- the json library we use does not support string and integer keys on the same table and only saves the entries with a string key to analytics.json
--- due to that, combo data is lost and in this function any string indices are converted to int
--- honestly no idea how they ever became strings, I assume someone fixed that already in the past but the lingering data continued to screw stuff over
+-- when gaps become too big, json starts to serialize the keys as string values as a best guess and then only saves the entries with a string key to analytics.json
+-- when the data is deserialized we get string keys instead of number keys and the increments and serialization use the integer indices only, causing the string data to get lost
+-- to counteract that, in this function all indices are explicitly converted to numbers
+-- that way it is "fine" whether json serializes the data as an array or a dictionary
 ---@param dataToCorrect {version: integer, last_game: AnalyticsData, overall: AnalyticsData}
-local function correctComboIndices(dataToCorrect)
+local function correctAllTimeIndices(dataToCorrect)
   local correctedCombos = {}
   for key, value in pairs(dataToCorrect["overall"]["used_combos"]) do
     local numberKey = tonumber(key)
@@ -196,10 +196,24 @@ local function correctComboIndices(dataToCorrect)
     end
   end
 
+  local correctedChains = {}
+  for key, value in pairs(dataToCorrect["overall"]["reached_chains"]) do
+    local numberKey = tonumber(key)
+    if type(numberKey) == "number" then
+      if correctedChains[numberKey] then
+        correctedChains[numberKey] = correctedChains[numberKey] + value
+      else
+        correctedChains[numberKey] = value
+      end
+    end
+  end
+
   dataToCorrect["overall"]["used_combos"] = correctedCombos
+  dataToCorrect["overall"]["reached_chains"] = correctedChains
 
   return dataToCorrect
 end
+
 
 function analytics.init()
   pcall(
@@ -211,7 +225,7 @@ function analytics.init()
       end
       if analytics_data then
         analytic_clear(analytics_data.last_game)
-        analytics_data = correctComboIndices(analytics_data)
+        analytics_data = correctAllTimeIndices(analytics_data)
 
         -- do stuff regarding version compatibility here, before we patch it
         if analytics_data.version < 2 then
