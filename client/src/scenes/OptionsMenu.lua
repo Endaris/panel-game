@@ -51,6 +51,10 @@ function OptionsMenu:loadScreens()
   menus.aboutAttackFiles = self:loadInfoScreen(save.read_txt_file("docs/training.txt"))
   menus.installingMods = self:loadInfoScreen(save.read_txt_file("docs/installMods.md"))
 
+  if #menus.modifyUserIdMenu.menuItems == 1 then
+    menus.baseMenu:removeMenuItemAtIndex(7)
+  end
+
   return menus
 end
 
