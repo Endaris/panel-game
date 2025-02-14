@@ -214,6 +214,7 @@ local function processMatchStartMessage(self, message)
   self:setState(states.INGAME)
 end
 
+---@param self NetClient
 local function processRankedStatusMessage(self, message)
   if not self.room then
     return
