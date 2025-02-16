@@ -139,6 +139,7 @@ local PANELS_TO_NEXT_SPEED =
 ---@field rollbackPanelBuffer Panel[]
 ---@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
 ---@field swapStallingBackLog table
+---@field swappingPanelCount integer
 
 
 -- Represents the full panel stack for one player
@@ -230,6 +231,7 @@ local Stack = class(
 
     s.n_active_panels = 0
     s.n_prev_active_panels = 0
+    s.swappingPanelCount = 0
 
     -- Player input stuff:
     s.manual_raise = false
@@ -394,6 +396,7 @@ function Stack:rollbackCopy()
   copy.chain_counter = self.chain_counter
   copy.n_active_panels = self.n_active_panels
   copy.n_prev_active_panels = self.n_prev_active_panels
+  copy.swappingPanelCount = self.swappingPanelCount
   copy.rise_timer = self.rise_timer
   copy.manual_raise = self.manual_raise
   copy.manual_raise_yet = self.manual_raise_yet
@@ -450,6 +453,7 @@ local function internalRollbackToFrame(stack, frame)
   stack.chain_counter = copy.chain_counter
   stack.n_active_panels = copy.n_active_panels
   stack.n_prev_active_panels = copy.n_prev_active_panels
+  stack.swappingPanelCount = copy.swappingPanelCount
   stack.rise_timer = copy.rise_timer
   stack.manual_raise = copy.manual_raise
   stack.manual_raise_yet = copy.manual_raise_yet
@@ -1406,7 +1410,7 @@ function Stack:swap(row, col)
   local leftPanel = panels[row][col]
   local rightPanel = panels[row][col + 1]
   if self.behaviours.swapStallingMode == 1 then
-    if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 then
+    if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 and (self.n_active_panels - self.swappingPanelCount) == 0 then
       local newRecord = { leftId = leftPanel.id, rightId = rightPanel.id, row = row, col = col }
       local punish = false
       for _, oldRecord in ipairs(self.swapStallingBackLog) do
@@ -1768,11 +1772,14 @@ end
 
 function Stack.updateActivePanels(self)
   self.n_prev_active_panels = self.n_active_panels
-  self.n_active_panels = self:getActivePanelCount()
+  self.n_active_panels, self.swappingPanelCount = self:getActivePanelCount()
 end
 
-function Stack.getActivePanelCount(self)
+---@return integer activePanelCount
+---@return integer swappingPanelCount
+function Stack:getActivePanelCount()
   local count = 0
+  local swappingCount = 0
 
   for row = 1, self.height do
     for col = 1, self.width do
@@ -1787,12 +1794,15 @@ function Stack.getActivePanelCount(self)
         and panel.state ~= "normal"
         and panel.state ~= "landing" then
           count = count + 1
+          if panel.state == "swapping" then
+            swappingCount = swappingCount + 1
+          end
         end
       end
     end
   end
 
-  return count
+  return count, swappingCount
 end
 
 function Stack.updateRiseLock(self)
