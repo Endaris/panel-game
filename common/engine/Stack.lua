@@ -51,6 +51,10 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
 
+---@class StackBehaviours
+---@field passiveRaise boolean if the stack will passively rise on its own
+---@field allowManualRaise boolean manual raise inputs are ignored or not
+---@field swapStallingMode integer how swaps are treated with respect to stalling passive raise
 
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
@@ -63,7 +67,7 @@ local PANELS_TO_NEXT_SPEED =
 ---@field allowAdjacentColors boolean if the panel generator is allowed to put panels of the same color next to each other (horizontally only)
 ---@field allowAdjacentColorsOnStartingBoard boolean if the panel generator is allowed to put panels of the same color next to each other on the starting board
 ---@field shockEnabled boolean whether shock panels may be queued
----@field behaviours table<string, boolean> a table of toggleable physics behaviours; currently mainly around raise
+---@field behaviours StackBehaviours a table of toggleable physics behaviours; currently mainly around raise
 ---@field do_first_row boolean? if the stack still needs to initiate its starting board
 ---@field speed integer Index for accessing the table for the rise_timer, thus indirectly determining how quickly the stack rises
 ---@field nextSpeedIncreaseClock integer? at which clock time the speed is going to increase the next time; only relevant if the levelData's speedIncreaseMode is 1
@@ -140,6 +144,7 @@ local PANELS_TO_NEXT_SPEED =
 ---@field rollbackBuffer RollbackBuffer
 ---@field rollbackPanelBuffer Panel[]
 ---@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
+---@field swapStallingBackLog table
 
 
 -- Represents the full panel stack for one player
@@ -159,9 +164,13 @@ local Stack = class(
     s.seed = arguments.seed
 
     -- the behaviour table contains a bunch of flags to modify the stack behaviour for custom game modes in broader chunks of functionality
-    s.behaviours = {}
-    s.behaviours.passiveRaise = true
-    s.behaviours.allowManualRaise = true
+    s.behaviours = {
+      passiveRaise = true,
+      allowManualRaise = true,
+      swapStallingMode = 1,
+    }
+
+    s.swapStallingBackLog = {}
 
     if not s.puzzle then
       s.do_first_row = true
@@ -1077,7 +1086,8 @@ function Stack.simulate(self)
   prof.pop("passive raise")
 
   prof.push("reset stuff")
-  if not self.panels_in_top_row and not self:has_falling_garbage() then
+  local hasFallingGarbage = self:has_falling_garbage()
+  if not self.panels_in_top_row and not hasFallingGarbage then
     self.health = self.levelData.maxHealth
   end
 
@@ -1252,13 +1262,11 @@ function Stack.simulate(self)
   end
   prof.pop("pop from incoming garbage q")
 
-  prof.push("update times")
   self.clock = self.clock + 1
 
   if self.game_stopwatch_running then
     self.game_stopwatch = (self.game_stopwatch or -1) + 1
   end
-  prof.pop("update times")
 end
 
 function Stack:runCountDownIfNeeded()
@@ -1405,9 +1413,28 @@ end
 -- Swaps panels at the current cursor location
 function Stack:swap(row, col)
   local panels = self.panels
-  self:processPuzzleSwap()
   local leftPanel = panels[row][col]
   local rightPanel = panels[row][col + 1]
+  if self.behaviours.swapStallingMode == 1 then
+    if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 then
+      local newRecord = { { row = row, col = col, id = leftPanel.id}, { row = row, col = col + 1, id = rightPanel.id } }
+      for i, oldRecord in ipairs(self.swapStallingBackLog) do
+        if deep_content_equal(newRecord, oldRecord) then
+          print("reducing health for repeated swap")
+          self.health = self.health - 1
+          if self:checkGameOver() then
+            self:setGameOver()
+            return
+          end
+          break
+        end
+      end
+      self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
+    elseif #self.swapStallingBackLog > 0 then
+      self.swapStallingBackLog = {}
+    end
+  end
+  self:processPuzzleSwap()
   leftPanel:startSwap(true)
   rightPanel:startSwap(false)
   Panel.switch(leftPanel, rightPanel, panels)
