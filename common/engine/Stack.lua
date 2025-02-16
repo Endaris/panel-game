@@ -51,12 +51,6 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
 
----@class StackBehaviours
----@field passiveRaise boolean if the stack will passively rise on its own
----@field allowManualRaise boolean manual raise inputs are ignored or not
----@field swapStallingMode integer how swaps are treated with respect to stalling passive raise
----@field swapStallingPunish integer how much health is deducted for stalling swaps
-
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
 ---@field height integer How many rows of panels the stack has
@@ -65,10 +59,9 @@ local PANELS_TO_NEXT_SPEED =
 ---@field gameOverConditions table Array of enumerated values signifying ways of going game over
 ---@field gameWinConditions table Array of enumerated values signifying ways of ending the game without going game over
 ---@field levelData LevelData
----@field allowAdjacentColors boolean if the panel generator is allowed to put panels of the same color next to each other (horizontally only)
 ---@field allowAdjacentColorsOnStartingBoard boolean if the panel generator is allowed to put panels of the same color next to each other on the starting board
 ---@field shockEnabled boolean whether shock panels may be queued
----@field behaviours StackBehaviours a table of toggleable physics behaviours; currently mainly around raise
+---@field behaviours StackBehaviours a table of flags and settings to modify the stack behaviour in chunks of functionality
 ---@field do_first_row boolean? if the stack still needs to initiate its starting board
 ---@field speed integer Index for accessing the table for the rise_timer, thus indirectly determining how quickly the stack rises
 ---@field nextSpeedIncreaseClock integer? at which clock time the speed is going to increase the next time; only relevant if the levelData's speedIncreaseMode is 1
@@ -155,22 +148,17 @@ local Stack = class(
 ---@param s Stack
   function(s, arguments)
     assert(arguments.levelData ~= nil)
-    assert(arguments.allowAdjacentColors ~= nil)
+    assert(arguments.behaviours ~= nil)
 
     s.gameOverConditions = arguments.gameOverConditions or {GameModes.GameOverConditions.NEGATIVE_HEALTH}
     s.gameWinConditions = arguments.gameWinConditions or {}
     s.engineVersion = arguments.engineVersion
     s.levelData = arguments.levelData
-    s.allowAdjacentColors = arguments.allowAdjacentColors
+    s.behaviours = arguments.behaviours
+
     s.seed = arguments.seed
 
     -- the behaviour table contains a bunch of flags to modify the stack behaviour for custom game modes in broader chunks of functionality
-    s.behaviours = {
-      passiveRaise = true,
-      allowManualRaise = true,
-      swapStallingMode = 1,
-      swapStallingPunish = 4,
-    }
 
     s.swapStallingBackLog = {}
 
@@ -1840,7 +1828,7 @@ function Stack:makePanels()
   if self.panel_buffer == "" then
     ret = self:makeStartingBoardPanels()
   else
-    ret = PanelGenerator.privateGeneratePanels(100, self.width, self.levelData.colors, self.panel_buffer, not self.allowAdjacentColors)
+    ret = PanelGenerator.privateGeneratePanels(100, self.width, self.levelData.colors, self.panel_buffer, not self.behaviours.allowAdjacentColors)
     ret = PanelGenerator.assignMetalLocations(ret, self.width)
   end
 
@@ -1968,7 +1956,7 @@ function Stack:toReplayPlayer()
   local replayPlayer = ReplayPlayer("Player " .. self.which, - self.which)
   replayPlayer:setLevelData(self.levelData)
   replayPlayer:setInputMethod(self.inputMethod)
-  replayPlayer:setAllowAdjacentColors(self.allowAdjacentColors)
+  replayPlayer:setBehaviours(self.behaviours)
 
   return replayPlayer
 end
@@ -1980,8 +1968,12 @@ function Stack.createFromReplayPlayer(replayPlayer, replay)
   local args = {
     engineVersion = replay.engineVersion,
     gameOverConditions = replay.gameMode.gameOverConditions,
+    -- this being unknown is correct; replays don't save stack specific game win conditions so far
+    -- these would be for puzzle mode and similar, where a stack can finish without game over; separate from match win conditions
+    ---@see GameModes
     gameWinConditions = replay.gameMode.gameWinConditions,
     allowAdjacentColors = replayPlayer.settings.allowAdjacentColors,
+    behaviours = replayPlayer.settings.stackBehaviours,
     levelData = replayPlayer.settings.levelData,
     is_local = false,
     which = tableUtils.indexOf(replay.players, replayPlayer),

@@ -758,7 +758,7 @@ end
 function Stack:refillGarbagePanelBuffer()
   PanelGenerator:setSeed(self.seed + self.garbageGenCount)
   -- privateGeneratePanels already appends to the existing self.gpanel_buffer
-  local garbagePanels = PanelGenerator.privateGeneratePanels(20, self.width, self.levelData.colors, self.gpanel_buffer, not self.allowAdjacentColors)
+  local garbagePanels = PanelGenerator.privateGeneratePanels(20, self.width, self.levelData.colors, self.gpanel_buffer, not self.behaviours.allowAdjacentColors)
   -- and then we append that result to the remaining buffer
   self.gpanel_buffer = self.gpanel_buffer .. garbagePanels
   -- that means the next 10 rows of garbage will use the same colors as the 10 rows after
