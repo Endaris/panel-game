@@ -1423,6 +1423,9 @@ function Stack:swap(row, col)
           return
         end
       else
+        -- mark the reverse swap of the swap initiated just now
+        self.swapStallingBackLog[#self.swapStallingBackLog+1] = { leftId = newRecord.rightId, rightId = newRecord.leftId, row = row, col = col }
+        -- and the swap itself so it's already marked in case the reverse swap happens and logic stays simple for when data is added
         self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
       end
     elseif #self.swapStallingBackLog > 0 then
