@@ -1,399 +1,419 @@
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
-local Replay = require("common.engine.Replay")
-
-local sep = package.config:sub(1, 1) --determines os directory separator (i.e. "/" or "\")
+local ServerProtocol = require("common.network.ServerProtocol")
+local NetworkProtocol = require("common.network.NetworkProtocol")
+local GameModes = require("common.engine.GameModes")
+-- heresy, remove once communication of levelData is established
+local tableUtils = require("common.lib.tableUtils")
+local ServerPlayer = require("server.Player")
+local Signal = require("common.lib.signal")
+local ServerGame = require("server.Game")
 
 -- Object that represents a current session of play between two connections
 -- Players alternate between the character select state and playing, and spectators can join and leave
-Room =
-class(
-function(self, a, b, roomNumber, leaderboard, server)
-  --TODO: it would be nice to call players a and b something more like self.players[1] and self.players[2]
-  self.a = a --player a as a connection object
-  self.b = b --player b as a connection object
-  self.server = server
-  self.stage = nil -- stage for the game, randomly picked from both players
-  self.name = a.name .. " vs " .. b.name
+---@class Room : Signal
+---@field players ServerPlayer[]
+---@field leaderboard Leaderboard?
+---@field name string
+---@field roomNumber integer
+---@field stage string? stage for the game, randomly picked from both players
+---@field spectators ServerPlayer[] array of spectator connection objects
+---@field win_counts integer[] win counts by player number
+---@field ratings table[] ratings by player number
+---@field matchCount integer
+---@field game ServerGame?
+---@field gameMode GameMode
+---@field ranked boolean if the next match is anticipated to be ranked 
+---@field rankedReasons string[]
+---@overload fun(roomNumber: integer, players: ServerPlayer[], gameMode: GameMode, leaderboard: Leaderboard?): Room
+local Room = class(
+---@param self Room
+---@param roomNumber integer
+---@param players ServerPlayer[]
+---@param gameMode GameMode
+---@param leaderboard Leaderboard?
+function(self, roomNumber, players, gameMode, leaderboard)
+  self.players = players
+  self.leaderboard = leaderboard
   self.roomNumber = roomNumber
-  self.a.room = self
-  self.b.room = self
-  self.spectators = {} -- array of spectator connection objects
-  self.win_counts = {} -- win counts by player number
-  self.win_counts[1] = 0
-  self.win_counts[2] = 0
-  local a_rating, b_rating
-  local a_placement_match_progress, b_placement_match_progress
+  self.name = table.concat(tableUtils.map(self.players, function(p) return p.name end), " vs ")
+  self.spectators = {}
+  self.win_counts = {}
+  self.ratings = {}
+  self.matchCount = 0
+  self.gameMode = gameMode
 
-  if a.user_id then
-    if leaderboard.players[a.user_id] and leaderboard.players[a.user_id].rating then
-      a_rating = math.round(leaderboard.players[a.user_id].rating)
+  for i, player in ipairs(self.players) do
+    player:connectSignal("settingsUpdated", self, self.onPlayerSettingsUpdate)
+    player:addToRoom(self)
+    self.win_counts[i] = 0
+    if self.leaderboard then
+      local rating = math.round(self.leaderboard:getRating(player) or 0)
+      local placementProgress = self.leaderboard:getPlacementProgress(player)
+      self.ratings[i] = {
+        old = rating,
+        new = rating,
+        difference = 0,
+        placement_match_progress = placementProgress
+      }
+      if placementProgress then
+        self.ratings[i].league = self.leaderboard:get_league(0)
+      else
+        self.ratings[i].league = self.leaderboard:get_league(rating)
+      end
     end
-    local a_qualifies, a_progress = self.server:qualifies_for_placement(a.user_id)
-    if not (leaderboard.players[a.user_id] and leaderboard.players[a.user_id].placement_done) and not a_qualifies then
-      a_placement_match_progress = a_progress
+    player.cursor = "__Ready"
+    player.player_number = i
+  end
+
+  -- don't want this dependency but current leaderboard updates rely on it so keep it until getting there
+  for i, p1 in ipairs(self.players) do
+    for j, p2 in ipairs(self.players) do
+      if i ~= j then
+        p1.opponent = p2
+      end
     end
   end
 
-  if b.user_id then
-    if leaderboard.players[b.user_id] and leaderboard.players[b.user_id].rating then
-      b_rating = math.round(leaderboard.players[b.user_id].rating or 0)
-    end
-    local b_qualifies, b_progress = self.server:qualifies_for_placement(b.user_id)
-    if not (leaderboard.players[b.user_id] and leaderboard.players[b.user_id].placement_done) and not b_qualifies then
-      b_placement_match_progress = b_progress
-    end
+  if self.leaderboard then
+    self.ranked, self.rankedReasons = self:rating_adjustment_approved()
+  else
+    self.ranked = false
+    self.rankedReasons = { "No leaderboard attached to the room" }
   end
 
-  self.ratings = {
-    {old = a_rating or 0, new = a_rating or 0, difference = 0, league = self.server:get_league(a_rating or 0), placement_match_progress = a_placement_match_progress},
-    {old = b_rating or 0, new = b_rating or 0, difference = 0, league = self.server:get_league(b_rating or 0), placement_match_progress = b_placement_match_progress}
-  }
+  self:prepare_character_select()
 
-  self.game_outcome_reports = {} -- mapping of what each player reports the outcome of the game
+  local message = ServerProtocol.createRoom(self)
+  self:broadcastJson(message)
+
+  Signal.turnIntoEmitter(self)
+  self:createSignal("matchStart")
+  self:createSignal("matchEnd")
 end
 )
 
-function Room:character_select()
-  self:prepare_character_select()
-  self:send({
-    character_select = true,
-    create_room = true,
-    rating_updates = true,
-    ratings = self.ratings,
-    a_menu_state = self.a:menu_state(),
-    b_menu_state = self.b:menu_state()
-  })
+
+
+function Room:onPlayerSettingsUpdate(player)
+  if self:state() == "character select" then
+    if self.leaderboard then
+      if self.ranked or player.wants_ranked_match then
+        logger.debug("about to check for rating_adjustment_approval for " .. player.name)
+        local ranked_match_approved, reasons = self:rating_adjustment_approved()
+        self:broadcastJson(ServerProtocol.updateRankedStatus(self.roomNumber, ranked_match_approved, reasons))
+      end
+    end
+
+    if tableUtils.trueForAll(self.players, ServerPlayer.isReady) then
+      self:start_match()
+    else
+      local settings = player:getSettings()
+      local msg = ServerProtocol.settingsUpdate(player, settings)
+      self:broadcastJson(msg, player)
+    end
+  end
+end
+
+function Room:start_match()
+  self.matchCount = self.matchCount + 1
+  logger.info("Starting match " .. self.matchCount .. " for " .. self.roomNumber .. " " .. self.name)
+
+  for _, player in ipairs(self.players) do
+    player.wantsReady = false
+  end
+
+  local stageIndex = math.random(1, #self.players)
+  self.stageId = self.players[stageIndex].stage
+
+  self.game = ServerGame.createFromRoomState(self)
+  local replay = self.game:getPartialReplay(false)
+  -- games generated via createFromRoomState always have a replay
+  ---@cast replay -nil
+  local message = ServerProtocol.startMatch(self.roomNumber, replay)
+  self:broadcastJson(message)
+
+  for i, player in ipairs(self.players) do
+    player:setup_game()
+  end
+
+  for _, v in pairs(self.spectators) do
+    v:setup_game()
+  end
+
+  self:emitSignal("matchStart")
 end
 
 function Room:prepare_character_select()
   logger.debug("Called Server.lua Room.character_select")
-  self.a.state = "character select"
-  self.b.state = "character select"
-  if self.a.player_number and self.a.player_number ~= 0 and self.a.player_number ~= 1 then
-    logger.debug("initializing room. player a does not have player_number 1. Swapping players a and b")
-    self.a, self.b = self.b, self.a
-    if self.a.player_number == 1 then
-      logger.debug("Success. player a has player_number 1 now.")
-    else
-      logger.error("ERROR. Player a still doesn't have player_number 1")
-    end
-  else
-    self.a.player_number = 1
-    self.b.player_number = 2
+  for _, player in ipairs(self.players) do
+    player.state = "character select"
+    player.cursor = "__Ready"
+    player.ready = false
   end
-  self.a.cursor = "__Ready"
-  self.b.cursor = "__Ready"
-  self.a.ready = false
-  self.b.ready = false
 end
 
+---@return "character select"|"lobby"|"not_logged_in"|"playing"|"spectating"|"closed"
 function Room:state()
-  if self.a.state == "character select" then
+  if #self.players == 0 then
+    return "closed"
+  elseif self.players[1].state == "character select" then
     return "character select"
-  elseif self.a.state == "playing" then
+  elseif self.players[1].state == "playing" then
     return "playing"
   else
-    return self.a.state
+    return self.players[1].state
   end
 end
 
-function Room:add_spectator(new_spectator_connection)
-  new_spectator_connection.state = "spectating"
-  new_spectator_connection.room = self
-  self.spectators[#self.spectators + 1] = new_spectator_connection
-  logger.debug(new_spectator_connection.name .. " joined " .. self.name .. " as a spectator")
-  local playerSettings = self.server:playerSettingFromTable(self.a)
-  local opponentSettings = self.server:playerSettingFromTable(self.b)
-  local msg = {
-    spectate_request_granted = true,
-    spectate_request_rejected = false,
-    room_number = self.roomNumber,
-    rating_updates = true,
-    ratings = self.ratings,
-    a_menu_state = self.a:menu_state(),
-    b_menu_state = self.b:menu_state(),
-    a_name = self.a.name,
-    b_name = self.b.name,
-    win_counts = self.win_counts,
-    match_start = replay_of_match_so_far ~= nil,
-    stage = self.stage,
-    replay_of_match_so_far = self.replay,
-    ranked = self:rating_adjustment_approved(),
-    player_settings = playerSettings,
-    opponent_settings = opponentSettings
-  }
-  if msg.replay_of_match_so_far ~= nil then
-    msg.replay_of_match_so_far.vs.in_buf = table.concat(self.inputs[1])
-    msg.replay_of_match_so_far.vs.I = table.concat(self.inputs[2])
-    if COMPRESS_SPECTATOR_REPLAYS_ENABLED then
-      msg.replay_of_match_so_far.vs.in_buf = Replay.compressInputString(msg.replay_of_match_so_far.vs.in_buf)
-      msg.replay_of_match_so_far.vs.I = Replay.compressInputString(msg.replay_of_match_so_far.vs.I)
-    end
+---@param newSpectator ServerPlayer
+function Room:add_spectator(newSpectator)
+  newSpectator.state = "spectating"
+  newSpectator:addToRoom(self)
+  self.spectators[#self.spectators + 1] = newSpectator
+  logger.debug(newSpectator.name .. " joined " .. self.name .. " as a spectator")
+
+  local replay
+  if self.game then
+    replay = self.game:getPartialReplay(COMPRESS_REPLAYS_ENABLED)
   end
-  new_spectator_connection:send(msg)
-  msg = {spectators = self:spectator_names()}
-  logger.debug("sending spectator list: " .. json.encode(msg))
-  self:send(msg)
+
+  local message = ServerProtocol.spectateRequestGranted(self, replay)
+
+  newSpectator:sendJson(message)
+  local spectatorList = self:spectator_names()
+  logger.debug("sending spectator list: " .. json.encode(spectatorList))
+  self:broadcastJson(ServerProtocol.updateSpectators(self.roomNumber, spectatorList))
 end
 
+---@return string[]
 function Room:spectator_names()
   local list = {}
-  for k, v in pairs(self.spectators) do
-    list[#list + 1] = v.name
+  for i, spectator in ipairs(self.spectators) do
+    list[i] = spectator.name
   end
   return list
 end
 
-function Room:remove_spectator(connection)
+---@param spectator ServerPlayer
+function Room:remove_spectator(spectator)
   local lobbyChanged = false
-  for k, v in pairs(self.spectators) do
-    if v.name == connection.name then
-      self.spectators[k].state = "lobby"
-      logger.debug(connection.name .. " left " .. self.name .. " as a spectator")
-      self.spectators[k] = nil
-      connection.room = nil
+  for i, v in ipairs(self.spectators) do
+    if v.name == spectator.name then
+      self.spectators[i].state = "lobby"
+      logger.debug(spectator.name .. " left " .. self.name .. " as a spectator")
+      table.remove(self.spectators, i)
+      spectator:removeFromRoom(self, spectator.name .. " left")
       lobbyChanged = true
+      break
     end
   end
-  local msg = {spectators = self:spectator_names()}
-  logger.debug("sending spectator list: " .. json.encode(msg))
-  self:send(msg)
+
+  if lobbyChanged then
+    local spectatorList = self:spectator_names()
+    logger.debug("sending spectator list: " .. json.encode(spectatorList))
+    self:broadcastJson(ServerProtocol.updateSpectators(self.roomNumber, spectatorList))
+  end
+
   return lobbyChanged
 end
 
-function Room:close()
-  if self.a then
-    self.a.player_number = 0
-    self.a.state = "lobby"
-    self.a.room = nil
+function Room:close(reason)
+  logger.info("Closing room " .. self.roomNumber .. " " .. self.name)
+
+  for i = #self.players, 1, -1 do
+    local player = self.players[i]
+    self.disconnectSignal(player, "settingsUpdated", self)
+    player:removeFromRoom(self, reason)
+    self.players[i] = nil
   end
-  if self.b then
-    self.b.player_number = 0
-    self.b.state = "lobby"
-    self.b.room = nil
-  end
-  for k, v in pairs(self.spectators) do
-    if v.room then
-      v.room = nil
-      v.state = "lobby"
+
+  for i = #self.spectators, 1, -1 do
+    local spectator = self.spectators[i]
+    if spectator.room then
+      spectator.state = "lobby"
+      spectator:removeFromRoom(self, reason)
+      self.spectators[i] = nil
     end
   end
-  self:send_to_spectators({leave_room = true})
+
+  self.signalSubscriptions = nil
 end
 
-function Room:send_to_spectators(message)
-  for k, v in pairs(self.spectators) do
+function Room:sendJsonToSpectators(message)
+  for _, spectator in ipairs(self.spectators) do
+    spectator:sendJson(message)
+  end
+end
+
+---@param input string
+---@param sender ServerPlayer
+function Room:broadcastInput(input, sender)
+  self.game:receiveInput(sender, input)
+
+  local inputMessage = NetworkProtocol.markedMessageForTypeAndBody(NetworkProtocol.serverMessageTypes.opponentInput.prefix, input)
+  if sender.opponent then
+    sender.opponent:send(inputMessage)
+  end
+
+  if sender.player_number == 1 then
+    inputMessage = NetworkProtocol.markedMessageForTypeAndBody(NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix, input)
+  end
+
+  for _, v in pairs(self.spectators) do
     if v then
-      v:send(message)
+      v:send(inputMessage)
     end
   end
 end
 
-function Room:send(message)
-  if self.a then
-    self.a:send(message)
+-- broadcasts the message to everyone in the room
+-- if an optional sender is specified, they are excluded from the broadcast
+function Room:broadcastJson(message, sender)
+  for _, player in ipairs(self.players) do
+    if player ~= sender then
+      player:sendJson(message)
+    end
   end
-  if self.b then
-    self.b:send(message)
-  end
-  self:send_to_spectators(message)
+
+  self:sendJsonToSpectators(message)
 end
 
-function Room:resolve_game_outcome()
-  --Note: return value is whether the outcome could be resolved
-  if not self.game_outcome_reports[1] or not self.game_outcome_reports[2] then
-    return false
-  else
-    local outcome = nil
-    if self.game_outcome_reports[1] ~= self.game_outcome_reports[2] then
-      --if clients disagree, the server needs to decide the outcome, perhaps by watching a replay it had created during the game.
-      --for now though...
-      logger.warn("clients " .. self.a.name .. " and " .. self.b.name .. " disagree on their game outcome. So the server will declare a tie.")
-      outcome = 0
-    else
-      outcome = self.game_outcome_reports[1]
-    end
-    local gameID = self.server.database:insertGame(self.replay.vs.ranked)
-    self.replay.vs.gameID = gameID
-    if outcome ~= 0 then
-      self.server.database:insertPlayerGameResult(self.a.user_id, gameID, self.replay.vs.P1_level, (self.a.player_number == outcome) and 1 or 2)
-      self.server.database:insertPlayerGameResult(self.b.user_id, gameID, self.replay.vs.P2_level, (self.b.player_number == outcome) and 1 or 2)
-    else
-      self.server.database:insertPlayerGameResult(self.a.user_id, gameID, self.replay.vs.P1_level, 0)
-      self.server.database:insertPlayerGameResult(self.b.user_id, gameID, self.replay.vs.P2_level, 0)
-    end
-
-    logger.debug("resolve_game_outcome says: " .. outcome)
-    --outcome is the player number of the winner, or 0 for a tie
-    if self.a.save_replays_publicly ~= "not at all" and self.b.save_replays_publicly ~= "not at all" then
-      --use UTC time for dates on replays
-      self.replay.timestamp = to_UTC(os.time())
-      self.replay.engineVersion = ENGINE_VERSION
-      local now = os.date("*t", self.replay.timestamp)
-      local path = "ftp" .. sep .. "replays" .. sep .. "v" .. ENGINE_VERSION .. sep .. string.format("%04d" .. sep .. "%02d" .. sep .. "%02d", now.year, now.month, now.day)
-      local rep_a_name, rep_b_name = self.a.name, self.b.name
-      if self.a.save_replays_publicly == "anonymously" then
-        rep_a_name = "anonymous"
-        self.replay.P1_name = "anonymous"
-      end
-      if self.b.save_replays_publicly == "anonymously" then
-        rep_b_name = "anonymous"
-        self.replay.P2_name = "anonymous"
-      end
-      --sort player names alphabetically for folder name so we don't have a folder "a-vs-b" and also "b-vs-a"
-      --don't switch to put "anonymous" first though
-      if rep_b_name < rep_a_name and rep_b_name ~= "anonymous" then
-        path = path .. sep .. rep_b_name .. "-vs-" .. rep_a_name
-      else
-        path = path .. sep .. rep_a_name .. "-vs-" .. rep_b_name
-      end
-      local filename = "v" .. ENGINE_VERSION .. "-" .. string.format("%04d-%02d-%02d-%02d-%02d-%02d", now.year, now.month, now.day, now.hour, now.min, now.sec) .. "-" .. rep_a_name .. "-L" .. self.replay.vs.P1_level .. "-vs-" .. rep_b_name .. "-L" .. self.replay.vs.P2_level
-      if self.replay.vs.ranked then
-        filename = filename .. "-Ranked"
-      else
-        filename = filename .. "-Casual"
-      end
-      if outcome == 1 or outcome == 2 then
-        filename = filename .. "-P" .. outcome .. "wins"
-      elseif outcome == 0 then
-        filename = filename .. "-draw"
-      end
-      filename = filename .. ".json"
-      if self.replay.vs then
-        self.replay.vs.in_buf = table.concat(self.inputs[1])
-        self.replay.vs.I = table.concat(self.inputs[2])
-        if COMPRESS_REPLAYS_ENABLED then
-          self.replay.vs.in_buf = Replay.compressInputString(self.replay.vs.in_buf)
-          self.replay.vs.I = Replay.compressInputString(self.replay.vs.I)
-          logger.debug("Compressed vs I/in_buf")
-          logger.debug("saving compressed replay as " .. path .. sep .. filename)
-        else
-          logger.debug("saving replay as " .. path .. sep .. filename)
-        end
-      end
-      write_replay_file(self.replay, path, filename)
-    else
-      logger.debug("replay not saved because a player didn't want it saved")
-    end
-
-    self.replay = nil
-
-    --check that it's ok to adjust ratings
-    local shouldAdjustRatings, reasons = self:rating_adjustment_approved()
-
-    -- record the game result for statistics, record keeping, and testing new features
-    local resultValue = 0.5
-    if self.a.player_number == outcome then
-      resultValue = 1
-    elseif self.b.player_number == outcome then
-      resultValue = 0
-    end
-    local rankedValue = 0
-    if shouldAdjustRatings then
-      rankedValue = 1
-    end
-    logGameResult(self.a.user_id, self.b.user_id, resultValue, rankedValue)
-
-    if outcome == 0 then
-      logger.debug("tie.  Nobody scored")
-      --do nothing. no points or rating adjustments for ties.
-      return true
-    else
-      local someone_scored = false
-
-      for i = 1, 2, 1 --[[or Number of players if we implement more than 2 players]] do
-        logger.debug("checking if player " .. i .. " scored...")
-        if outcome == i then
-          logger.trace("Player " .. i .. " scored")
-          self.win_counts[i] = self.win_counts[i] + 1
-          if shouldAdjustRatings then
-            self.server:adjust_ratings(self, i, gameID)
-          else
-            logger.debug("Not adjusting ratings because: " .. reasons[1])
-          end
-          someone_scored = true
-        end
-      end
-
-      if someone_scored then
-        local msg = {win_counts = self.win_counts}
-        self.a:send(msg)
-        self.b:send(msg)
-        self:send_to_spectators(msg)
-      end
-      return true
-    end
-  end
-end
-
+---@return boolean # if the players may play ranked
+---@return string[] reasons why or why not they may play ranked or what caveats apply to playing ranked
 function Room:rating_adjustment_approved()
-  --returns whether both players in the room have game states such that rating adjustment should be approved
-  local players = {self.a, self.b}
-  local reasons = {}
-  local caveats = {}
-  local both_players_are_placed = nil
+  if not self.leaderboard then
+    return false, {"Room has no leaderboard"}
+  end
 
-  if PLACEMENT_MATCHES_ENABLED then
-    if leaderboard.players[players[1].user_id] and leaderboard.players[players[1].user_id].placement_done and leaderboard.players[players[2].user_id] and leaderboard.players[players[2].user_id].placement_done then
-      --both players are placed on the leaderboard.
-      both_players_are_placed = true
-    elseif not (leaderboard.players[players[1].user_id] and leaderboard.players[players[1].user_id].placement_done) and not (leaderboard.players[players[2].user_id] and leaderboard.players[players[2].user_id].placement_done) then
-      reasons[#reasons + 1] = "Neither player has finished enough placement matches against already ranked players"
+  for _, player in ipairs(self.players) do
+    if not player.wants_ranked_match then
+      return false, {player.name .. " doesn't want ranked"}
     end
-  else
-    both_players_are_placed = true
-  end
-  -- don't let players use the same account
-  if players[1].user_id == players[2].user_id then
-    reasons[#reasons + 1] = "Players cannot use the same account"
   end
 
-  --don't let players too far apart in rating play ranked
-  local ratings = {}
-  for k, v in ipairs(players) do
-    if leaderboard.players[v.user_id] then
-      if not leaderboard.players[v.user_id].placement_done and leaderboard.players[v.user_id].placement_rating then
-        ratings[k] = leaderboard.players[v.user_id].placement_rating
-      elseif leaderboard.players[v.user_id].rating and leaderboard.players[v.user_id].rating ~= 0 then
-        ratings[k] = leaderboard.players[v.user_id].rating
-      else
-        ratings[k] = DEFAULT_RATING
+  return self.leaderboard:rating_adjustment_approved(self.players)
+end
+
+---@return string
+function Room:toString()
+  local info = self.name
+  info = info .. "\nRoom number:" .. self.roomNumber
+  info = info .. "\nWin Counts" .. table_to_string(self.win_counts)
+  for _, player in ipairs(self.players) do
+    info = info .. "\n" .. player.name .. " settings:"
+    info = info .. "\n" .. table_to_string(player:getSettings())
+  end
+
+  return info
+end
+
+---@param message table
+---@param sender ServerPlayer
+function Room:handleTaunt(message, sender)
+  local msg = ServerProtocol.taunt(sender, message.type, message.index)
+  self:broadcastJson(msg, sender)
+end
+
+---@param message { outcome: integer, [any]: any }
+---@param sender ServerPlayer
+function Room:handleGameOverOutcome(message, sender)
+  logger.debug(self.roomNumber .. ": Received game result from " .. sender.name .. ": " .. message.outcome)
+  self.game:receiveOutcomeReport(sender, message.outcome)
+
+  if self.game.complete then
+    self:updateWinCounts(self.game)
+    logger.info(self.roomNumber .. " " .. self.name .. " match " .. self.matchCount .. " ended with winner " .. (self.game.winnerIndex or ""))
+    self:emitSignal("matchEnd", self.game)
+
+    if self.game.ranked and self.game.winnerId then
+      local ratingUpdates = self.leaderboard:processGameResult(self.game)
+      for i, _ in ipairs(self.players) do
+        ratingUpdates[i].userId = nil
       end
-    else
-      ratings[k] = DEFAULT_RATING
+      self.ratings = ratingUpdates
     end
-  end
-  if math.abs(ratings[1] - ratings[2]) > RATING_SPREAD_MODIFIER * ALLOWABLE_RATING_SPREAD_MULITPLIER then
-    reasons[#reasons + 1] = "Players' ratings are too far apart"
-  end
 
-  local player_level_out_of_bounds_for_ranked = false
-  for i = 1, 2 do --we'll change 2 here when more players are allowed.
-    if (players[i].level < MIN_LEVEL_FOR_RANKED or players[i].level > MAX_LEVEL_FOR_RANKED) then
-      player_level_out_of_bounds_for_ranked = true
+    logger.debug("*******************************")
+    for i, player in ipairs(self.players) do
+      logger.debug("***" .. player.name .. " " .. self.win_counts[i] .. "***")
     end
-  end
-  if player_level_out_of_bounds_for_ranked then
-    reasons[#reasons + 1] = "Only levels between " .. MIN_LEVEL_FOR_RANKED .. " and " .. MAX_LEVEL_FOR_RANKED .. " are allowed for ranked play."
-  end
-  if players[1].level ~= players[2].level then
-    reasons[#reasons + 1] = "Levels don't match"
-  end
-  if players[1].inputMethod == "touch" or players[2].inputMethod == "touch" then
-    reasons[#reasons + 1] = "Touch input is not currently allowed in ranked matches."
-  end
-  for player_number = 1, 2 do
-    if not players[player_number].wants_ranked_match then
-      reasons[#reasons + 1] = players[player_number].name .. " doesn't want ranked"
-    end
-  end
-  if reasons[1] then
-    return false, reasons
-  else
-    if PLACEMENT_MATCHES_ENABLED and not both_players_are_placed and ((leaderboard.players[players[1].user_id] and leaderboard.players[players[1].user_id].placement_done) or (leaderboard.players[players[2].user_id] and leaderboard.players[players[2].user_id].placement_done)) then
-      caveats[#caveats + 1] = "Note: Rating adjustments for these matches will be processed when the newcomer finishes placement."
-    end
-    return true, caveats
+    logger.debug("*******************************\n")
+
+    self:prepare_character_select()
+    self:broadcastJson(
+      ServerProtocol.gameResult(
+        self.game,
+        self
+      )
+    )
+    self.game = nil
   end
 end
+
+---@param game ServerGame
+function Room:updateWinCounts(game)
+  for i, player in ipairs(self.players) do
+    logger.debug("checking if player " .. i .. " scored...")
+    if player.player_number == game.winnerIndex then
+      logger.trace("Player " .. i .. " scored")
+      self.win_counts[i] = self.win_counts[i] + 1
+    end
+  end
+  if not game.winnerId then
+    logger.debug("tie.  Nobody scored")
+  end
+end
+
+function Room:handleGameAbort(sender)
+  if #self.players == 1 and self.players[1] == sender then
+    logger.debug(sender.name .. " aborted the game")
+    self:abortGame(sender)
+  elseif #self.players == 2 and tableUtils.contains(self.players, sender) then
+    -- aborts in multiplayer room are a bigger deal so we should log them as info
+    logger.info(sender.name .. " aborted the game")
+
+    -- there is obviously some abuse potential here, e.g. by sending aborts instead of a game result
+    -- the room should only accept the abort if there is a significant difference in inputs on Game, suggesting the abort is legitimate
+    local inputCountDifference = self.game:getInputCountDifference()
+    if inputCountDifference > 100 then
+      logger.info("abort was judged as legitimate with an inputCountDifference of " .. inputCountDifference)
+      self:abortGame(sender)
+    else
+      logger.info("abort was judged as illegitimate with an inputCountDifference of " .. inputCountDifference)
+      -- if that is not the case, we're in a bit of a pickle as the sender already stopped the match client side
+      --  but there is no indication for the abort actually being legitimate
+      -- I don't think there is a truly fair way to resolve that situation as the assumption of manipulation makes it impossible to make a correct decision
+      --  as long as clients are given the "power" to abort (and realistically they can always do that just by Alt+F4)
+      -- ; up to now closing the room was the effective outcome either way
+      -- even running a simulation of the game to the end to see if there was a winner would not resolve it as clients could be modified to not send an input that leads to a game over
+
+      -- I think the fair thing is to assume that the client reported a loss in that scenario
+      -- if both clients end up sending an abort that is denied by above criteria they'll both report a loss
+      -- this leads to the outcome resolving as a tie which is fair as long as ties are discarded for the ladder (currently they are)
+      -- that would be a scenario in which the above condition was simply not enough to validate the abort
+      local outcome
+      if sender.player_number == 1 then
+        outcome = 2
+      else
+        outcome = 1
+      end
+      self:handleGameOverOutcome({outcome = outcome}, sender)
+
+      -- it could naturally still happen that one player aborts and the other reports a win leading to a win instead of a tie
+      -- while clients could be manipulated to just report a win instead of an abort in this scenario,
+      --  the general occurence of the situation should be rare enough that consequences of abuse in this manner should be minimal
+      --  as the abuser does only have control over their own connection to the server
+    end
+  end
+
+end
+
+function Room:abortGame(sender)
+  self:broadcastJson(ServerProtocol.sendGameAbort(sender), sender)
+  self:emitSignal("matchEnd", self.game)
+  self:prepare_character_select()
+  self.game = nil
+end
+
+return Room

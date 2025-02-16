@@ -1,10 +1,7 @@
 local CharacterSelect = require("client.src.scenes.CharacterSelect")
 local class = require("common.lib.class")
-local MultiPlayerSelectionWrapper = require("client.src.ui.MultiPlayerSelectionWrapper")
-local Grid = require("client.src.ui.Grid")
+local ui = require("client.src.ui")
 
---@module CharacterSelectChallenge
--- 
 local CharacterSelectChallenge = class(
   function (self, sceneParams)
   end,
@@ -18,12 +15,12 @@ function CharacterSelectChallenge:customLoad(sceneParams)
 end
 
 function CharacterSelectChallenge:loadUserInterface()
-  self.ui.grid = Grid({unitSize = 100, gridWidth = 9, gridHeight = 6, unitMargin = 8, hAlign = "center", vAlign = "center"})
+  self.ui.grid = ui.Grid({unitSize = 100, gridWidth = 9, gridHeight = 6, unitMargin = 8, hAlign = "center", vAlign = "center"})
   self.uiRoot:addChild(self.ui.grid)
 
-  self.ui.panelSelection = MultiPlayerSelectionWrapper({hFill = true, alignment = "top", hAlign = "center", vAlign = "top"})
+  self.ui.panelSelection = ui.MultiPlayerSelectionWrapper({hFill = true, alignment = "top", hAlign = "center", vAlign = "top"})
   self.ui.panelSelection:setTitle("panels")
-  self.ui.stageSelection = MultiPlayerSelectionWrapper({vFill = true, alignment = "left", hAlign = "center", vAlign = "center"})
+  self.ui.stageSelection = ui.MultiPlayerSelectionWrapper({vFill = true, alignment = "left", hAlign = "center", vAlign = "center"})
   self.ui.stageSelection:setTitle("stage")
   self.ui.readyButton = self:createReadyButton()
   local characterButtons = self:getCharacterButtons()
@@ -40,7 +37,6 @@ function CharacterSelectChallenge:loadUserInterface()
 
   panelHeight = self.ui.grid.unitSize - self.ui.grid.unitMargin * 2- self.ui.panelSelection.height
   stageWidth = self.ui.grid.unitSize * 1.5 - self.ui.grid.unitMargin * 2
-  rankedWidth = stageWidth
 
   self.ui.grid:createElementAt(9, 2, 1, 1, "readyButton", self.ui.readyButton)
   self.ui.grid:createElementAt(1, 3, characterGridWidth, characterGridHeight, "characterSelection", self.ui.characterGrid, true)

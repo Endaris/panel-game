@@ -1,8 +1,10 @@
-local Label = require("client.src.ui.Label")
-local TextButton = require("client.src.ui.TextButton")
-local UiElement = require("client.src.ui.UIElement")
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UiElement = require(PATH .. ".UIElement")
+local Label = require(PATH .. ".Label")
+local TextButton = require(PATH .. ".TextButton")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
+local system = require("client.src.system")
 
 -- MenuItem is a specific UIElement that all children of Menu should be
 local MenuItem = class(function(self, options)
@@ -25,7 +27,7 @@ function MenuItem.createMenuItem(label, item)
 
   menuItem.width = label.width + (2 * MenuItem.PADDING)
 
-  if love.system.getOS() == "Android" or DEBUG_ENABLED then
+  if system.isMobileOS() or DEBUG_ENABLED then
     label.height = math.max(30, label.height + (2 * MenuItem.PADDING))
     menuItem.height = math.max(30, label.height, item and item.height or 0)
   else
@@ -36,7 +38,7 @@ function MenuItem.createMenuItem(label, item)
     local spaceBetween = 16
     item.x = label.width + spaceBetween
     item.vAlign = "center"
-    if love.system.getOS() == "Android" or DEBUG_ENABLED then
+    if system.isMobileOS() or DEBUG_ENABLED then
       item.height = math.max(30, item.height)
     end
     menuItem.width = item.x + item.width + MenuItem.PADDING

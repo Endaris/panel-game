@@ -2,7 +2,7 @@ local consts = require("common.engine.consts")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local fileUtils = require("client.src.FileUtils")
-local levelPresets = require("client.src.LevelPresets")
+local levelPresets = require("common.data.LevelPresets")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local ImageContainer = require("client.src.ui.ImageContainer")
 local Music = require("client.src.music.Music")
@@ -25,13 +25,26 @@ local flags = {
 }
 
 -- Represents the current styles and images to apply to the game UI
+---@class Theme
+---@field path string
+---@field name string
+---@field version ThemeVersion
+---@field images table
+---@field fontMaps table
+---@field sounds table<string, (love.Source | table | nil)>
+---@field musics table<string, Music>
+---@field font table
+---@field main_menu_screen_pos number[]
+---@field main_menu_y_max number
+---@field main_menu_max_height number
+---@field defaultStage Stage
 Theme =
   class(
+---@param self Theme
   function(self, fullPath, foldername)
-    self.VERSIONS = { original = 1, two = 2, fixedOffsets = 3, current = 3}
     self.path = fullPath
     self.name = foldername
-    self.version = self.VERSIONS.original
+    self.version = Theme.THEME_VERSIONS.original
     self.images = {} -- theme images
     self.fontMaps = {}
     self.sounds = {} -- theme sfx
@@ -44,6 +57,13 @@ Theme =
     self.main_menu_max_height = 0
   end
 )
+
+---@enum ThemeVersion
+Theme.THEME_VERSIONS = { original = 1, two = 2, fixedOffsets = 3, current = 3}
+
+Theme.TYPE = "theme"
+-- name of the top level save directory for mods of this type
+Theme.SAVE_DIR = "themes"
 
 -- Returns a list of keys and their type allowed in theme config files
 function Theme:configurableKeys() 
@@ -232,7 +252,7 @@ function Theme:loadVersion3DefaultValues()
     self.winLabel_Pos = {318, -246}
     self.win_Scale = 0.75
     self.win_Pos = {260, -112}
-    self.gameover_text_Pos = {640, 620}
+    self.gameover_text_Pos = {640, 60}
     self.healthbar_frame_Pos = {-51, -12}
     self.healthbar_frame_Scale = 1
     self.healthbar_Pos = {-39, 68}
@@ -301,6 +321,25 @@ function Theme:loadMenuGraphics()
   self.images.IMG_bug = self:load_theme_img("bug")
 end
 
+local MAX_SUPPORTED_PLAYERS = 2
+
+---@param theme Theme
+---@return table<integer, table<integer, love.Texture>>
+local function loadGridCursors(theme)
+  local gridCursors = {}
+  theme.images.IMG_char_sel_cursors = {}
+  for player_num = 1, MAX_SUPPORTED_PLAYERS do
+    gridCursors[player_num] = {}
+    for position_num = 1, 2 do
+      gridCursors[player_num][position_num] = theme:load_theme_img("p" .. player_num .. "_select_screen_cursor" .. position_num)
+    end
+  end
+
+  theme.images.IMG_char_sel_cursors = gridCursors
+
+  return theme.images.IMG_char_sel_cursors
+end
+
 function Theme:loadSelectionGraphics()
   self.images.flags = {}
   for _, flag in ipairs(flags) do
@@ -333,16 +372,12 @@ function Theme:loadSelectionGraphics()
   self.images.IMG_random_stage = self:load_theme_img("random_stage")
   self.images.IMG_random_character = self:load_theme_img("random_character")
 
-  local MAX_SUPPORTED_PLAYERS = 2
-  self.images.IMG_char_sel_cursors = {}
   self.images.IMG_players = {}
   for player_num = 1, MAX_SUPPORTED_PLAYERS do
     self.images.IMG_players[player_num] = self:load_theme_img("p" .. player_num)
-    self.images.IMG_char_sel_cursors[player_num] = {}
-    for position_num = 1, 2 do
-      self.images.IMG_char_sel_cursors[player_num][position_num] = self:load_theme_img("p" .. player_num .. "_select_screen_cursor" .. position_num)
-    end
   end
+
+  loadGridCursors(self)
 end
 
 function Theme:loadIngameGraphics()
@@ -590,6 +625,10 @@ function Theme:applyConfigVolume()
   SoundController:applyMusicVolume(self.musics)
 end
 
+
+---@param theme Theme
+---@param SFX_name string
+---@return love.Source?
 local function loadThemeSfx(theme, SFX_name)
   local dirs_to_check = {
     theme.path .. "/sfx/",
@@ -626,12 +665,14 @@ function Theme:loadIngameSfx()
   self.sounds.game_over = loadThemeSfx(self, "gameover")
   self.sounds.countdown = loadThemeSfx(self, "countdown")
   self.sounds.go = loadThemeSfx(self, "go")
+  ---@type love.Source[]
   self.sounds.garbage_thud = {
       loadThemeSfx(self, "thud_1"),
       loadThemeSfx(self, "thud_2"),
       loadThemeSfx(self, "thud_3")
     }
-    self.sounds.pops = {}
+  ---@type love.Source[][]
+  self.sounds.pops = {}
 
   for popLevel = 1, 4 do
     self.sounds.pops[popLevel] = {}
@@ -649,40 +690,19 @@ function Theme:loadSfx(full)
   end
 end
 
-local basicMusics = {"main", "main_start"}
-local fullMusics = {"main", "main_start", "select_screen", "select_screen_start", "title_screen", "title_screen_start"} -- the music used in a theme
+local basicMusics = {"main",}
+local fullMusics = {"main", "select_screen", "title_screen",} -- the music used in a theme
 
 function Theme:loadMusic(full)
   local musics = full and fullMusics or basicMusics
   for _, music in ipairs(musics) do
-    self.musics[music] = fileUtils.loadSoundFromSupportExtensions(self.path .. "/music/" .. music, true)
-    if self.musics[music] then
-      if not string.find(music, "start") then
-        self.musics[music]:setLooping(true)
-      else
-        self.musics[music]:setLooping(false)
-      end
-    end
-  end
-
-  self.stageTracks = {}
-
-  if self.musics.main then
-    self.stageTracks.main = Music(self.musics.main, self.musics.main_start)
-  end
-
-  if self.musics.select_screen then
-    self.stageTracks.select_screen = Music(self.musics.select_screen, self.musics.select_screen_start)
-  end
-
-  if self.musics.title_screen then
-    self.stageTracks.title_screen = Music(self.musics.title_screen, self.musics.title_screen_start)
+    self.musics[music] = Music.load(self.path .. "/music", music)
   end
 end
 
 function Theme:upgradeAndSaveVerboseConfig()
-  if self.version == self.VERSIONS.original then
-    self.version = self.VERSIONS.two
+  if self.version == Theme.THEME_VERSIONS.original then
+    self.version = Theme.THEME_VERSIONS.two
     self:saveVerboseConfig()
   end
 end
@@ -699,7 +719,7 @@ function Theme:saveVerboseConfig()
     jsonData[key] = self[key]
   end
 
-  love.filesystem.write(jsonPath, json.encode(jsonData))
+  fileUtils.writeJson(self.path, "config.json", jsonData)
 end
 
 -- initializes theme using the json settings
@@ -709,9 +729,9 @@ function Theme.json_init(self)
   -- Then override with custom theme
   local customData = fileUtils.readJsonFile(self.path .. "/config.json")
   local version = self:versionForJSONVersion(customData.version)
-  if version == self.VERSIONS.original then
+  if version == Theme.THEME_VERSIONS.original then
     self:loadVersion1DefaultValues()
-  elseif version == self.VERSIONS.two then
+  elseif version == Theme.THEME_VERSIONS.two then
     self:loadVersion2DefaultValues()
   end
   self:applyJSONData(customData)
@@ -723,7 +743,7 @@ function Theme:versionForJSONVersion(jsonVersion)
   if jsonVersion and type(jsonVersion) == "number" then
     return  jsonVersion
   else
-    return self.VERSIONS.original
+    return Theme.THEME_VERSIONS.original
   end
 end
 
@@ -762,7 +782,7 @@ function Theme:final_init()
 end
 
 function Theme:offsetsAreFixed()
-  return self.version >= self.VERSIONS.fixedOffsets
+  return self.version >= Theme.THEME_VERSIONS.fixedOffsets
 end
 
 function Theme:chainImage(chainAmount)
@@ -781,6 +801,32 @@ function Theme:comboImage(comboAmount)
   return cardImage
 end
 
+function Theme:defaultModInit()
+  self:loadDefaultStage()
+end
+
+function Theme:loadDefaultStage()
+  local stagePath = self.path .. "/default/stage"
+  local defaultStage
+  if love.filesystem.getInfo(stagePath, "directory") then
+    defaultStage = require("client.src.mods.Stage")(stagePath, "__default")
+    -- we don't want to do a full json init but we need to find out the music style of the default stage
+    local read_data = fileUtils.readJsonFile(defaultStage.path .. "/config.json")
+    if read_data and read_data.music_style and type(read_data.music_style) == "string" then
+      defaultStage.music_style = read_data.music_style
+    end
+    defaultStage:preload()
+    defaultStage:load(true)
+  elseif self.path ~= consts.DEFAULT_THEME_DIRECTORY then
+    defaultStage = themes[consts.DEFAULT_THEME_DIRECTORY]:loadDefaultStage()
+  else
+    error("No default stage available")
+  end
+
+  self.defaultStage = defaultStage
+  return defaultStage
+end
+
 -- loads a theme into the game
 function Theme:load()
   logger.debug("loading theme " .. self.name)
@@ -788,6 +834,7 @@ function Theme:load()
   self:graphics_init(true)
   self:sound_init(true)
   self:final_init()
+  self:defaultModInit()
   self.fullyLoaded = true
   logger.debug("loaded theme " .. self.name)
 end
@@ -821,6 +868,9 @@ function theme_init()
   themes[consts.DEFAULT_THEME_DIRECTORY] = Theme(Theme.defaultThemeDirectoryPath, consts.DEFAULT_THEME_DIRECTORY)
 
   themes[config.theme]:load()
+  if themes[config.theme].font then
+    GraphicsUtil.setGlobalFont(themes[config.theme].font.path, themes[config.theme].font.size)
+  end
 end
 
 function Theme:playCancelSfx()
@@ -833,6 +883,15 @@ end
 
 function Theme:playMoveSfx()
   SoundController:playSfx(self.sounds.menu_move)
+end
+
+function Theme:getGridCursor(index)
+  index = index or 1
+  if not self.images.IMG_char_sel_cursors or self.images.IMG_char_sel_cursors[index] then
+    loadGridCursors(self)
+  end
+
+  return self.images.IMG_char_sel_cursors[index]
 end
 
 return Theme

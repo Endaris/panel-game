@@ -23,7 +23,14 @@ local profiler = {}
 -- the memory consumption we determine using collectgarbage("count"))
 -- since no allocations/deallocations are triggered by them anymore
 local zoneStack = table.new(16, 0)
-local profData = table.new(10, 0)
+local profData
+if PROF_CAPTURE then
+    -- if not preallocating profData will frequently rehash early on which may cause spikes in frame time
+    --   making it more difficult to identify whether there is a problem in the game or if jprof acted up
+    profData = table.new(10000000, 0)
+else
+    profData = {}
+end
 local netBuffer = nil
 local profEnabled = true
 -- profMem keeps track of the amount of memory allocated by prof.push/prof.pop
@@ -137,6 +144,7 @@ if PROF_CAPTURE then
     end
 
     function profiler.connect(saveFullProfData, port, address)
+---@diagnostic disable-next-line: different-requires
         local socket = require("socket")
 
         local sock, err = socket.tcp()

@@ -1,10 +1,11 @@
 local table = table
 
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UIElement = require(PATH .. ".UIElement")
+local Label = require(PATH .. ".Label")
+local directsFocus = require(PATH .. ".FocusDirector")
 local class = require("common.lib.class")
-local UIElement = require("client.src.ui.UIElement")
-local input = require("common.lib.inputManager")
-local Label = require("client.src.ui.Label")
-local directsFocus = require("client.src.ui.FocusDirector")
+local input = require("client.src.inputManager")
 
 local NAVIGATION_BUTTON_WIDTH = 30
 

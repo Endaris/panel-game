@@ -1,19 +1,17 @@
 local GameBase = require("client.src.scenes.GameBase")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 local consts = require("common.engine.consts")
 local util = require("common.lib.util")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local prof = require("common.lib.jprof.jprof")
 
---@module replayGame
 local ReplayGame = class(
   function (self, sceneParams)
     self.frameAdvance = false
     self.playbackSpeeds = {-1, 0, 0.5, 1, 2, 3, 4, 8, 16}
     self.playbackSpeedIndex = 4
-  
-    self:load(sceneParams)
+    self.saveReplay = false
   end,
   GameBase
 )
@@ -55,7 +53,7 @@ function ReplayGame:runGame()
         self.match:run()
       end
     elseif playbackSpeed < 0 then
-      self.match:rewindToFrame(self.match.clock + playbackSpeed)
+      self.match:rewindToFrame(self.match.engine.clock + playbackSpeed)
     elseif playbackSpeed < 1 then
       local inverse = math.round(1 / playbackSpeed, 0)
       if tick % inverse == 0 then
@@ -68,7 +66,7 @@ function ReplayGame:runGame()
       if playbackSpeed > 0 then
         self.match:run()
       elseif playbackSpeed < 0 then
-        self.match:rewindToFrame(self.match.clock - 1)
+        self.match:rewindToFrame(self.match.engine.clock - 1)
       end
       self.frameAdvance = false
       self.match.isPaused = true
@@ -95,7 +93,7 @@ function ReplayGame:runGame()
   elseif input:isPressedWithRepeat("MenuLeft") then
     self.playbackSpeedIndex = util.bound(1, self.playbackSpeedIndex - 1, #self.playbackSpeeds)
     playbackSpeed = self.playbackSpeeds[self.playbackSpeedIndex]
-  elseif input.isDown["Swap2"] or input.allkeys.isDown["escape"] then
+  elseif input.isDown["Swap2"] or input.allKeys.isDown["escape"] then
     if self.match.isPaused then
       self.match:abort()
       GAME.navigationStack:pop()
@@ -114,11 +112,6 @@ function ReplayGame:customDraw()
   local textPos = themes[config.theme].gameover_text_Pos
   local playbackText = self.playbackSpeeds[self.playbackSpeedIndex] .. "x"
   GraphicsUtil.printf(playbackText, textPos[0], textPos[1], consts.CANVAS_WIDTH, "center", nil, 1, 10)
-end
-
-function ReplayGame:customGameOverSetup()
-  self.nextScene = "ReplayBrowser"
-  self.nextSceneParams = nil
 end
 
 function ReplayGame:drawHUD()

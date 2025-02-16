@@ -66,6 +66,10 @@ Panels =
   end
 )
 
+Panels.TYPE = "panels"
+-- name of the top level save directory for mods of this type
+Panels.SAVE_DIR = "panels"
+
 function Panels:json_init()
   local read_data = fileUtils.readJsonFile(self.path .. "/config.json")
   if read_data then
@@ -203,18 +207,18 @@ local function validateSingleFilesAgainstConfig(imagesByColorAndIndex, animation
   local configIndexes = {}
   local problems = {}
 
-  for animationState, config in pairs(animationConfig) do
+  for _, config in pairs(animationConfig) do
     for i = 1, #config.frames do
       -- the indexes of the images used for the config are saved here, mark as being in use
       configIndexes[config.frames[i]] = true
     end
   end
 
-  for i = 1, 8 do
-    local imagesByIndex = imagesByColorAndIndex[i]
+  for color = 1, 8 do
+    local imagesByIndex = imagesByColorAndIndex[color]
     for index, _ in pairs(configIndexes) do
       if not imagesByIndex[index] then
-        problems[#problems+1] = "Failed to find image with index " .. index .. " for color " .. i
+        problems[#problems+1] = "Failed to find image with index " .. index .. " for color " .. color
       end
     end
   end
@@ -231,20 +235,29 @@ function Panels:loadSingles()
   for color = 1, 8 do
     images[color] = {}
 
-    local files = tableUtils.filter(panelFiles, function(f)
-      return string.match(f, "panel" .. color .. "%d+%.")
-    end)
+    local files = fileUtils.getMatchingFiles(panelFiles, "panel" .. color, fileUtils.SUPPORTED_IMAGE_FORMATS)
 
     local indexToFile = {}
 
+    local maxIndex = 0
     for i = 1, #files do
-      local f = fileUtils.getFileNameWithoutExtension(files[i])
-      indexToFile[tonumber(f:sub(7))] = f
+      local file = fileUtils.getFileNameWithoutExtension(files[i])
+      local index = tonumber(file:sub(7))
+      if index then
+        maxIndex = math.max(maxIndex, index)
+        indexToFile[index] = file
+      end
     end
 
-    for i = 1, math.max(#indexToFile or 7, 7) do
-      images[color][i] = load_panel_img(self.path, indexToFile[i] or ("panel" .. color .. i))
-      self.size = math.max(images[color][i]:getWidth(), self.size) -- for scaling
+    -- always go to at least 7 because the default single config uses 7 panels
+    -- and likewise there are fallbacks up to panel 7
+    for i = 1, math.max(maxIndex, 7) do
+      if indexToFile[i] or i <= 7 then
+        images[color][i] = load_panel_img(self.path, indexToFile[i] or ("panel" .. color .. i))
+        if images[color][i] then
+          self.size = math.max(images[color][i]:getWidth(), self.size) -- for scaling
+        end
+      end
     end
   end
 
@@ -430,7 +443,7 @@ end
 
 local function getDangerBounceProps(panelSet, panel, dangerTimer)
   local conf = panelSet.sheetConfig.danger
-  -- danger_timer counts down from 18 or 15 to 0, depending on what triggered it and then wrapping back to 18
+  -- dangerTimer counts up from 0 but top out and getting out of danger force it back to 0
   local frame = ceil(wrap(1, dangerTimer + 1 + floor((panel.column - 1) / 2), conf.durationPerFrame * conf.frames) / conf.durationPerFrame)
   return conf, frame
 end
@@ -553,7 +566,7 @@ function Panels:getDrawProps(panel, x, y, dangerCol, dangerTimer)
   end
 
   -- verify that the default frame we get from the new config and the old frame are the same
-  if self.animationConfig == DEFAULT_PANEL_ANIM and conf ~= self.sheetConfig.flash then
+  if DEBUG_ENABLED and self.animationConfig == DEFAULT_PANEL_ANIM and conf ~= self.sheetConfig.flash then
   -- flash in particular started on a different frame depending on level
   -- on levels with FLASH % 4 == 0 it would start with frame 5
   -- on levels with FLASH % 4 == 2 it would start with frame 1

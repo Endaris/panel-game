@@ -10,10 +10,12 @@ local Signal = require("common.lib.signal")
 local CharacterSelect2p = require("client.src.scenes.CharacterSelect2p")
 local SoundController = require("client.src.music.SoundController")
 local GameCatchUp = require("client.src.scenes.GameCatchUp")
-local Game2pVs = require("client.src.scenes.Game2pVs")
+local GameBase = require("client.src.scenes.GameBase")
 local LoginRoutine = require("client.src.network.LoginRoutine")
+local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
+local LevelData = require("common.data.LevelData")
 
-
+---@enum NetClientStates
 local states = { OFFLINE = 1, LOGIN = 2, ONLINE = 3, ROOM = 4, INGAME = 5 }
 
 -- Most functions of NetClient are private as they only should get triggered via incoming server messages
@@ -55,6 +57,19 @@ local function updateLobbyState(self, lobbyState)
   self:emitSignal("lobbyStateUpdate", self.lobbyData)
 end
 
+local function getSceneByGameMode(gameMode)
+  -- this is so hacky oh my god
+  if gameMode.richPresenceLabel == "2p versus" then
+    return CharacterSelect2p()
+  elseif gameMode.richPresenceLabel == "Endless" then
+    return require("client.src.scenes.EndlessMenu")()
+  elseif gameMode.richPresenceLabel == "Time Attack" then
+    return require("client.src.scenes.TimeAttackMenu")()
+  elseif gameMode.richPresenceLabel == "1p vs self" then
+    return require("client.src.scenes.CharacterSelectVsSelf")()
+  end
+end
+
 -- starts a 2p vs online match
 local function start2pVsOnlineMatch(self, createRoomMessage)
   resetLobbyData(self)
@@ -62,7 +77,7 @@ local function start2pVsOnlineMatch(self, createRoomMessage)
   self.room = GAME.battleRoom
   love.window.requestAttention()
   SoundController:playSfx(themes[config.theme].sounds.notification)
-  GAME.navigationStack:push(CharacterSelect2p())
+  GAME.navigationStack:push(getSceneByGameMode(self.room.mode))
   self.state = states.ROOM
 end
 
@@ -72,8 +87,9 @@ local function processSpectatorListMessage(self, message)
   end
 end
 
-local function processCharacterSelectMessage(self, message)
-  -- receiving a character select message means that both players have reported their game results to the server
+---@param self NetClient
+local function processGameResultMessage(self, message)
+  -- receiving a gameResult message means that both players have reported their game results to the server
   -- that means from here on it is expected to receive no further input messages from either player
   -- if we went game over first, the opponent will notice later and keep sending inputs until we went game over on their end too
   -- these extra messages will remain unprocessed in the queue and need to be cleared up so they don't get applied the next match
@@ -83,35 +99,32 @@ local function processCharacterSelectMessage(self, message)
     return
   end
 
-  -- character_select and create_room are the same message
-  -- except that character_select has an additional character_select = true flag
-  message = ServerMessages.sanitizeCreateRoom(message)
-  for _, messagePlayer in ipairs(message.players) do
-    for _, roomPlayer in ipairs(self.room.players) do
-      if messagePlayer.playerNumber == roomPlayer.playerNumber then
-        if messagePlayer.ratingInfo then
-          roomPlayer:setRating(messagePlayer.ratingInfo.new)
-          roomPlayer:setLeague(messagePlayer.ratingInfo.league)
-        end
-        if not roomPlayer.isLocal then
-          roomPlayer:updateWithMenuState(messagePlayer)
-        end
-      end
+  for _, roomPlayer in ipairs(self.room.players) do
+    local messagePlayer = message.gameResult[roomPlayer.playerNumber]
+    roomPlayer:setWinCount(messagePlayer.winCount)
+
+    if messagePlayer.ratingInfo then
+      local ratingInfo = messagePlayer.ratingInfo
+      roomPlayer:setRating(ratingInfo.placement_match_progress or ratingInfo.new)
+      roomPlayer:setLeague(ratingInfo.league)
     end
   end
 
+  self.room:updateWinrates()
   self.room:updateExpectedWinrates()
-  self.state = states.ROOM
+  self:setState(states.ROOM)
 end
 
 local function processLeaveRoomMessage(self, message)
   if self.room then
+    local transition
     if self.room.match then
       -- we're ending the game via an abort so we don't want to enter the standard onMatchEnd callback
       self.room.match:disconnectSignal("matchEnded", self.room)
       -- instead we actively abort the match ourselves
       self.room.match:abort()
       self.room.match:deinit()
+      transition = MessageTransition(love.timer.getTime(), 5, message.reason or "", false)
     end
 
     -- and then shutdown the room
@@ -119,7 +132,7 @@ local function processLeaveRoomMessage(self, message)
     self.room = nil
 
     self.state = states.ONLINE
-    GAME.navigationStack:popToName("Lobby")
+    GAME.navigationStack:popToName("Lobby", transition)
   end
 end
 
@@ -134,12 +147,11 @@ local function processTauntMessage(self, message)
   characters[characterId]:playTaunt(message.type, message.index)
 end
 
+---@param self NetClient
 local function processMatchStartMessage(self, message)
   if not self.room then
     return
   end
-
-  message = ServerMessages.sanitizeStartMatch(message)
 
   for _, playerSettings in ipairs(message.playerSettings) do
     -- contains level, characterId, panelId
@@ -149,19 +161,35 @@ local function processMatchStartMessage(self, message)
         if playerSettings.level ~= player.settings.level then
           player:setLevel(playerSettings.level)
         end
+        if playerSettings.levelData and LevelData.validate(playerSettings.levelData) then
+          playerSettings.levelData = setmetatable(playerSettings.levelData, LevelData)
+          player:setLevelData(playerSettings.levelData)
+        end
+
+        if playerSettings.inputMethod ~= player.settings.inputMethod then
+          -- since only one player can claim touch, touch is unclaimed every time we return to character select
+          -- this also means they will send controller as their input method until they ready up
+          -- if the remote touch player readies up AFTER the local client, we never get informed about the change in input method
+          -- besides for the match start message itself
+          -- likewise if the local player readies up with touch and then unreadies their inputMethod will flip back to controller so we even have to overwrite the local player setting
+          -- so it's very important to set this here
+          player:setInputMethod(playerSettings.inputMethod)
+        end
+
         if player.isLocal then
           if not player.inputConfiguration then
+            if player.settings.inputMethod == "touch" then
+              player:restrictInputs(GAME.input.mouse)
+            else
+              if player.lastUsedInputConfiguration.x then
+                -- there is no configuration and the last one is a touch configuration
+                -- there is no way to know which input configuration the player wanted to use in this scenario so throw an error
+                error("Player's input configuration does not match input method " .. player.settings.inputMethod .. " sent by server.")
+              else
+                player:restrictInputs(player.lastUsedInputConfiguration)
+              end
+            end
             -- fallback in case the player lost their input config while the server sent the message
-            player:restrictInputs(player.lastUsedInputConfiguration)
-          end
-        else
-          if playerSettings.inputMethod ~= player.settings.inputMethod then
-            -- since only one player can claim touch, touch is unclaimed every time we return to character select
-            -- this also means they will send controller as their input method until they ready up
-            -- if the remote touch player readies up AFTER the local client, we never get informed about the change in input method
-            -- besides for the match start message itself
-            -- so it's very important to set this here
-            player:setInputMethod(playerSettings.inputMethod)
           end
         end
         -- generally I don't think it's a good idea to try and rematch the other diverging settings here
@@ -182,18 +210,11 @@ local function processMatchStartMessage(self, message)
   end
 
   self.tcpClient:dropOldInputMessages()
-  self.room:startMatch(message.stageId, message.seed)
-  self.state = states.INGAME
+  self.room:startMatch(message.stageId, message.seed, message.replay)
+  self:setState(states.INGAME)
 end
 
-local function processWinCountsMessage(self, message)
-  if not self.room then
-    return
-  end
-
-  self.room:setWinCounts(message.win_counts)
-end
-
+---@param self NetClient
 local function processRankedStatusMessage(self, message)
   if not self.room then
     return
@@ -211,28 +232,30 @@ local function processRankedStatusMessage(self, message)
 end
 
 local function processMenuStateMessage(player, message)
-  local menuState = ServerMessages.sanitizeMenuState(message.menu_state)
-  if message.player_number then
+  local menuState = message.menu_state
+  if menuState.playerNumber then
     -- only update if playernumber matches the player's
-    if message.player_number == player.playerNumber then
-      player:updateWithMenuState(menuState)
+    if menuState.playerNumber == player.playerNumber then
+      player:updateSettings(menuState)
     else
       -- this update is for someone else
     end
   else
-    player:updateWithMenuState(menuState)
+    player:updateSettings(menuState)
   end
 end
 
 local function processInputMessages(self)
   local messages = self.tcpClient.receivedMessageQueue:pop_all_with(NetworkProtocol.serverMessageTypes.opponentInput.prefix, NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix)
-  for _, msg in ipairs(messages) do
-    for type, data in pairs(msg) do
-      logger.trace("Processing: " .. type .. " with data:" .. data)
-      if type == NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix then
-        self.room.match.stacks[1]:receiveConfirmedInput(data)
-      elseif type == NetworkProtocol.serverMessageTypes.opponentInput.prefix then
-        self.room.match.stacks[2]:receiveConfirmedInput(data)
+  if self.room and self.room.match then
+    for _, msg in ipairs(messages) do
+      for type, data in pairs(msg) do
+        logger.trace("Processing: " .. type .. " with data:" .. data)
+        if type == NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix then
+          self.room.match.stacks[1]:receiveConfirmedInput(data)
+        elseif type == NetworkProtocol.serverMessageTypes.opponentInput.prefix then
+          self.room.match.stacks[2]:receiveConfirmedInput(data)
+        end
       end
     end
   end
@@ -255,15 +278,30 @@ local function spectate2pVsOnlineMatch(self, spectateRequestGrantedMessage)
   self.room = GAME.battleRoom
   if GAME.battleRoom.match then
     self.state = states.INGAME
-    local vsScene = Game2pVs({match = GAME.battleRoom.match})
+    local vsScene = GameBase({match = GAME.battleRoom.match})
     local catchUp = GameCatchUp(vsScene)
     -- need to push character select, otherwise the pop on match end will return to lobby
     -- directly add to the stack so it isn't getting displayed
-    GAME.navigationStack.scenes[#GAME.navigationStack.scenes+1] = CharacterSelect2p()
+    GAME.navigationStack.scenes[#GAME.navigationStack.scenes+1] = getSceneByGameMode(self.room.mode)
     GAME.navigationStack:push(catchUp)
   else
     self.state = states.ROOM
-    GAME.navigationStack:push(CharacterSelect2p())
+    GAME.navigationStack:push(getSceneByGameMode(self.room.mode))
+  end
+end
+
+---@param self NetClient
+local function handleGameAbort(self, gameAbortMessage)
+  if self.room and self.room.match and self.state == states.INGAME then
+    self.tcpClient:dropOldInputMessages()
+    -- we're ending the game via an abort so we don't want to enter the standard onMatchEnd callback
+    self.room.match:disconnectSignal("matchEnded", self.room)
+    -- instead we actively abort the match ourselves
+    self.room.match:abort()
+    self.room.match:deinit()
+    self.state = states.ROOM
+    transition = MessageTransition(love.timer.getTime(), 5, "Game aborted by " .. (gameAbortMessage.source or "unknown"), false)
+    GAME.navigationStack:pop(transition)
   end
 end
 
@@ -277,21 +315,32 @@ local function createListeners(self)
   -- messageListener holds *all* available listeners
   local messageListeners = {}
   messageListeners.create_room = createListener(self, "create_room", start2pVsOnlineMatch)
-  messageListeners.players = createListener(self, "players", updateLobbyState)
+  messageListeners.players = createListener(self, "unpaired", updateLobbyState)
   messageListeners.game_request = createListener(self, "game_request", processGameRequest)
   messageListeners.menu_state = createListener(self, "menu_state", processMenuStateMessage)
-  messageListeners.win_counts = createListener(self, "win_counts", processWinCountsMessage)
   messageListeners.ranked_match_approved = createListener(self, "ranked_match_approved", processRankedStatusMessage)
-  messageListeners.ranked_match_denied = createListener(self, "ranked_match_denied", processRankedStatusMessage)
   messageListeners.leave_room = createListener(self, "leave_room", processLeaveRoomMessage)
   messageListeners.match_start = createListener(self, "match_start", processMatchStartMessage)
   messageListeners.taunt = createListener(self, "taunt", processTauntMessage)
-  messageListeners.character_select = createListener(self, "character_select", processCharacterSelectMessage)
+  messageListeners.gameResult = createListener(self, "gameResult", processGameResultMessage)
   messageListeners.spectators = createListener(self, "spectators", processSpectatorListMessage)
+  messageListeners.gameAbort = createListener(self, "gameAbort", handleGameAbort)
 
   return messageListeners
 end
 
+---@class NetClient : Signal
+---@field tcpClient TcpClient
+---@field leaderboard table
+---@field pendingResponses table
+---@field state NetClientStates
+---@field lobbyListeners table
+---@field roomListeners table
+---@field matchListeners table
+---@field messageListeners table
+---@field room BattleRoom?
+---@field lobbyData table
+---@overload fun(): NetClient
 local NetClient = class(function(self)
   self.tcpClient = TcpClient()
   self.leaderboard = nil
@@ -311,24 +360,22 @@ local NetClient = class(function(self)
 
   -- all listeners running while in a room but not in a match
   self.roomListeners = {
-    win_counts = messageListeners.win_counts,
     ranked_match_approved = messageListeners.ranked_match_approved,
-    ranked_match_denied = messageListeners.ranked_match_denied,
     leave_room = messageListeners.leave_room,
     match_start = messageListeners.match_start,
     spectators = messageListeners.spectators,
-    character_select = messageListeners.character_select
+    gameResult = messageListeners.gameResult,
   }
 
   -- all listeners running while in a match
   self.matchListeners = {
-    win_counts = messageListeners.win_counts,
     leave_room = messageListeners.leave_room,
     taunt = messageListeners.taunt,
     -- for spectators catching up to an ongoing match, a match_start acts as a cancel
     match_start = messageListeners.match_start,
     spectators = messageListeners.spectators,
-    character_select = messageListeners.character_select
+    gameResult = messageListeners.gameResult,
+    gameAbort = messageListeners.gameAbort,
   }
 
   self.messageListeners = messageListeners
@@ -350,15 +397,8 @@ function NetClient:leaveRoom()
     self.tcpClient:dropOldInputMessages()
     self.tcpClient:sendRequest(ClientMessages.leaveRoom())
 
-    if self.room:hasLocalPlayer() then
-      -- the server sends us back the confirmation that we left the room
-      -- so we reenter ONLINE state via processLeaveRoomMessage, not here
-    else
-      -- but as spectator there is no confirmation
-      -- meaning state needs to be reset immediately
-      self.room = nil
-      self.state = states.ONLINE
-    end
+    -- the server sends us back the confirmation that we left the room
+    -- so we reenter ONLINE state via processLeaveRoomMessage, not here
   end
 end
 
@@ -399,7 +439,7 @@ end
 
 function NetClient:challengePlayer(name)
   if not self.lobbyData.sentRequests[name] then
-    self.tcpClient:sendRequest(ClientMessages.challengePlayer(name))
+    self.tcpClient:sendRequest(ClientMessages.challengePlayer(config.name, name))
     self.lobbyData.sentRequests[name] = true
     self:emitSignal("lobbyStateUpdate", self.lobbyData)
   end
@@ -407,12 +447,29 @@ end
 
 function NetClient:requestSpectate(roomNumber)
   if not self.pendingResponses.spectateResponse then
-    self.pendingResponses.spectateResponse = self.tcpClient:sendRequest(ClientMessages.requestSpectate(roomNumber))
+    self.pendingResponses.spectateResponse = self.tcpClient:sendRequest(ClientMessages.requestSpectate(config.name, roomNumber))
   end
 end
 
-local function sendMenuState(player)
-  GAME.netClient.tcpClient:sendRequest(ClientMessages.sendMenuState(ServerMessages.toServerMenuState(player)))
+function NetClient:requestRoom(gameMode)
+  if self:isConnected() then
+    self.tcpClient:sendRequest(ClientMessages.sendRoomRequest(gameMode))
+  end
+end
+
+function NetClient:sendMatchAbort()
+  if self:isConnected() then
+    self.tcpClient:sendRequest(ClientMessages.sendMatchAbort())
+    self:setState(states.ROOM)
+  end
+end
+
+function sendPlayerSettings(player)
+  GAME.netClient.tcpClient:sendRequest(ClientMessages.sendPlayerSettings(ServerMessages.toServerMenuState(player)))
+end
+
+function NetClient:sendPlayerSettings(player)
+  self.tcpClient:sendRequest(ClientMessages.sendPlayerSettings(ServerMessages.toServerMenuState(player)))
 end
 
 function NetClient:registerPlayerUpdates(room)
@@ -420,19 +477,17 @@ function NetClient:registerPlayerUpdates(room)
   for _, player in ipairs(room.players) do
     if player.isLocal then
       -- seems a bit silly to subscribe a player to itself but it works and the player doesn't have to become part of the closure
-      player:connectSignal("selectedCharacterIdChanged", player, sendMenuState)
-      player:connectSignal("characterIdChanged", player, sendMenuState)
-      player:connectSignal("selectedStageIdChanged", player, sendMenuState)
-      player:connectSignal("stageIdChanged", player, sendMenuState)
-      player:connectSignal("panelIdChanged", player, sendMenuState)
-      player:connectSignal("wantsRankedChanged", player, sendMenuState)
-      player:connectSignal("wantsReadyChanged", player, sendMenuState)
-      player:connectSignal("difficultyChanged", player, sendMenuState)
-      player:connectSignal("startingSpeedChanged", player, sendMenuState)
-      player:connectSignal("levelChanged", player, sendMenuState)
-      player:connectSignal("colorCountChanged", player, sendMenuState)
-      player:connectSignal("inputMethodChanged", player, sendMenuState)
-      player:connectSignal("hasLoadedChanged", player, sendMenuState)
+      player:connectSignal("characterIdChanged", player, sendPlayerSettings)
+      player:connectSignal("stageIdChanged", player, sendPlayerSettings)
+      player:connectSignal("panelIdChanged", player, sendPlayerSettings)
+      player:connectSignal("wantsRankedChanged", player, sendPlayerSettings)
+      player:connectSignal("wantsReadyChanged", player, sendPlayerSettings)
+      player:connectSignal("difficultyChanged", player, sendPlayerSettings)
+      player:connectSignal("startingSpeedChanged", player, sendPlayerSettings)
+      player:connectSignal("levelChanged", player, sendPlayerSettings)
+      player:connectSignal("colorCountChanged", player, sendPlayerSettings)
+      player:connectSignal("inputMethodChanged", player, sendPlayerSettings)
+      player:connectSignal("hasLoadedChanged", player, sendPlayerSettings)
     else
       listener:subscribe(player, processMenuStateMessage)
     end
@@ -441,13 +496,16 @@ function NetClient:registerPlayerUpdates(room)
   self.roomListeners.menu_state = listener
 end
 
-function NetClient:sendErrorReport(errorData, server, ip)
+---@param errorData table
+---@param server string
+---@param port integer
+function NetClient:sendErrorReport(errorData, server, port)
   if not self:isConnected() then
-    self.tcpClient:connectToServer(server, ip)
+    self.tcpClient:connectToServer(server, port)
   end
   self.tcpClient:sendRequest(ClientMessages.sendErrorReport(errorData))
   self.tcpClient:resetNetwork()
-  self.state = states.OFFLINE
+  self:setState(states.OFFLINE)
 end
 
 function NetClient:isConnected()
@@ -457,14 +515,15 @@ end
 function NetClient:login(ip, port)
   if not self:isConnected() then
     self.loginRoutine = LoginRoutine(self.tcpClient, ip, port)
-    self.state = states.LOGIN
+    self:setState(states.LOGIN)
   end
 end
 
 function NetClient:logout()
   self.tcpClient:sendRequest(ClientMessages.logout())
+  love.timer.sleep(0.001)
   self.tcpClient:resetNetwork()
-  self.state = states.OFFLINE
+  self:setState(states.OFFLINE)
   resetLobbyData(self)
 end
 
@@ -479,19 +538,19 @@ function NetClient:update()
       self.loginState = result
     else
       if result.loggedIn then
-        self.state = states.ONLINE
+        self:setState(states.ONLINE)
         self.loginState = result.message
         self.loginTime = love.timer.getTime()
       else
         self.loginState = result.message
-        self.state = states.OFFLINE
-        end
+        self:setState(states.OFFLINE)
+      end
       self:emitSignal("loginFinished", result)
     end
   end
 
   if not self.tcpClient:processIncomingMessages() then
-    self.state = states.OFFLINE
+    self:setState(states.OFFLINE)
     self.room = nil
     self.tcpClient:resetNetwork()
     resetLobbyData(self)
@@ -530,15 +589,18 @@ function NetClient:update()
       listener:listen()
     end
   elseif self.state == states.INGAME then
+    processInputMessages(self)
+
     for _, listener in pairs(self.matchListeners) do
       listener:listen()
     end
-    -- we could receive a leaveRoom message and the room could get axed while processing listeners
-    -- so always need to check if the room is still there
-    if self.room and self.room.match then
-      processInputMessages(self)
-    end
   end
+end
+
+---@param state NetClientStates
+function NetClient:setState(state)
+  logger.debug("Setting netclient state to " .. state)
+  self.state = state
 end
 
 return NetClient

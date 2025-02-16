@@ -1,9 +1,19 @@
 local class = require("common.lib.class")
 local StageTrack = require("client.src.music.StageTrack")
 
+---@class DynamicStageTrack : StageTrack
+---@field crossfadeTimer integer amount of frames to transition between normal and danger music
+---@field volume number the overall music volume of the track; used to calculate the crossfade volumes between musics
+
 local CROSSFADE_DURATION = 60
 
-local DynamicStageTrack = class(function(stageTrack, normalMusic, dangerMusic)
+---@class DynamicStageTrack
+---@overload fun(normalMusic: Music, dangerMusic: Music, volumeMultiplier: number?): DynamicStageTrack
+local DynamicStageTrack = class(
+---@param stageTrack DynamicStageTrack
+---@param normalMusic Music
+---@param dangerMusic Music
+function(stageTrack, normalMusic, dangerMusic, volumeMultiplier)
   assert(dangerMusic, "Dynamic tracks need danger music!")
   stageTrack.crossfadeTimer = 0
   stageTrack.volume = config.music_volume
@@ -71,11 +81,11 @@ function DynamicStageTrack:updateTrackVolumes()
   local percentage = self.crossfadeTimer / CROSSFADE_DURATION
 
   if self.state == "danger" then
-    self.dangerMusic:setVolume(self.volume * (1 - percentage))
-    self.normalMusic:setVolume(self.volume * percentage)
+    self.dangerMusic:setVolume(self.volume * (1 - percentage) * self.volumeMultiplier)
+    self.normalMusic:setVolume(self.volume * percentage * self.volumeMultiplier)
   else
-    self.dangerMusic:setVolume(self.volume * percentage)
-    self.normalMusic:setVolume(self.volume * (1 - percentage))
+    self.dangerMusic:setVolume(self.volume * percentage * self.volumeMultiplier)
+    self.normalMusic:setVolume(self.volume * (1 - percentage) * self.volumeMultiplier)
   end
 end
 

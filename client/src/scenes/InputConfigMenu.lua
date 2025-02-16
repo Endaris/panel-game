@@ -1,15 +1,13 @@
 local Scene = require("client.src.scenes.Scene")
 local tableUtils = require("common.lib.tableUtils")
-local Slider = require("client.src.ui.Slider")
-local Menu = require("client.src.ui.Menu")
-local MenuItem = require("client.src.ui.MenuItem")
+local ui = require("client.src.ui")
 local consts = require("common.engine.consts")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 local joystickManager = require("common.lib.joystickManager")
 local util = require("common.lib.util")
 local class = require("common.lib.class")
+local save = require("client.src.save")
 
---@module inputConfigMenu
 -- Scene for configuring input
 local InputConfigMenu = class(
   function (self, sceneParams)
@@ -75,7 +73,7 @@ function InputConfigMenu:updateKey(key, pressedKey, index)
   GAME.input.inputConfigurations[self.configIndex][key] = pressedKey
   local keyDisplayName = self:getKeyDisplayName(pressedKey)
   self:currentKeyLabelForIndex(index + 1):setText(keyDisplayName)
-  write_key_file()
+  save.write_key_file()
 end
 
 function InputConfigMenu:setKey(key, index)
@@ -135,7 +133,7 @@ function InputConfigMenu:clearAllInputs()
     local keyName = loc("op_none")
     self:currentKeyLabelForIndex(i + 1):setText(keyName)
   end
-  write_key_file()
+  save.write_key_file()
 end
 
 function InputConfigMenu:resetToDefault(menuOptions) 
@@ -154,7 +152,7 @@ function InputConfigMenu:resetToDefault(menuOptions)
   GAME.theme:playMoveSfx()
   self.slider:setValue(1)
   self:updateInputConfigMenuLabels(1)
-  write_key_file() 
+  save.write_key_file()
 end
 
 local function exitMenu()
@@ -165,13 +163,13 @@ end
 function InputConfigMenu:load(sceneParams)
   self.configIndex = 1
   local menuOptions = {}
-  self.slider = Slider({
+  self.slider = ui.Slider({
     min = 1,
     max = input.maxConfigurations,
     value = 1,
     tickLength = 10,
     onValueChange = function(slider) self:updateInputConfigMenuLabels(slider.value) end})
-  menuOptions[1] = MenuItem.createSliderMenuItem("configuration", nil, nil, self.slider)
+  menuOptions[1] = ui.MenuItem.createSliderMenuItem("configuration", nil, nil, self.slider)
   for i, key in ipairs(consts.KEY_NAMES) do
     local clickFunction = function() 
       if not self.settingKey then
@@ -179,14 +177,14 @@ function InputConfigMenu:load(sceneParams)
       end
     end
     local keyName = self:getKeyDisplayName(GAME.input.inputConfigurations[self.configIndex][key])
-    menuOptions[#menuOptions + 1] = MenuItem.createLabeledButtonMenuItem(key, nil, false, keyName, nil, false, clickFunction)
+    menuOptions[#menuOptions + 1] = ui.MenuItem.createLabeledButtonMenuItem(key, nil, false, keyName, nil, false, clickFunction)
   end
-  menuOptions[#menuOptions + 1] = MenuItem.createButtonMenuItem("op_all_keys", nil, nil, function() self:setAllKeysStart() end)
-  menuOptions[#menuOptions + 1] = MenuItem.createButtonMenuItem("Clear All Inputs", nil, false, function() self:clearAllInputs() end)
-  menuOptions[#menuOptions + 1] = MenuItem.createButtonMenuItem("Reset Keys To Default", nil, false, function() self:resetToDefault(menuOptions) end)
-  menuOptions[#menuOptions + 1] = MenuItem.createButtonMenuItem("back", nil, nil, exitMenu)
+  menuOptions[#menuOptions + 1] = ui.MenuItem.createButtonMenuItem("op_all_keys", nil, nil, function() self:setAllKeysStart() end)
+  menuOptions[#menuOptions + 1] = ui.MenuItem.createButtonMenuItem("Clear All Inputs", nil, false, function() self:clearAllInputs() end)
+  menuOptions[#menuOptions + 1] = ui.MenuItem.createButtonMenuItem("Reset Keys To Default", nil, false, function() self:resetToDefault(menuOptions) end)
+  menuOptions[#menuOptions + 1] = ui.MenuItem.createButtonMenuItem("back", nil, nil, exitMenu)
 
-  self.menu = Menu.createCenteredMenu(menuOptions)
+  self.menu = ui.Menu.createCenteredMenu(menuOptions)
 
   self.uiRoot:addChild(self.menu)
 end

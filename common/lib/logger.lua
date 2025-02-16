@@ -1,14 +1,17 @@
 local os = require("os")
+local RingBuffer = require("common.lib.RingBuffer")
 local socket
 if love then
   -- love comes with luasocket
+---@diagnostic disable-next-line: different-requires
   socket = require("socket")
 else
+---@diagnostic disable-next-line: different-requires
   socket = require("common.lib.socket")
 end
 
 local logger = {
-  messages = {}
+  messageBuffer = RingBuffer(2048)
 }
 
 local TRACE = 0 -- Log something that is very detailed verbose debug logging
@@ -61,12 +64,14 @@ function direct_log(prefix, msg)
   -- %x - Date
   -- %X - Time
   local message = string.format("%s.%03d %s:%s", os.date("%x %X"), socket_millis, prefix, msg)
-  logger.messages[#logger.messages+1] = message
   print(message)
-  -- note the space in the string below is on purpose
-  if SERVER_MODE == nil and (prefix == "ERROR" or prefix == " WARN") then
-    love.filesystem.append("warnings.txt", message .. "\n")
+  if not SERVER_MODE then
+    logger.messageBuffer:push(message)
+    -- the space in the string below is on purpose
+    if prefix == "ERROR" or prefix == " WARN" then
+      love.filesystem.append("warnings.txt", message .. "\n")
+    end
   end
 end
 
-return logger;
+return logger

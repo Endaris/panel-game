@@ -1,3 +1,4 @@
+---@diagnostic disable: duplicate-set-field
 -- with love 12 you can pass the name of a lua file as an argument when starting love
 -- this will cause that file to be used in place of main.lua
 -- so by passing "./testLauncher.lua" as the first arg this becomes a testrunner that shares the game's conf.lua
@@ -30,13 +31,18 @@ function love.load()
 end
 
 local tests = {
+  "server.tests.ServerTests",
+  "server.tests.LeaderboardTests",
+  "server.tests.RoomTests",
+  "server.tests.LoginTests",
+  "client.tests.FileUtilsTests",
+  "client.tests.ModControllerTests",
   "common.tests.engine.StackRollbackReplayTests",
   "client.tests.QueueTests",
   "client.tests.ServerQueueTests",
-  --"client.tests.StackGraphicsTests",
+  "client.tests.StackGraphicsTests",
   "client.tests.TcpClientTests",
   "client.tests.ThemeTests",
-  "server.tests.ConnectionTests",
   "common.tests.engine.GarbageQueueTests",
   "common.tests.engine.HealthTests",
   "common.tests.engine.PanelGenTests",
@@ -76,13 +82,13 @@ function love.draw()
 end
 
 function love.quit()
-  love.filesystem.write("test.log", table.concat(logger.messages, "\n"))
+  love.filesystem.write("test.log", tostring(logger.messageBuffer))
 end
 
 local love_errorhandler = love.errorhandler
 function love.errorhandler(msg)
   logger.info(msg)
-  pcall(love.filesystem.write, "test-crash.log", table.concat(logger.messages, "\n"))
+  pcall(love.filesystem.write, "test-crash.log", tostring(logger.messageBuffer))
   if lldebugger then
     error(msg, 2)
   else

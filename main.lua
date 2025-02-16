@@ -1,16 +1,18 @@
 local logger = require("common.lib.logger")
 require("common.lib.mathExtensions")
 local utf8 = require("common.lib.utf8Additions")
-local inputManager = require("common.lib.inputManager")
+local inputManager = require("client.src.inputManager")
 require("client.src.globals")
 local touchHandler = require("client.src.ui.touchHandler")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
-local ClientMessages = require("common.network.ClientProtocol")
 local RunTimeGraph = require("client.src.RunTimeGraph")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local prof = require("common.lib.jprof.jprof")
+local Replay = require("common.data.Replay")
 require("common.lib.util")
+local consts = require("common.engine.consts")
+local system = require("client.src.system")
 
 local Game = require("client.src.Game")
 -- move to load once global dependencies have been resolved
@@ -26,7 +28,7 @@ end
 
 -- Called at the beginning to load the game
 -- Either called directly or from auto_updater
-function love.load(args)
+function love.load(args, rawArgs)
   love.keyboard.setTextInput(false)
 
   -- there is a bug on windows that causes the game to start with a size equal to the desktop causing the window handle to be offscreen
@@ -35,7 +37,7 @@ function love.load(args)
   local desktopWidth, desktopHeight = love.window.getDesktopDimensions(displayIndex)
   local w, windowHeight, flags = love.window.getMode()
 
-  if not flags.fullscreen and not flags.borderless and love.system.getOS() ~= "Android" then
+  if not flags.fullscreen and not flags.borderless and not system.isMobileOS() then
     if y == 0 and windowHeight >= desktopHeight then
       if love.window.isMaximized() then
         love.window.restore()
@@ -129,12 +131,8 @@ function love.quit()
   love.audio.stop()
   config.fullscreen = love.window.getFullscreen()
   local x, y, displayIndex = love.window.getPosition()
-  config.displayIndex = displayIndex
-  if config.fullscreen then
-    _, _, config.display = love.window.getPosition()
-    config.fullscreen = true
-    -- don't save the other values so the settings from previous windowed mode usage are preserved
-  else
+  config.display = displayIndex
+  if not config.fullscreen then
     config.windowX = math.max(x, 0)
     config.windowY = math.max(y, 0)
     if config.windowY == 0 then
@@ -143,15 +141,23 @@ function love.quit()
     end
     config.windowWidth, config.windowHeight, _ = love.window.getMode()
     config.maximizeOnStartup = love.window.isMaximized()
+  else
+    -- don't save the other values so the settings from previous windowed mode usage are preserved
   end
 
   write_conf_file()
-  pcall(love.filesystem.write, "debug.log", table.concat(logger.messages, "\n"))
+  pcall(love.filesystem.write, "debug.log", tostring(logger.messageBuffer))
+
+  if GAME.updater then
+    while GAME.updater.state ~= GAME_UPDATER_STATES.idle do
+      GAME.updater:update()
+    end
+  end
 end
 
 function love.errorhandler(msg)
   if lldebugger then
-    pcall(love.filesystem.write, "debug.log", table.concat(logger.messages, "\n"))
+    pcall(love.filesystem.write, "debug.log", tostring(logger.messageBuffer))
     error(msg, 2)
   end
 
@@ -159,6 +165,7 @@ function love.errorhandler(msg)
     return
   end
 
+---@diagnostic disable-next-line: undefined-field
   if not love.graphics.isCreated() or not love.window.isOpen() then
     local success, status = pcall(love.window.setMode, 800, 600)
     if not success or not status then
@@ -172,7 +179,7 @@ function love.errorhandler(msg)
     pcall(function()
       local match = GAME.battleRoom.match
       match.aborted = true
-      Replay.finalizeReplay(match, match.replay)
+      Replay.finalizeReplay(match.engine, match.replay)
       logger.info("Replay of match during crash:\n" .. json.encode(match.replay))
     end)
   end
@@ -197,9 +204,9 @@ function love.errorhandler(msg)
     local errorData = Game.errorData(sanitizedMessage, sanitizedTrace)
     local detailedErrorLogString = Game.detailedErrorLogString(errorData)
     errorData.detailedErrorLogString = detailedErrorLogString
-    -- if GAME_UPDATER_GAME_VERSION then
-    --   GAME.netClient:sendErrorReport(errorData, consts.SERVER_LOCATION, 59569)
-    -- end
+    if GAME.updater and not DEBUG_ENABLED and not os.getenv("LOCAL_LUA_DEBUGGER_VSCODE") then
+      GAME.netClient:sendErrorReport(errorData, consts.SERVER_LOCATION, 49569)
+    end
     return detailedErrorLogString
   end
 
@@ -213,9 +220,9 @@ function love.errorhandler(msg)
     table.insert(errorLines, sanitizedMessage)
     logger.info(sanitizedMessage)
   end
-  if logger.messages then
+  if logger.messageBuffer then
     logger.info("config during crash: " .. table_to_string(config))
-    pcall(love.filesystem.write, "crash.log", table.concat(logger.messages, "\n"))
+    pcall(love.filesystem.write, "crash.log", tostring(logger.messageBuffer))
   end
   if #sanitizedMessage ~= #msg then
     table.insert(errorLines, "Invalid UTF-8 string in error message.")

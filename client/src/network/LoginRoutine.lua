@@ -1,5 +1,25 @@
 local class = require("common.lib.class")
 local ClientMessages = require("common.network.ClientProtocol")
+local save = require("client.src.save")
+
+-- abstraction level function
+-- returns things as a parameter list so the API in ClientProtocol can be more explicit about which parameters it expects
+--  (which it cannot if things are passed as tables)
+local function toLoginData(configuration, localPlayer)
+  local ps = localPlayer.settings
+  local c = configuration
+  return
+    c.name,
+    ps.level,
+    ps.inputMethod,
+    ps.panels,
+    ps.selectedCharacterId,
+    ps.characterId,
+    ps.selectedStageId,
+    ps.stageId,
+    ps.wantsRanked,
+    c.save_replays_publicly
+end
 
 -- returns true/false as the first return value to indicate success or failure of the login
 -- returns a string with a message to display for the user
@@ -33,15 +53,12 @@ local function login(tcpClient, ip, port)
         result.message = loc("nt_ver_err")
         return result
       else
-        local userId = read_user_id_file(ip)
+        local userId = save.read_user_id_file(ip)
         if not userId then
           userId = "need a new user id"
         end
-        if CUSTOM_USER_ID then
-          userId = CUSTOM_USER_ID
-        end
 
-        response = tcpClient:sendRequest(ClientMessages.requestLogin(userId))
+        response = tcpClient:sendRequest(ClientMessages.requestLogin(userId, toLoginData(config, GAME.localPlayer)))
         status, value = response:tryGetValue()
         while status == "waiting" do
           coroutine.yield("Logging in")
@@ -56,7 +73,7 @@ local function login(tcpClient, ip, port)
           if value.login_successful then
             result.loggedIn = true
             if value.new_user_id then
-              write_user_id_file(value.new_user_id, GAME.connected_server_ip)
+              save.write_user_id_file(value.new_user_id, GAME.connected_server_ip)
               result.message = loc("lb_user_new", config.name)
             elseif value.name_changed then
               result.message = loc("lb_user_update", value.old_name, value.new_name)
@@ -66,11 +83,17 @@ local function login(tcpClient, ip, port)
             if value.server_notice then
               result.message = result.message .. "\n" value.server_notice:gsub("\\n", "\n")
             end
+            if value.publicId then
+              GAME.localPlayer.publicId = value.publicId
+            end
 
             return result
           else --if result.login_denied then
             result.loggedIn = false
             result.message = loc("lb_error_msg") .. "\n" .. value.reason
+            if value.ban_duration then
+              result.message = result.message .. "\n" .. value.ban_duration
+            end
             return result
           end
         else

@@ -3,7 +3,7 @@ local Scene = require("client.src.scenes.Scene")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local logger = require("common.lib.logger")
 local analytics = require("client.src.analytics")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 local tableUtils = require("common.lib.tableUtils")
 local consts = require("common.engine.consts")
 local StageLoader = require("client.src.mods.StageLoader")
@@ -11,24 +11,27 @@ local ModController = require("client.src.mods.ModController")
 local SoundController = require("client.src.music.SoundController")
 local UpdatingImage = require("client.src.graphics.UpdatingImage")
 local prof = require("common.lib.jprof.jprof")
-local Menu = require("client.src.ui.Menu")
-local MenuItem = require("client.src.ui.MenuItem")
+local ui = require("client.src.ui")
+local FileUtils = require("client.src.FileUtils")
+local ClientStack = require("client.src.ClientStack")
 
---@module GameBase
 -- Scene template for running any type of game instance (endless, vs-self, replays, etc.)
 local GameBase = class(
   function (self, sceneParams)
-    -- must be set in child class
-    self.nextScene = nil
-    self.nextSceneParams = {}
+    self.saveReplay = true
 
     -- set in load
-    self.text = ""
+    self.text = nil
     self.keepMusic = false
     self.currentStage = config.stage
+    self.pauseState = {
+      musicWasPlaying = false
+    }
 
     self.minDisplayTime = 1 -- the minimum amount of seconds the game over screen will be displayed for
     self.maxDisplayTime = -1 -- the maximum amount of seconds the game over screen will be displayed for, -1 means no max time
+    self.gameOverStartTime = nil -- timestamp for when game over screen was first displayed
+    self.fadeOutMusicOnGameOver = true
 
     self.frameInfo = {
       frameCount = nil,
@@ -36,9 +39,13 @@ local GameBase = class(
       currentTime = nil,
       expectedFrameCount = nil
     }
+
+    self:load(sceneParams)
   end,
   Scene
 )
+
+GameBase.name = "GameBase"
 
 -- begin abstract functions
 
@@ -85,9 +92,20 @@ function GameBase:pickMusicSource()
   local preferredMusicSourceType = self:getPreferredMusicSourceType()
 
   if not stageHasMusic and not characterHasMusic then
-    return nil
-  elseif (preferredMusicSourceType == "stage" and stageHasMusic) or not characterHasMusic then
-    return self.stage
+    -- fallback to default stage music if possible
+    if GAME.theme.defaultStage and GAME.theme.defaultStage.hasMusic then
+      return GAME.theme.defaultStage
+    else
+      return nil
+    end
+  elseif preferredMusicSourceType == "stage" or not characterHasMusic then
+    if stageHasMusic then
+      return self.stage
+    elseif GAME.theme.defaultStage and GAME.theme.defaultStage.hasMusic then
+      return GAME.theme.defaultStage
+    else
+      return nil
+    end
   else --if preferredMusicSourceType == "characters" and characterHasMusic then
     return character
   end
@@ -96,10 +114,9 @@ end
 -- unlike regular asset load, this function connects the used assets to the match so they cannot be unloaded
 function GameBase:loadAssets(match)
   for i, stack in ipairs(match.stacks) do
-    local character = characters[stack.character]
-    logger.debug("Force loading character " .. character.id .. " as part of GameBase:load")
-    ModController:loadModFor(character, stack, true)
-    character:register(match)
+    logger.debug("Force loading character " .. stack.character.id .. " as part of GameBase:load")
+    ModController:loadModFor(stack.character, stack, true)
+    stack.character:register(match)
   end
 
   if not match.stageId then
@@ -107,7 +124,7 @@ function GameBase:loadAssets(match)
     match.stageId = StageLoader.fullyResolveStageSelection(match.stageId)
   end
   local stage = stages[match.stageId]
-  if stage.fully_loaded then
+  if stage.fullyLoaded then
     logger.debug("Match stage " .. stage.id .. " already fully loaded in GameBase:load()")
     stage:register(match)
   else
@@ -119,6 +136,7 @@ end
 function GameBase:initializeFrameInfo()
   self.frameInfo.startTime = nil
   self.frameInfo.frameCount = 0
+  GAME.droppedFrames = 0
 end
 
 function GameBase:load(sceneParams)
@@ -131,29 +149,25 @@ function GameBase:load(sceneParams)
   self.stage = stages[self.match.stageId]
   self.backgroundImage = UpdatingImage(self.stage.images.background, false, 0, 0, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
   self.musicSource = self:pickMusicSource()
-  if self.musicSource and self.musicSource.stageTrack and not self.keepMusic then
-    -- reset the track to make sure it starts from the default settings
-    self.musicSource.stageTrack:stop()
-    SoundController:stopMusic()
-  end
 
   local pauseMenuItems = {
-    MenuItem.createButtonMenuItem("pause_resume", nil, true, function()
+    ui.MenuItem.createButtonMenuItem("pause_resume", nil, true, function()
       GAME.theme:playValidationSfx()
       self.pauseMenu:setVisibility(false)
       self.match:togglePause()
-      if self.musicSource and self.musicSource.stageTrack then
+      if self.musicSource and self.musicSource.stageTrack and self.pauseState.musicWasPlaying then
         SoundController:playMusic(self.musicSource.stageTrack)
       end
       self:initializeFrameInfo()
     end),
-    MenuItem.createButtonMenuItem("back", nil, true, function()
+    ui.MenuItem.createButtonMenuItem("back", nil, true, function()
       GAME.theme:playCancelSfx()
       self.match:abort()
+      self:startNextScene()
     end),
   }
 
-  self.pauseMenu = Menu({
+  self.pauseMenu = ui.Menu({
     x = 0,
     y = 0,
     hAlign = "center",
@@ -186,7 +200,8 @@ function GameBase:handlePause()
       self.match:togglePause()
       self.pauseMenu:setVisibility(true)
 
-      if self.musicSource then
+      if self.musicSource and self.musicSource.stageTrack then
+        self.pauseState.musicWasPlaying = self.musicSource.stageTrack:isPlaying()
         SoundController:pauseMusic()
       end
       GAME.theme:playValidationSfx()
@@ -196,36 +211,40 @@ function GameBase:handlePause()
   end
 end
 
-local gameOverStartTime = nil -- timestamp for when game over screen was first displayed
-
 function GameBase:setupGameOver()
-  gameOverStartTime = love.timer.getTime()
+  -- timestamp for when game over screen was first displayed
+  self.gameOverStartTime = love.timer.getTime()
   self.minDisplayTime = 1 -- the minimum amount of seconds the game over screen will be displayed for
   self.maxDisplayTime = -1
 
-  SoundController:fadeOutActiveTrack(3)
+  if self.fadeOutMusicOnGameOver then
+    SoundController:fadeOutActiveTrack(3)
+  end
 
   self:customGameOverSetup()
 end
 
 function GameBase:runGameOver()
-  local font = GraphicsUtil.getGlobalFont()
-
-  GraphicsUtil.print(self.text, (consts.CANVAS_WIDTH - font:getWidth(self.text)) / 2, 10)
-  GraphicsUtil.print(loc("continue_button"), (consts.CANVAS_WIDTH - font:getWidth(loc("continue_button"))) / 2, 10 + 30)
   -- wait()
-  local displayTime = love.timer.getTime() - gameOverStartTime
+  local displayTime = love.timer.getTime() - self.gameOverStartTime
 
   self.match:run()
 
   -- if conditions are met, leave the game over screen
-  local keyPressed = (tableUtils.length(input.isDown) > 0) or (tableUtils.length(input.mouse.isDown) > 0)
+  local keyPressed = self:readyToProceedToNextScene()
 
   if ((displayTime >= self.maxDisplayTime and self.maxDisplayTime ~= -1) or (displayTime >= self.minDisplayTime and keyPressed)) then
     GAME.theme:playValidationSfx()
-    SFX_GameOver_Play = 0
-    GAME.navigationStack:pop()
+    self:startNextScene()
   end
+end
+
+function GameBase:readyToProceedToNextScene()
+  return (tableUtils.length(input.isDown) > 0) or (tableUtils.length(input.mouse.isDown) > 0)
+end
+
+function GameBase:startNextScene()
+  GAME.navigationStack:pop()
 end
 
 function GameBase:runGame(dt)
@@ -262,12 +281,12 @@ function GameBase:musicCanChange()
   end
 
   -- someone is still catching up
-  if tableUtils.trueForAny(self.match.stacks, Stack.isCatchingUp) then
+  if tableUtils.trueForAny(self.match.stacks, ClientStack.isCatchingUp) then
     return false
   end
 
   -- music waits until countdown is over
-  if self.match.doCountdown and self.match.clock < (consts.COUNTDOWN_START + consts.COUNTDOWN_LENGTH) then
+  if self.match.engine.doCountdown and self.match.engine.clock < (consts.COUNTDOWN_START + consts.COUNTDOWN_LENGTH) then
     return false
   end
 
@@ -318,6 +337,7 @@ function GameBase:draw()
     prof.pop("Match:render")
     prof.push("GameBase:drawHUD")
     self:drawHUD()
+    self:drawEndGameText()
     prof.pop("GameBase:drawHUD")
     if self.customDraw then
       self:customDraw()
@@ -352,11 +372,11 @@ end
 function GameBase:drawHUD()
   if not self.match.isPaused then
     for i, stack in ipairs(self.match.stacks) do
-      if stack.puzzle then
+      if stack.engine.puzzle then
         stack:drawMoveCount()
       end
       if config.show_ingame_infos then
-        if not stack.puzzle then
+        if not stack.engine.puzzle then
           stack:drawScore()
           stack:drawSpeed()
         end
@@ -377,23 +397,42 @@ function GameBase:drawHUD()
         prof.pop("Stack:drawAnalyticData")
       end
     end
+
     if not config.debug_mode and GAME.battleRoom and GAME.battleRoom.spectatorString then -- this is printed in the same space as the debug details
       GraphicsUtil.print(GAME.battleRoom.spectatorString, themes[config.theme].spectators_Pos[1], themes[config.theme].spectators_Pos[2])
     end
 
     self:drawCommunityMessage()
+  end
+end
 
-    if self.match.ended then
-      local winners = self.match:getWinners()
-      local pos = themes[config.theme].gameover_text_Pos
-      local message
-      if #winners == 1 then
+function GameBase:drawEndGameText()
+  if self.match.ended then
+
+    local winners = self.match:getWinners()
+    local message = self.text
+    if message == nil then
+      if #self.match.players == 1 then
+        message = loc("pl_gameover")
+      elseif #winners == 1 then
         message = loc("ss_p_wins", winners[1].name)
       else
         message = loc("ss_draw")
       end
-      GraphicsUtil.printf(message, pos.x, pos.y, consts.CANVAS_WIDTH, "center")
     end
+
+    local gameOverPosition = themes[config.theme].gameover_text_Pos
+    local font = GraphicsUtil.getGlobalFont()
+    local padding = 4
+    local maxWidth = math.max(font:getWidth(message), font:getWidth(loc("continue_button")))
+    local height = font:getHeight() * 2 + 3*padding
+    local drawY = gameOverPosition[2]
+
+    -- Background
+    GraphicsUtil.drawRectangle("fill", gameOverPosition[1] - maxWidth/2 - padding, drawY, maxWidth + 2*padding, height, 0, 0, 0, 0.8)
+
+    GraphicsUtil.print(message, gameOverPosition[1] - font:getWidth(message)/2, drawY + padding)
+    GraphicsUtil.print(loc("continue_button"), gameOverPosition[1] - font:getWidth(loc("continue_button"))/2, drawY + padding + font:getHeight() + padding )
   end
 end
 
@@ -402,6 +441,10 @@ function GameBase:genericOnMatchEnded(match)
   -- matches always sort players to have locals in front so if 1 isn't local, none is
   if match.players[1].isLocal then
     analytics.game_ends(match.players[1].stack.analytic)
+  end
+
+  if self.saveReplay then
+    FileUtils.saveReplay(match.replay)
   end
 end
 

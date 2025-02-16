@@ -2,7 +2,9 @@ local consts = require("common.engine.consts")
 local tableUtils = require("common.lib.tableUtils")
 local StackReplayTestingUtils = require("common.tests.engine.StackReplayTestingUtils")
 local GameModes = require("common.engine.GameModes")
+local ReplayPlayer = require("common.data.ReplayPlayer")
 local logger = require("common.lib.logger")
+local LevelPresets = require("common.data.LevelPresets")
 
 local testReplayFolder = "common/tests/engine/replays/"
 
@@ -123,7 +125,7 @@ local function basicEndlessTest()
   assert(match.stacks[1].game_over_clock == 402)
   assert(match.stacks[1].levelData.maxHealth == 1)
   assert(match.stacks[1].score == 37)
-  assert(match.stacks[1].difficulty == 3)
+  assert(match.stacks[1].levelData == LevelPresets.getClassic(3))
   StackReplayTestingUtils:cleanup(match)
 end
 
@@ -138,7 +140,7 @@ local function basicTimeAttackTest()
   assert(match.stacks[1].game_stopwatch == 7200)
   assert(match.stacks[1].levelData.maxHealth == 1)
   assert(match.stacks[1].score == 10353)
-  assert(match.stacks[1].difficulty == 1)
+  assert(match.stacks[1].levelData == LevelPresets.getClassic(1))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 8)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 4)
   StackReplayTestingUtils:cleanup(match)
@@ -151,16 +153,16 @@ local function basicVsTest()
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 2992240)
   assert(match.stacks[1].game_over_clock == 2039)
-  assert(match.stacks[1].level == 10)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 4)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 4)
   assert(match.stacks[2].game_over_clock <= 0)
-  assert(match.stacks[2].level == 10)
+  assert(match.stacks[2].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return g.isChain end) == 4)
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return not g.isChain end) == 4)
   local winners = match:getWinners()
   assert(#winners == 1)
-  assert(winners[1].playerNumber == 2)
+  assert(tableUtils.indexOf(match.stacks, winners[1]) == 2)
   StackReplayTestingUtils:cleanup(match)
 end
 
@@ -173,16 +175,16 @@ local function basicVsTest2()
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 9285831)
   assert(match.stacks[1].game_over_clock == 3394)
-  assert(match.stacks[1].level == 10)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 7)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 8)
   assert(match.stacks[2].game_over_clock <= 0)
-  assert(match.stacks[2].level == 10)
+  assert(match.stacks[2].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return g.isChain end) == 5)
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return not g.isChain end) == 9)
   local winners = match:getWinners()
   assert(#winners == 1)
-  assert(winners[1].playerNumber == 2)
+  assert(tableUtils.indexOf(match.stacks, winners[1]) == 2)
   StackReplayTestingUtils:cleanup(match)
 end
 
@@ -193,11 +195,11 @@ local function noInputsInVsIsDrawTest()
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 1866552)
   assert(match.stacks[1].game_over_clock == 908)
-  assert(match.stacks[1].level == 10)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 0)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 0)
   assert(match.stacks[2].game_over_clock == 908)
-  assert(match.stacks[2].level == 10)
+  assert(match.stacks[2].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return g.isChain end) == 0)
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return not g.isChain end) == 0)
   local winners = match:getWinners()
@@ -216,7 +218,7 @@ local function frameTricksTest()
   assert(tableUtils.length(match.winConditions) == 0)
   assert(match.seed == 9399683)
   assert(match.stacks[1].game_over_clock == 10032)
-  assert(match.stacks[1].difficulty == 3)
+  assert(match.stacks[1].levelData == LevelPresets.getClassic(3))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 13)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 7)
   StackReplayTestingUtils:cleanup(match)
@@ -230,16 +232,16 @@ local function catchAndSyncTest()
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 8739468)
   assert(match.stacks[1].game_over_clock <= 0)
-  assert(match.stacks[1].level == 10)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(10))
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 4)
   assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return not g.isChain end) == 6)
   assert(match.stacks[2].game_over_clock == 2431)
-  assert(match.stacks[2].level == 8)
+  assert(match.stacks[2].levelData == LevelPresets.getModern(8))
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return g.isChain end) == 2)
   assert(tableUtils.count(match.stacks[2].outgoingGarbage.history, function(g) return not g.isChain end) == 2)
   local winners = match:getWinners()
   assert(#winners == 1)
-  assert(winners[1].playerNumber == 1)
+  assert(tableUtils.indexOf(match.stacks, winners[1]) == 1)
   StackReplayTestingUtils:cleanup(match)
 end
 
@@ -296,15 +298,15 @@ local function downStackDropsSandwichedGarbageAllTogether()
   assert(match.engineVersion == consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE)
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 1123596)
-  assert(match.stacks[1].level == 8)
-  assert(match.stacks[2].level == 8)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(8))
+  assert(match.stacks[2].levelData == LevelPresets.getModern(8))
   assert(match.stacks[2].panels[4][4].state == "normal")
   assert(match.stacks[2].panels[4][4].isGarbage == false)
   assert(match.stacks[2].panels[5][4].state == "normal")
   assert(match.stacks[2].panels[5][4].isGarbage == true)
   assert(match.stacks[2].panels[9][4].state == "normal")
   assert(match.stacks[2].panels[9][4].isGarbage == true)
-  
+
   -- After swapping out the panel, the garbage, panels and more garbage should all drop
   StackReplayTestingUtils:simulateMatchUntil(match, 4669)
   assert(match.stacks[2].panels[4][4].state == "falling")
@@ -325,15 +327,15 @@ local function matchMetalAndGarbageClearsAllMetalTest()
   assert(match.engineVersion == consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE)
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 6141756)
-  assert(match.stacks[1].level == 5)
-  assert(match.stacks[2].level == 5)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(5))
+  assert(match.stacks[2].levelData == LevelPresets.getModern(5))
   assert(match.stacks[1].panels[6][3].state == "normal")
   assert(match.stacks[1].panels[6][3].isGarbage == true)
   assert(match.stacks[1].panels[6][3].metal == nil)
   assert(match.stacks[1].panels[7][3].state == "normal")
   assert(match.stacks[1].panels[7][3].isGarbage == true)
   assert(match.stacks[1].panels[7][3].metal == true)
-  
+
   -- Note the panels raised up one in the mean time
   -- But we now expect the panels to be matched
   StackReplayTestingUtils:simulateMatchUntil(match, 7341)
@@ -357,15 +359,15 @@ local function fallingWhileHoverBeginsDoesNotChain()
   assert(match.engineVersion == consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE)
   assert(match.stackInteraction == GameModes.StackInteractions.VERSUS)
   assert(match.seed == 5439756)
-  assert(match.stacks[1].level == 10)
-  assert(match.stacks[2].level == 10)
+  assert(match.stacks[1].levelData == LevelPresets.getModern(10))
+  assert(match.stacks[2].levelData == LevelPresets.getModern(10))
   assert(match.stacks[2].panels[8][3].state == "falling")
   assert(match.stacks[2].panels[8][3].isGarbage == false)
   assert(match.stacks[2].panels[8][3].chaining == nil)
   assert(match.stacks[2].panels[7][3].state == "normal")
   assert(match.stacks[2].panels[7][3].isGarbage == false)
   assert(match.stacks[2].panels[7][3].chaining == nil)
-  
+
   -- if panels started hovering while a panel was still falling, it doesn't get the chain flag
   StackReplayTestingUtils:simulateMatchUntil(match, 5572)
   assert(match.stacks[2].panels[8][3].state == "hovering")
@@ -375,6 +377,48 @@ local function fallingWhileHoverBeginsDoesNotChain()
   assert(match.stacks[2].panels[7][3].isGarbage == false)
   assert(match.stacks[2].panels[7][3].chaining == true)
   StackReplayTestingUtils:cleanup(match)
+end
+
+local function platformTest(waitFrames, useMatchSide)
+  local match = StackReplayTestingUtils.createSinglePlayerMatch(GameModes.getPreset("ONE_PLAYER_PUZZLE"), "controller", LevelPresets.getModern(10))
+  local puzzle = Puzzle("chain", false, 0, "3000994339949999994999999999999999999999999999999999", 60, 0)
+  local stack = match.stacks[1]
+  stack:setPuzzleState(puzzle)
+
+  assert(stack.panels[8][3].color == 4, "wrong color")
+  assert(stack.panels[8][4].color == 3, "wrong color")
+
+  local compressedInputs = "C1A1Q1" -- Move left, make the vertical match
+  if useMatchSide then
+    compressedInputs = compressedInputs .. "B1A" .. waitFrames -- move right
+  else
+    compressedInputs = compressedInputs .. "A1A" .. waitFrames -- stay still, platform from the far side
+  end
+  compressedInputs = compressedInputs .. "Q1A80" -- do the platform, and wait for the chain
+
+  local fullInputs = ReplayPlayer.decompressInputString(compressedInputs)
+  stack:receiveConfirmedInput(fullInputs) -- make the clear and then do the platform
+  assert(#match.stacks[1].confirmedInput > match.stacks[1].clock)
+  StackReplayTestingUtils:fullySimulateMatch(match)
+  assert(match.stacks[1].clock == 134)
+  assert(tableUtils.count(match.stacks[1].outgoingGarbage.history, function(g) return g.isChain end) == 1)
+  StackReplayTestingUtils:cleanup(match)
+end
+
+local function platformFirstFrameTest()
+  platformTest(66, true)
+end
+
+local function platformLastFrameTest()
+  platformTest(68, true)
+end
+
+local function platformFirstFrameFarSideTest()
+  platformTest(66, false)
+end
+
+local function platformLastFrameFarSideTest()
+  platformTest(68, false)
 end
 
 logger.info("running basicTimeAttackTest")
@@ -424,3 +468,15 @@ test(matchMetalAndGarbageClearsAllMetalTest)
 
 logger.info("running fallingWhileHoverBeginsDoesNotChain")
 test(fallingWhileHoverBeginsDoesNotChain)
+
+logger.info("running platformTest")
+test(platformFirstFrameTest)
+
+logger.info("running platformTest")
+test(platformLastFrameTest)
+
+logger.info("running platformFirstFrameFarSideTest")
+test(platformFirstFrameFarSideTest)
+
+logger.info("running platformLastFrameFarSideTest")
+test(platformLastFrameFarSideTest)

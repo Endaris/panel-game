@@ -9,46 +9,78 @@ local tableUtils = require("common.lib.tableUtils")
 local fileUtils = require("client.src.FileUtils")
 local consts = require("common.engine.consts")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local Music = require("client.src.music.Music")
 local StageTrack = require("client.src.music.StageTrack")
 local DynamicStageTrack = require("client.src.music.DynamicStageTrack")
 local RelayStageTrack = require("client.src.music.RelayStageTrack")
 local Mod = require("client.src.mods.Mod")
+local FileGroup = require("client.src.FileGroup")
+local SfxGroup = require("client.src.music.SfxGroup")
+local Music = require("client.src.music.Music")
 
+---@type Character
 local default_character = nil -- holds default assets fallbacks
+---@type Character
 local randomCharacter = nil -- acts as the bundle character for all theme characters
 
+---@enum ChainStyle
 local chainStyle = {classic = 0, per_chain = 1}
+---@enum ComboStyle
 local comboStyle = {classic = 0, per_combo = 1}
 
-local Character =
-  class(
-  function(self, full_path, folder_name)
-    self.path = full_path -- string | path to the character folder content
-    self.id = folder_name -- string | id of the character, specified in config.json
-    self.display_name = self.id -- string | display name of the stage
-    self.stage = nil -- string | stage that get selected upon doing the super selection of that character
-    self.panels = nil -- string | panels that get selected upon doing the super selection of that character
-    self.sub_characters = {} -- stringS | either empty or with two elements at least; holds the sub characters IDs for bundle characters
-    self.images = {}
-    self.sounds = {}
-    self.musics = {}
-    self.flag = nil -- string | flag to be displayed in the select screen
-    self.fully_loaded = false
-    self.is_visible = true
-    self.chain_style = chainStyle.classic
-    self.combo_style = comboStyle.classic
-    self.popfx_style = "burst"
-    self.popfx_burstRotate = false
-    self.popfx_burstScale = 1
-    self.popfx_fadeScale = 1
-    self.music_style = "normal"
-    self.stageTrack = nil
-    self.files = tableUtils.map(love.filesystem.getDirectoryItems(self.path), function(file) return fileUtils.getFileNameWithoutExtension(file) end)
-    self.TYPE = "character"
-  end,
-  Mod
+---@class Character:Mod
+---@field display_name string Name for display in selection menus
+---@field stage string? Id of a stage for super select
+---@field panels string? Id of a panel set for super select
+---@field images table<string, love.Image> graphical assets of the character
+---@field telegraph_garbage_images userdata[][] graphical assets for telegraph display
+---@field sounds table<string, table<integer, SfxGroup> | SfxGroup> sound effect assets of the character
+---@field musics table<string, Music> music assets of the character
+---@field hasMusic boolean? if the character has any music
+---@field flag string? flag to be displayed in selection menus
+---@field chain_style ChainStyle defines a pattern in which SFX are used for chain events
+---@field combo_style ComboStyle defines a pattern in which SFX are used for combo events
+---@field popfx_style string defines a style in which attacks and pops are accompanied by select graphic assets
+---@field popfx_burstRotate boolean configuration option for the PopFxStyle
+---@field popfx_burstScale number scale factor for certain graphic assets displayed for the PopFxStyle
+---@field popfx_fadeScale number scale factor for certain graphic assets displayed for the PopFxStyle
+---@field music_style string defines the behaviour for music when switching between normal and danger
+---@field music_volume number defines a multiplier to apply to the StageTrack
+---@field sfx_volume number defines a multiplier to apply to the character's SFX
+---@field stageTrack StageTrack? the StageTrack constructed from the character's music assets
+---@field files string[] array of files in the mod's directory
+
+---@class Character
+---@overload fun(full_path: string, folder_name: string): Character
+local Character = class(
+---@param self Character
+function(self, full_path, folder_name)
+  self.path = full_path
+  self.id = folder_name
+  self.display_name = self.id
+  self.stage = nil
+  self.panels = nil
+  self.images = {}
+  self.sounds = {}
+  self.musics = {}
+  self.flag = nil
+  self.chain_style = chainStyle.classic
+  self.combo_style = comboStyle.classic
+  self.popfx_style = "burst"
+  self.popfx_burstRotate = false
+  self.popfx_burstScale = 1
+  self.popfx_fadeScale = 1
+  self.music_style = "normal"
+  self.music_volume = 1
+  self.sfx_volume = 1
+  self.stageTrack = nil
+  self.files = tableUtils.map(love.filesystem.getDirectoryItems(self.path), function(file) return fileUtils.getFileNameWithoutExtension(file) end)
+end,
+Mod
 )
+
+Character.TYPE = "character"
+-- name of the top level save directory for mods of this type
+Character.SAVE_DIR = "characters"
 
 function Character.json_init(self)
   local read_data = fileUtils.readJsonFile(self.path .. "/config.json")
@@ -59,7 +91,7 @@ function Character.json_init(self)
 
       -- sub ids for bundles
       if read_data.sub_ids and type(read_data.sub_ids) == "table" then
-        self.sub_characters = read_data.sub_ids
+        self.subIds = read_data.sub_ids
       end
       -- display name
       if read_data.name and type(read_data.name) == "string" then
@@ -67,9 +99,9 @@ function Character.json_init(self)
       end
       -- is visible
       if read_data.visible ~= nil and type(read_data.visible) == "boolean" then
-        self.is_visible = read_data.visible
+        self.isVisible = read_data.visible
       elseif read_data.visible and type(read_data.visible) == "string" then
-        self.is_visible = read_data.visible == "true"
+        self.isVisible = read_data.visible == "true"
       end
 
       -- chain_style
@@ -107,8 +139,16 @@ function Character.json_init(self)
         self.music_style = read_data.music_style
       end
 
+      if read_data.music_volume and type(read_data.music_volume) == "number" then
+        self.music_volume = read_data.music_volume
+      end
+
+      if read_data.sfx_volume and type(read_data.sfx_volume) == "number" then
+        self.sfx_volume = read_data.sfx_volume
+      end
+
       -- associated stage
-      if read_data.stage and type(read_data.stage) == "string" and stages[read_data.stage] and not stages[read_data.stage]:is_bundle() then
+      if read_data.stage and type(read_data.stage) == "string" and stages[read_data.stage] and not stages[read_data.stage]:isBundle() then
         self.stage = read_data.stage
       end
       -- associated panel
@@ -123,7 +163,7 @@ function Character.json_init(self)
 
       return true
     end
-end
+  end
 
   return false
 end
@@ -138,7 +178,7 @@ end
 function Character.load(self, instant)
   self:graphics_init(true, (not instant))
   self:sound_init(true, (not instant))
-  self.fully_loaded = true
+  self.fullyLoaded = true
   logger.debug("loaded character " .. self.id)
 end
 
@@ -147,36 +187,62 @@ function Character.unload(self)
   logger.debug("unloading character " .. self.id)
   self:graphics_uninit()
   self:sound_uninit()
-  self.fully_loaded = false
+  self.fullyLoaded = false
   logger.debug("unloaded character " .. self.id)
 end
 
-function Character.loadDefaultCharacter()
+function Character.loadDefaultMod()
   default_character = Character("client/assets/characters/__default", "__default")
   default_character:preload()
   default_character:load(true)
 end
 
-local function loadRandomCharacter()
+local function loadRandomCharacter(visibleCharacters)
   local randomCharacter = Character("characters/__default", consts.RANDOM_CHARACTER_SPECIAL_VALUE)
   randomCharacter.images["icon"] = themes[config.theme].images.IMG_random_character
-  randomCharacter.sounds["selection"] = {}
   randomCharacter.display_name = "random"
-  randomCharacter.sub_characters = characters_ids_for_current_theme
+  randomCharacter.subIds = visibleCharacters
+  -- we need to shadow some character functions to correct load behaviour for the random character
   randomCharacter.preload = function() end
+  randomCharacter.load = function() end
+  randomCharacter.unload = function() end
+  randomCharacter.graphics_init = function(character, full, yields)
+    character.images.icon = themes[config.theme].images.IMG_random_character
+  end
   return randomCharacter
 end
 
-function Character.getRandomCharacter()
+function Character.getRandom(visibleCharacters)
   if not randomCharacter then
-    randomCharacter = loadRandomCharacter()
+    randomCharacter = loadRandomCharacter(visibleCharacters)
+  elseif visibleCharacters then
+    randomCharacter.subIds = visibleCharacters
   end
 
   return randomCharacter
 end
 
-function Character.is_bundle(self)
-  return #self.sub_characters > 1
+function Character:getSubMods()
+  local m = {}
+  for _, id in ipairs(self.subIds) do
+    if characters[id] then
+      m[#m + 1] = characters[id]
+    end
+  end
+  return m
+end
+
+function Character:enable(enable)
+  if enable and not characters[self.id] then
+    characters[self.id] = self
+    visibleCharacters[#visibleCharacters+1] = self.id
+  elseif not enable and characters[self.id] then
+    local i = tableUtils.indexOf(visibleCharacters, self.id)
+    table.remove(visibleCharacters, i)
+    characters[self.id] = nil
+  end
+
+  require("client.src.mods.ModLoader").updateBlacklist(self, enable)
 end
 
 function Character:canSuperSelect()
@@ -235,23 +301,25 @@ local defaulted_images = {
 
 -- for reloading the graphics if the window was resized
 function characters_reload_graphics()
-  local characterIds = shallowcpy(characters_ids_for_current_theme)
-  for i = 1, #characterIds do
-    local character = characterIds[i]
-    local fullLoad = false
-    if character == config.character or GAME.battleRoom and GAME.battleRoom.match and ((GAME.battleRoom.match.stacks[1] and character == GAME.battleRoom.match.stacks[1].character) or (GAME.battleRoom.match.stacks[2] and character == GAME.battleRoom.match.stacks[2].character)) then
-      fullLoad = true
+  if visibleCharacters then
+    local characterIds = shallowcpy(visibleCharacters)
+    for i = 1, #characterIds do
+      local character = characterIds[i]
+      local fullLoad = false
+      if character == config.character or GAME.battleRoom and GAME.battleRoom.match and ((GAME.battleRoom.match.stacks[1] and character == GAME.battleRoom.match.stacks[1].character) or (GAME.battleRoom.match.stacks[2] and character == GAME.battleRoom.match.stacks[2].character)) then
+        fullLoad = true
+      end
+      characters[character]:graphics_init(fullLoad, false)
     end
-    characters[character]:graphics_init(fullLoad, false)
+    require("client.src.mods.CharacterLoader").loadBundleIcons()
   end
-  require("client.src.mods.CharacterLoader").loadBundleIcons()
 end
 
 function Character.graphics_init(self, full, yields)
   local character_images = full and all_images or basic_images
   for _, image_name in ipairs(character_images) do
     self.images[image_name] = GraphicsUtil.loadImageFromSupportedExtensions(self.path .. "/" .. image_name)
-    if not self.images[image_name] and defaulted_images[image_name] and not self:is_bundle() then
+    if not self.images[image_name] and defaulted_images[image_name] and not self:isBundle() then
       self.images[image_name] = default_character.images[image_name]
       if not self.images[image_name] then
         error("Could not find default character image")
@@ -304,12 +372,13 @@ function Character.graphics_init(self, full, yields)
 end
 
 -- bundles without stage icon display up to 4 icons of their substages
-function Character:createIcon()
+function Character:createBundleIcon()
   local canvas = love.graphics.newCanvas(2 * 168, 2 * 168)
   canvas:renderTo(function()
-    for i, subcharacterId in ipairs(self.sub_characters) do
-      if i <= 4 then
-        local character = characters[subcharacterId]
+    for i, subCharacterId in ipairs(self.subIds) do
+      -- only draw up to 4 and only draw sub mods that are actually there unless there are none
+      if i <= 4 and (characters[subCharacterId] or (allCharacters[subCharacterId] and #self:getSubMods() == 0)) then
+        local character = allCharacters[subCharacterId]
         local x = 0
         local y = 0
         if i % 2 == 0 then
@@ -356,14 +425,18 @@ local other_sfx = {
   "taunt_up",
   "taunt_down"}
 local basic_musics = {}
-local other_musics = {"normal_music", "danger_music", "normal_music_start", "danger_music_start"}
-local defaulted_musics = {} -- those musics will be defaulted if missing
+local other_musics = {"normal_music", "danger_music"}
 
 function Character.sound_init(self, full, yields)
   -- SFX
   local character_sfx = full and other_sfx or basic_sfx
   for _, sfx in ipairs(character_sfx) do
-    self.sounds[sfx] = self:loadSfx(sfx, yields)
+    self.sounds[sfx] = self:loadSfx(sfx)
+    if self.sounds[sfx] then
+      if yields then
+        coroutine.yield()
+      end
+    end
   end
 
   if full then
@@ -371,48 +444,34 @@ function Character.sound_init(self, full, yields)
   end
 
   -- music
+
+  self.hasMusic = fileUtils.soundFileExists("normal_music", self.path)
   local character_musics = full and other_musics or basic_musics
   for _, music in ipairs(character_musics) do
-    self.musics[music] = fileUtils.loadSoundFromSupportExtensions(self.path .. "/" .. music, true)
-    -- Set looping status for music.
-    -- Intros won't loop, but other parts should.
-    if self.musics[music] then
-      if not string.find(music, "start") then
-        self.musics[music]:setLooping(true)
-      else
-        self.musics[music]:setLooping(false)
-      end
-    elseif not self.musics[music] and defaulted_musics[music] and not self:is_bundle() then
-      self.musics[music] = default_character.musics[music] or themes[config.theme].zero_sound
-    end
+    self.musics[music] = Music.load(self.path, music)
 
     if yields then
       coroutine.yield()
     end
   end
 
-  self:applyConfigVolume()
-
   if full and self.musics.normal_music then
-    local normalMusic = Music(self.musics.normal_music, self.musics.normal_music_start)
-    local dangerMusic
-    if self.musics.danger_music then
-      dangerMusic = Music(self.musics.danger_music, self.musics.danger_music_start)
-    end
     if self.music_style == "normal" then
-      self.stageTrack = StageTrack(normalMusic, dangerMusic)
+      self.stageTrack = StageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
     elseif self.music_style == "dynamic" then
-      if dangerMusic then
-        self.stageTrack = DynamicStageTrack(normalMusic, dangerMusic)
+      if self.musics.danger_music then
+        self.stageTrack = DynamicStageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
       else
         -- DynamicStageTrack HAVE to have danger music
         -- default back to a regular stage track if there is none
-        self.stageTrack = StageTrack(normalMusic)
+        self.stageTrack = StageTrack(self.musics.normal_music, nil, self.music_volume)
       end
     elseif self.music_style == "relay" then
-      self.stageTrack = RelayStageTrack(normalMusic, dangerMusic)
+      self.stageTrack = RelayStageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
     end
   end
+
+  self:applyConfigVolume()
 end
 
 function Character.sound_uninit(self)
@@ -495,13 +554,13 @@ function Character.reassignLegacySfx(self)
         self.sounds.chain[i] = nil
       end
     end
-    if #self.sounds.chain2_echo > 0 then
+    if self.sounds.chain2_echo then
       self.sounds.chain[6] = self.sounds.chain2_echo
       -- shouldn't show up in sound test any longer
       self.sounds.chain2_echo = nil
       maxIndex = 6
     end
-    if #self.sounds.chain_echo > 0 then
+    if self.sounds.chain_echo then
       self.sounds.chain[5] = self.sounds.chain_echo
       -- shouldn't show up in sound test any longer
       self.sounds.chain_echo = nil
@@ -511,9 +570,9 @@ function Character.reassignLegacySfx(self)
     self:fillInMissingSounds(self.sounds.chain, "chain", maxIndex)
   end
 
-  if #self.sounds.shock > 0 then
+  if tableUtils.length(self.sounds.shock) > 0 then
     -- combo_echo won't get used if shock is present, so it shouldn't show up in sound test any longer
-    self.sounds.combo_echo = {}
+    self.sounds.combo_echo = nil
   end
 end
 
@@ -522,107 +581,62 @@ Explanation for sound loading process
 
 Standard expected structure for sound files is as follows:
 self.sounds holds a dictionary with the keys in basic_sfx and other_sfx
-The values of that dictionary are tables that contain integer numbered sfx, e.g.
-self.sounds["combo"] = {}
-For some sfx types, sfx can possibly contain sub sfx. That is selected via randomization upon being played.
-For that reason each index in that table holds another table with possible sounds for that selection value:
-self.sounds["combo"][4] = { standardsfx, alternativesfx, alternativesfx2}
-self.sounds["combo"][5] = { standardsfx}
-For most sounds that aren't divided by size one level is omitted and they don't load the variations as subSfx:
-self.sounds["win"] = { win, win2, win3}
-The level of sound loading is determined via "mayHaveSubSfx"
+The values of that dictionary are SfxGroups that implement a subset of love.Source to interop with SoundController.
+self.sounds["win"] = SfxGroup
+For some sfx types, sfx can possibly contain sub sfx.
+To reflect that mechanic instead of an SfxGroup these sfx types will contain an array of SfxGroups
+self.sounds["combo"] = { nil, nil, SfxGroup, SfxGroup, SfxGroup}
+The level of sound loading is determined via the presence of the key in "perSizeSfxStart"
 ]]--
 
 local perSizeSfxStart = { chain = 2, combo = 4, shock = 3}
 
-function Character.loadSfx(self, name, yields)
-  local sfx = {}
-
-  local stringLen = string.len(name)
-  local files = tableUtils.filter(self.files, function(file) return string.find(file, name, nil, true) end)
-
-  local maxIndex = -1
-  -- load sounds
-  for i = 1, #files do
-    stringLen = string.len(name)
-    local index = tonumber(string.match(files[i], "%d+", stringLen + 1))
-
-    -- for files with no suffix at all, index would be nil but they should go in sfx[1] instead
-    local targetIndex = 1
-    if index ~= nil then
-      -- otherwise use the index as normal
-      targetIndex = index
-    end
-
-
-    if perSizeSfxStart[name] then
-      if sfx[targetIndex] == nil then
-        sfx[targetIndex] = self:loadSubSfx(name, index)
-      end
+---@param name string
+---@return SfxGroup | table<integer, SfxGroup> | nil
+function Character:loadSfx(name)
+  if not perSizeSfxStart[name] then
+    local fileGroup = FileGroup(self.path, name, fileUtils.SUPPORTED_SOUND_FORMATS)
+    if next(fileGroup.matchingFiles) then
+      return SfxGroup(fileGroup, self.sfx_volume)
     else
-      local sound = fileUtils.loadSoundFromSupportExtensions(self.path .. "/" .. files[i], false)
-      if sound ~= nil then
-        sfx[targetIndex] = sound
+      return nil
+    end
+  else
+    local sfx = {}
+    local stringLen = string.len(name)
+    local files = tableUtils.filter(self.files, function(file) return string.find(file, name, nil, true) end)
+
+    local maxIndex = -1
+    -- load sounds
+    for i = 1, #files do
+      stringLen = string.len(name)
+      local index = tonumber(string.match(files[i], "%d+", stringLen + 1))
+
+      -- for files with no suffix at all, index would be nil but they should go in sfx[1] instead
+      local targetIndex = 1
+      if index ~= nil then
+        -- otherwise use the index as normal
+        targetIndex = index
       end
 
-      if yields then
-        coroutine.yield()
+      if sfx[targetIndex] == nil then
+        local searchName = name
+        if index then
+          searchName = searchName .. index
+        end
+        local fileGroup = FileGroup(self.path, searchName, fileUtils.SUPPORTED_SOUND_FORMATS, "_")
+        if next(fileGroup.matchingFiles) then
+          sfx[targetIndex] = SfxGroup(fileGroup, self.sfx_volume)
+        end
+      end
+
+      if sfx[targetIndex] then
+        maxIndex = math.max(maxIndex, targetIndex)
       end
     end
 
-    if sfx[targetIndex] then
-      maxIndex = math.max(maxIndex, targetIndex)
-    end
-  end
-
-  if perSizeSfxStart[name] then
     self:fillInMissingSounds(sfx, name, maxIndex)
-  else
-    -- #table may yield erroneous (too large) results for tables with gaps 
-    -- Character:playRandomSfx() relies on #table being accurate so we redo the table here if it has gaps
-    sfx = tableUtils.toContinuouslyIndexedTable(sfx)
-  end
-
-  assert(sfx ~= nil)
-  return sfx
-end
-
--- loads all variations for the sfx with the base name sfxName and returns them in a continuous integer key'd table
-function Character.loadSubSfx(self, name, index, yields)
-  local sfxTable = {}
-
-  if index == nil then
-    -- index 1 can be implicit, e.g. chain, chain_2, chain2, chain2_2 (actually the official spec)
-    -- change it to an empty string so it doesn't crash on concat
-    index = ""
-  end
-  local stringLen = string.len(name..index)
-  local subfiles = tableUtils.filter(self.files,
-                    function(file)
-                      return file == name..index or
-                            (string.find(file, name .. index) and
-                            -- exclude chain22 while searching for chain2
-                            tonumber(string.sub(file, stringLen + 1, stringLen + 1)) == nil and
-                            -- exclude combo_echo / chain_echo, only take comboN_M/chainN_M
-                            tonumber(string.sub(file, stringLen + 2, stringLen + 2)) ~= nil)
-                    end)
-
-  if #subfiles > 0 then
-    for j = 1, #subfiles do
-      local subSound = fileUtils.loadSoundFromSupportExtensions(self.path .. "/" .. subfiles[j], false)
-      if subSound ~= nil then
-        sfxTable[#sfxTable+1] = subSound
-      end
-      if yields then
-        coroutine.yield()
-      end
-    end
-  end
-
-  if #sfxTable > 0 then
-    return sfxTable
-  else
-    return nil
+    return sfx
   end
 end
 
@@ -641,8 +655,8 @@ function Character.fillInMissingSounds(self, sfxTable,  name, maxIndex)
       if i >= perSizeSfxStart[name] then
         sfxTable[i] = fillUpSound
       else
-        -- leave it empty so it doesn't show up in sound test
-        sfxTable[i] = {}
+        -- leave it empty
+        sfxTable[i] = nil
       end
     end
   end
@@ -661,8 +675,8 @@ end
 -- sound playing / sound control
 
 function Character.playSelectionSfx(self)
-  if self.sounds.selection and #self.sounds.selection > 0 then
-    SoundController:playRandomSfx(self.sounds.selection)
+  if self.sounds.selection then
+    self.sounds.selection:play()
   else
     GAME.theme:playValidationSfx()
   end
@@ -672,37 +686,50 @@ function Character.playComboSfx(self, size)
   -- self.sounds.combo[0] is the fallback combo sound which is guaranteed to be set if there is a combo sfx
   if self.sounds.combo[0] == nil then
     -- no combos loaded, try to fallback to the fallback chain sound
-    if self.sounds.chain[0] == nil then
-      -- technically we should always have a default chain sound from the default_character
-      -- so if this error ever occurs, something is seriously cursed
-      error("Found neither chain nor combo sfx upon trying to play combo sfx")
-    else
-      SoundController:playRandomSfx(self.sounds.chain[0])
-    end
+    self:playChainSfx(0)
   else
     -- combo sfx available!
     if self.combo_style == comboStyle.classic then
       -- roll among all combos in case a per_combo style character had its combostyle changed to classic
       local rolledIndex = math.random(#self.sounds.combo)
-      SoundController:playRandomSfx(self.sounds.combo[rolledIndex])
+      self.sounds.combo[rolledIndex]:play()
     else
       -- use fallback sound if the combo size is higher than the highest combo sfx
-      SoundController:playRandomSfx(self.sounds.combo[size], self.sounds.combo[0])
+      -- an alternative scenario is if in per_combo style the shock sfx redirects here for a 3 shock match
+      if self.sounds.combo[size] then
+        self.sounds.combo[size]:play()
+      else
+        self.sounds.combo[0]:play()
+      end
     end
   end
 end
 
 function Character.playChainSfx(self, length)
   -- chain[0] always exists by virtue of the default character SFX
-  SoundController:playRandomSfx(self.sounds.chain[length], self.sounds.chain[0])
+  if self.sounds.chain[length] then
+    self.sounds.chain[length]:play()
+  else
+    if self.sounds.chain[0] == nil then
+      -- technically we should always have a default chain sound from the default_character
+      -- so if this error ever occurs, something is seriously cursed
+      error("Found no chain sfx for character")
+    else
+      self.sounds.chain[0]:play()
+    end
+  end
 end
 
 function Character.playShockSfx(self, size)
-  if #self.sounds.shock > 0 then
-    SoundController:playRandomSfx(self.sounds.shock[size], self.sounds.shock[0])
+  if tableUtils.length(self.sounds.shock) > 0 then
+    if self.sounds.shock[size] then
+      self.sounds.shock[size]:play()
+    else
+      self.sounds.shock[0]:play()
+    end
   else
-    if size >= 6 and #self.sounds.combo_echo > 0 then
-      SoundController:playRandomSfx(self.sounds.combo_echo)
+    if size >= 6 and self.sounds.combo_echo then
+      self.sounds.combo_echo:play()
     else
       self:playComboSfx(size)
     end
@@ -721,7 +748,7 @@ function Character.playAttackSfx(self, attack)
       for _, v in pairs(self.sounds.shock) do
         SoundController:stopSfx(v)
       end
-    else
+    elseif self.sounds.combo_echo then
       SoundController:stopSfx(self.sounds.combo_echo)
     end
 
@@ -745,41 +772,27 @@ function Character.playAttackSfx(self, attack)
 end
 
 function Character.playGarbageMatchSfx(self)
-  if self.sounds.garbage_match and #self.sounds.garbage_match ~= 0 then
-    SoundController:stopSfx(self.sounds.garbage_match)
-    SoundController:playRandomSfx(self.sounds.garbage_match)
+  if self.sounds.garbage_match then
+    self.sounds.garbage_match:play()
   end
 end
 
 function Character.playGarbageLandSfx(self)
-  if self.sounds.garbage_land and #self.sounds.garbage_land ~= 0 then
-    SoundController:stopSfx(self.sounds.garbage_land)
-    SoundController:playRandomSfx(self.sounds.garbage_land)
+  if self.sounds.garbage_land then
+    self.sounds.garbage_land:play()
   end
 end
 
 -- tauntUp is rolled externally in order to send the exact same taunt index to the enemy as plays locally
 function Character.playTauntUpSfx(self, tauntUp)
-  if self.sounds.taunt_up and #self.sounds.taunt_up ~= 0 then
-    SoundController:stopSfx(self.sounds.taunt_up)
-    -- self might be a replacement character with less taunts than the selected one so confirm the index first
-    if self.sounds.taunt_up[tauntUp] then
-      SoundController:playSfx(self.sounds.taunt_up[tauntUp])
-    else
-      SoundController:playRandomSfx(self.sounds.taunt_up, self.sounds.taunt_down)
-    end
+  if self.sounds.taunt_up then
+    self.sounds.taunt_up:play()
   end
 end
 
 function Character.playTauntDownSfx(self, tauntDown)
-  if self.sounds.taunt_down and #self.sounds.taunt_down ~= 0 then
-    SoundController:stopSfx(self.sounds.taunt_down)
-    -- self might be a replacement character with less taunts than the selected one so confirm the index first
-    if self.sounds.taunt_down[tauntDown] then
-      SoundController:playSfx(self.sounds.taunt_down[tauntDown])
-    else
-      SoundController:playRandomSfx(self.sounds.taunt_down, self.sounds.taunt_up)
-    end
+  if self.sounds.taunt_down then
+    self.sounds.taunt_down:play()
   end
 end
 
@@ -793,7 +806,11 @@ function Character.playTaunt(self, tauntType, index)
 end
 
 function Character:playWinSfx()
-  SoundController:playRandomSfx(self.sounds.win, themes[config.theme].sounds.fanfare1)
+  if self.sounds.win then
+    self.sounds.win:play()
+  else
+    themes[config.theme].sounds.fanfare1:play()
+  end
 end
 
 function Character.applyConfigVolume(self)

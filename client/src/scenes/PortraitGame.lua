@@ -3,16 +3,11 @@ local class = require("common.lib.class")
 local consts = require("common.engine.consts")
 local Telegraph = require("client.src.graphics.Telegraph")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local PixelFontLabel = require("client.src.ui.PixelFontLabel")
-local TextButton = require("client.src.ui.TextButton")
-local Label = require("client.src.ui.Label")
-local input = require("common.lib.inputManager")
+local ui = require("client.src.ui")
+local input = require("client.src.inputManager")
+local system = require("client.src.system")
 
 local PortraitGame = class(function(self, sceneParams)
-  self.nextScene = sceneParams.nextScene
-
-  self:load(sceneParams)
-  self.match:connectSignal("matchEnded", self, self.onMatchEnded)
 end,
 GameBase)
 
@@ -39,7 +34,7 @@ function PortraitGame:customLoad()
   self.uiRoot.width = consts.CANVAS_HEIGHT
   self.uiRoot.height = consts.CANVAS_WIDTH
 
-  local communityMessage = Label({
+  local communityMessage = ui.Label({
     text = "join_community",
     replacements = {"\ndiscord." .. consts.SERVER_LOCATION},
     translate = true,
@@ -51,7 +46,7 @@ function PortraitGame:customLoad()
   self.uiRoot:addChild(self.uiRoot.communityMessage)
 
   local timerScale = themes[config.theme].time_Scale
-  self.uiRoot.timer = PixelFontLabel({
+  self.uiRoot.timer = ui.PixelFontLabel({
     text = getTimer(self.match),
     fontMap = themes[config.theme].fontMaps.time,
     hAlign = "center",
@@ -61,58 +56,7 @@ function PortraitGame:customLoad()
   })
   self.uiRoot:addChild(self.uiRoot.timer)
 
-  -- recreate the global canvas in portrait dimensions
-  GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_HEIGHT, consts.CANVAS_WIDTH, {dpiscale=GAME:newCanvasSnappedScale()})
-
-  local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" then
-    -- flip the window dimensions to portrait
-    love.window.updateMode(height, width)
-    love.window.setFullscreen(true)
-  elseif DEBUG_ENABLED then
-    GAME:updateCanvasPositionAndScale(width, height)
-  end
-
-  for _, player in ipairs(self.match.players) do
-    if player.isLocal and player.human and player.settings.inputMethod == "touch" then
-      -- recreate the stack canvas to use a higher instead of the usual 3
-      -- force center it
-      local stack = player.stack
-      stack.gfxScale = 5
-      stack.canvas = love.graphics.newCanvas(104 * stack.gfxScale, 204 * stack.gfxScale, {dpiscale = GAME:newCanvasSnappedScale()})
-      stack.frameOriginX = (GAME.globalCanvas:getWidth() / 2 - stack.canvas:getWidth() / 2) / stack.gfxScale
-      stack.frameOriginY = (GAME.globalCanvas:getHeight() - stack.canvas:getHeight()) / stack.gfxScale
-      stack.panelOriginX = stack.frameOriginX + stack.panelOriginXOffset
-      stack.panelOriginY = stack.frameOriginY + stack.panelOriginYOffset
-      stack.origin_x = stack.frameOriginX / stack.gfxScale
-
-      -- create a raise button that interacts with the touch controller
-      local raiseButton = TextButton({label = Label({text = "raise", fontSize = 20}), hAlign = "right", vAlign = "bottom", height = player.stack.canvas:getHeight() / 2})
-      raiseButton.onTouch = function(button, x, y)
-        button.backgroundColor[4] = 1
-        stack.touchInputController.touchingRaise = true
-      end
-      raiseButton.onDrag = function(button, x, y)
-        stack.touchInputController.touchingRaise = button:inBounds(x, y)
-      end
-      raiseButton.onRelease = function(button, x, y, timeHeld)
-        button.backgroundColor[4] = 0.7
-        stack.touchInputController.touchingRaise = false
-      end
-      raiseButton.width = 70
-      self.uiRoot.raiseButton = raiseButton
-      self.uiRoot:addChild(raiseButton)
-    else
-      local stack = player.stack
-      stack.gfxScale = 1
-      stack.canvas = love.graphics.newCanvas(104 * stack.gfxScale, 204 * stack.gfxScale, {dpiscale = GAME:newCanvasSnappedScale()})
-      stack.frameOriginX = (GAME.globalCanvas:getWidth() - stack.canvas:getWidth()) - 12
-      stack.frameOriginY = 10
-      stack.panelOriginX = stack.frameOriginX + stack.panelOriginXOffset
-      stack.panelOriginY = stack.frameOriginY + stack.panelOriginYOffset
-      stack.origin_x = stack.frameOriginX / stack.gfxScale
-    end
-  end
+  self:flipToPortrait()
 end
 
 function PortraitGame:drawBar(stack, image, quad, themePositionOffset, height, yOffset, rotate, scale)
@@ -132,8 +76,8 @@ end
 -- when using the stack function, the multibar ends up somewhere
 -- so just force absolute multibar with a somewhat fixed draw
 function PortraitGame:drawMultibar(stack)
-  local stop_time = stack.stop_time
-  local shake_time = stack.shake_time
+  local stop_time = stack.engine.stop_time
+  local shake_time = stack.engine.shake_time
 
   -- before the first move, display the stop time from the puzzle, not the stack
   if stack.puzzle and stack.puzzle.puzzleType == "clear" and stack.puzzle.moves == stack.puzzle.remaining_moves then
@@ -159,7 +103,7 @@ function PortraitGame:drawMultibar(stack)
   local bottomOffset = 0
 
   scale = themes[config.theme].multibar_Scale
-  local healthHeight = (stack.health / multiBarFrameCount) * multiBarMaxHeight
+  local healthHeight = (stack.engine.health / multiBarFrameCount) * multiBarMaxHeight
   self:drawBar(stack, themes[config.theme].images.IMG_healthbar, stack.healthQuad, barPos, healthHeight, 0, 0, scale)
 
   bottomOffset = healthHeight
@@ -167,7 +111,7 @@ function PortraitGame:drawMultibar(stack)
   local stopHeight = 0
   local preStopHeight = 0
 
-  if shake_time > 0 and shake_time > (stop_time + stack.pre_stop_time) then
+  if shake_time > 0 and shake_time > (stop_time + stack.engine.pre_stop_time) then
     -- shake is only drawn if it is greater than prestop + stop
     -- shake is always guaranteed to fit
     local shakeHeight = (shake_time / multiBarFrameCount) * multiBarMaxHeight
@@ -175,20 +119,20 @@ function PortraitGame:drawMultibar(stack)
   else
     -- stop/prestop are only drawn if greater than shake
     if stop_time > 0 then
-      stopHeight = math.min(stop_time, multiBarFrameCount - stack.health) / multiBarFrameCount * multiBarMaxHeight
+      stopHeight = math.min(stop_time, multiBarFrameCount - stack.engine.health) / multiBarFrameCount * multiBarMaxHeight
       self:drawBar(stack, themes[config.theme].images.IMG_multibar_stop_bar, stack.multi_stopQuad, barPos, stopHeight, bottomOffset, 0, scale)
 
       bottomOffset = bottomOffset + stopHeight
     end
-    if stack.pre_stop_time and stack.pre_stop_time > 0 then
-      local totalInvincibility = stack.health + stack.stop_time + stack.pre_stop_time
+    if stack.engine.pre_stop_time and stack.engine.pre_stop_time > 0 then
+      local totalInvincibility = stack.engine.health + stack.engine.stop_time + stack.engine.pre_stop_time
       local remainingSeconds = 0
       if totalInvincibility > multiBarFrameCount then
         -- total invincibility exceeds what the multibar can display -> fill only the remaining space with prestop
-        preStopHeight = (1 - (stack.health + stop_time) / multiBarFrameCount) * multiBarMaxHeight
+        preStopHeight = (1 - (stack.engine.health + stop_time) / multiBarFrameCount) * multiBarMaxHeight
         remainingSeconds = (totalInvincibility - multiBarFrameCount) / 60
       else
-        preStopHeight = stack.pre_stop_time / multiBarFrameCount * multiBarMaxHeight
+        preStopHeight = stack.engine.pre_stop_time / multiBarFrameCount * multiBarMaxHeight
       end
 
       self:drawBar(stack, themes[config.theme].images.IMG_multibar_prestop_bar, stack.multi_prestopQuad, barPos, preStopHeight, bottomOffset, 0, scale)
@@ -218,7 +162,7 @@ function PortraitGame:draw()
     for _, stack in ipairs(self.match.stacks) do
       stack:render()
       -- don't render stacks that only have an attack engine
-      if stack.is_local and stack.player.human and stack.inputMethod == "touch" then
+      if stack.engine.is_local and stack.player.human and stack.inputMethod == "touch" then
         self:drawMultibar(stack)
       end
 
@@ -246,28 +190,84 @@ function PortraitGame:draw()
   self.uiRoot:draw()
 end
 
-function PortraitGame:onMatchEnded(match)
+function PortraitGame:flipToPortrait()
+  -- recreate the global canvas in portrait dimensions
+  GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_HEIGHT, consts.CANVAS_WIDTH, {dpiscale=GAME:newCanvasSnappedScale()})
+
+  local width, height, _ = love.window.getMode()
+  if system.isMobileOS() or DEBUG_ENABLED then
+    -- flip the window dimensions to portrait
+    love.window.updateMode(height, width, {})
+    love.window.setFullscreen(true)
+    --GAME:updateCanvasPositionAndScale(width, height)
+  end
+
+  for _, player in ipairs(self.match.players) do
+    if player.isLocal and player.human and player.settings.inputMethod == "touch" then
+      -- modify the stack to use a higher gfxScale instead of the usual 3
+      local stack = player.stack
+      stack.gfxScale = 5
+      -- force center it horizontally
+      stack.frameOriginX = (GAME.globalCanvas:getWidth() / 2 - stack:canvasWidth() / 2) / stack.gfxScale
+      -- and anchor at the bottom
+      stack.frameOriginY = (GAME.globalCanvas:getHeight() - stack:canvasHeight()) / stack.gfxScale
+      stack.panelOriginX = stack.frameOriginX + stack.panelOriginXOffset
+      stack.panelOriginY = stack.frameOriginY + stack.panelOriginYOffset
+      stack.origin_x = stack.frameOriginX / stack.gfxScale
+
+      -- create a raise button that interacts with the touch controller
+      local raiseButton = ui.TextButton({label = ui.Label({text = "raise", fontSize = 20}), hAlign = "right", vAlign = "bottom", height = player.stack:canvasHeight() / 2})
+      raiseButton.onTouch = function(button, x, y)
+        button.backgroundColor[4] = 1
+        stack.touchInputDetector.touchingRaise = true
+      end
+      raiseButton.onDrag = function(button, x, y)
+        stack.touchInputDetector.touchingRaise = button:inBounds(x, y)
+      end
+      raiseButton.onRelease = function(button, x, y, timeHeld)
+        button.backgroundColor[4] = 0.7
+        stack.touchInputDetector.touchingRaise = false
+      end
+      raiseButton.width = 70
+      self.uiRoot.raiseButton = raiseButton
+      self.uiRoot:addChild(raiseButton)
+    else
+      local stack = player.stack
+      stack.gfxScale = 1
+      stack.canvas = true
+      stack.frameOriginX = (GAME.globalCanvas:getWidth() - stack:canvasWidth()) - 12
+      stack.frameOriginY = 10
+      stack.panelOriginX = stack.frameOriginX + stack.panelOriginXOffset
+      stack.panelOriginY = stack.frameOriginY + stack.panelOriginYOffset
+      stack.origin_x = stack.frameOriginX / stack.gfxScale
+    end
+  end
+end
+
+function PortraitGame:returnToLandscape()
   -- recreate the global canvas in landscape dimensions
   GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT, {dpiscale=GAME:newCanvasSnappedScale()})
   -- flip the window dimensions to landscape
   local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" then
-    love.window.updateMode(height, width)
+  if system.isMobileOS() or DEBUG_ENABLED then
+    love.window.updateMode(height, width, {})
     love.window.setFullscreen(false)
-  elseif DEBUG_ENABLED then
-    GAME:updateCanvasPositionAndScale(width, height)
+    --GAME:updateCanvasPositionAndScale(width, height)
   end
-  for _, player in ipairs(match.players) do
+  for _, player in ipairs(self.match.players) do
     if player.isLocal and player.human and player.settings.inputMethod == "touch" then
-      -- recreate the stack canvas to use gfxScale of 3
       player.stack.gfxScale = 3
-      player.stack.canvas = love.graphics.newCanvas(104 * 3, 204 * 3, {dpiscale = GAME:newCanvasSnappedScale()})
     end
   end
 end
 
 function PortraitGame:customRun()
   self.uiRoot.timer:setText(getTimer(self.match))
+end
+
+function PortraitGame:startNextScene()
+  self:returnToLandscape()
+  GAME.navigationStack:pop()
 end
 
 return PortraitGame

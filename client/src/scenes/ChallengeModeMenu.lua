@@ -1,14 +1,9 @@
 local Scene = require("client.src.scenes.Scene")
 local class = require("common.lib.class")
 local ChallengeMode = require("client.src.ChallengeMode")
-local Menu = require("client.src.ui.Menu")
-local MenuItem = require("client.src.ui.MenuItem")
-local Label = require("client.src.ui.Label")
-local Stepper = require("client.src.ui.Stepper")
+local ui = require("client.src.ui")
 local CharacterSelectChallenge = require("client.src.scenes.CharacterSelectChallenge")
 
---@module ChallengeModeMenu
--- 
 local ChallengeModeMenu = class(
   function (self, sceneParams)
     self.backgroundImg = themes[config.theme].images.bg_main
@@ -27,7 +22,7 @@ end
 
 function ChallengeModeMenu:goToCharacterSelect(difficulty)
   GAME.theme:playValidationSfx()
-  GAME.battleRoom = ChallengeMode(difficulty)
+  GAME.battleRoom = ChallengeMode.create(difficulty)
   if GAME.battleRoom then
     GAME.navigationStack:replace(CharacterSelectChallenge())
   end
@@ -37,11 +32,11 @@ function ChallengeModeMenu:load(sceneParams)
   local difficultyLabels = {}
   local challengeModes = {}
   for i = 1, ChallengeMode.numDifficulties do
-    table.insert(difficultyLabels, Label({text = "challenge_difficulty_" .. i}))
+    table.insert(difficultyLabels, ui.Label({text = "challenge_difficulty_" .. i}))
     table.insert(challengeModes, i)
   end
 
-  local difficultyStepper = Stepper({
+  local difficultyStepper = ui.Stepper({
       labels = difficultyLabels,
       values = challengeModes,
       selectedIndex = 1,
@@ -54,14 +49,14 @@ function ChallengeModeMenu:load(sceneParams)
   )
 
   local menuItems = {
-    MenuItem.createStepperMenuItem("difficulty", nil, nil, difficultyStepper),
-    MenuItem.createButtonMenuItem("go_", nil, nil, function()
+    ui.MenuItem.createStepperMenuItem("difficulty", nil, nil, difficultyStepper),
+    ui.MenuItem.createButtonMenuItem("go_", nil, nil, function()
       self:goToCharacterSelect(difficultyStepper.value)
     end),
-    MenuItem.createButtonMenuItem("back", nil, nil, exitMenu)
+    ui.MenuItem.createButtonMenuItem("back", nil, nil, exitMenu)
   }
 
-  self.menu = Menu.createCenteredMenu(menuItems)
+  self.menu = ui.Menu.createCenteredMenu(menuItems)
   self.uiRoot:addChild(self.menu)
 end
 

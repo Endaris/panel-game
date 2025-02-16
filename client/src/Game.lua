@@ -13,7 +13,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local analytics = require("client.src.analytics")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 local save = require("client.src.save")
 local fileUtils = require("client.src.FileUtils")
 local handleShortcuts = require("client.src.Shortcuts")
@@ -25,6 +25,7 @@ local SoundController = require("client.src.music.SoundController")
 require("client.src.BattleRoom")
 local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
+local system = require("client.src.system")
 
 local RichPresence = require("client.lib.rich_presence.RichPresence")
 
@@ -35,6 +36,20 @@ local function newCanvasSnappedScale(self)
   return result
 end
 
+---@class PanelAttack
+---@field netClient NetClient
+---@field battleRoom BattleRoom?
+---@field globalCanvas love.Canvas
+---@field muteSound boolean
+---@field rich_presence table
+---@field input table
+---@field backgroundImage table
+---@field backgroundColor number[]
+---@field updater table?
+---@field automaticScales number[]
+---@field config UserConfig
+---@field puzzleSets table<string, PuzzleSet>
+---@overload fun(): PanelAttack
 local Game = class(
   function(self)
     self.scores = require("client.src.scores")
@@ -80,8 +95,6 @@ local Game = class(
     self.last_y = 0
     self.input_delta = 0.0
 
-    -- misc
-    self.rich_presence = RichPresence()
     -- time in seconds, can be used by other elements to track the passing of time beyond dt
     self.timer = love.timer.getTime()
   end
@@ -90,8 +103,10 @@ local Game = class(
 Game.newCanvasSnappedScale = newCanvasSnappedScale
 
 function Game:load()
-  -- TODO: include this with save.lua?
-  require("client.src.puzzles")
+  GAME.puzzleSets = {}
+  save.write_puzzles()
+  save.read_puzzles("puzzles")
+
   -- move to constructor
   self.updater = GAME_UPDATER or nil
   if self.updater then
@@ -115,17 +130,12 @@ function Game:load()
 end
 
 local function detectHardwareProblems()
-  local OS = love.system.getOS()
-  if OS == "Windows" then
-    local version, vendor = select(2, love.graphics.getRendererInfo())
-    if vendor == "ATI Technologies Inc." and
-		(version:find("22.7.1", 1, true) or version:find(".2207", 1, true)) then
-      love.window.showMessageBox(
-        "AMD driver 22.7.1 detected",
-        "AMD driver 22.7.1 is known to have problems with running LÖVE (this includes Panel Attack). If the game fails to render its visuals, it is recommended to upgrade or downgrade your AMD GPU drivers.",
-        "warning"
-      )
-    end
+  local compatible, problem, reason = system.isCompatible()
+
+  if not compatible then
+    ---@cast problem -nil
+    ---@cast reason -nil
+    love.window.showMessageBox(problem, reason, "warning")
   end
 end
 
@@ -143,7 +153,10 @@ function Game:cleanupOldVersions()
         if not tableUtils.first(activeReleaseStream.availableVersions, function(availableVersionInfo)
           return availableVersionInfo.version == installedVersionInfo.version
         end) then
-          toBeCleared[#toBeCleared+1] = installedVersionInfo
+          -- double check we're not trying to remove the very file that is mounted right now
+          if not string.find(love.filesystem.getRequirePath(), installedVersionInfo.path, 1, true) then
+            toBeCleared[#toBeCleared+1] = installedVersionInfo
+          end
         end
       end
 
@@ -205,7 +218,7 @@ function Game:setupRoutine()
   -- loading various assets into the game
   coroutine.yield("Loading localization...")
   Localization:init()
-  self.setLanguage(config.language_code)
+  self:setLanguage(config.language_code)
 
   detectHardwareProblems()
 
@@ -234,13 +247,6 @@ function Game:setupRoutine()
 
   self:cleanupOldVersions()
   self:writeReleaseStreamDefinition()
-  -- Run all unit tests now that we have everything loaded
-  if TESTS_ENABLED then
-    self:runUnitTests()
-  end
-  if PERFORMANCE_TESTS_ENABLED then
-    self:runPerformanceTests()
-  end
 
   self:initializeLocalPlayer()
 end
@@ -283,15 +289,13 @@ function Game:createDirectoriesIfNeeded()
 
     -- Move the old user ID spot to the new folder (we won't delete the old one for backwards compatibility and safety)
     if love.filesystem.getInfo(oldServerDirectory) then
-      local userID = read_user_id_file(consts.LEGACY_SERVER_LOCATION)
-      write_user_id_file(userID, consts.SERVER_LOCATION)
+      local userID = save.read_user_id_file(consts.LEGACY_SERVER_LOCATION)
+      save.write_user_id_file(userID, consts.SERVER_LOCATION)
     end
   end
 
-  if #fileUtils.getFilteredDirectoryItems("training") == 0 then
-    fileUtils.recursiveCopy("client/assets/default_data/training", "training")
-  end
-  readAttackFiles("training")
+  fileUtils.recursiveCopy("client/assets/default_data/training", "training")
+  save.readAttackFiles("training")
 
   if love.system.getOS() ~= "OS X" then
     fileUtils.recursiveRemoveFiles(".", ".DS_Store")
@@ -344,7 +348,7 @@ end
 function Game:handleResize(newWidth, newHeight)
   if self.previousWindowWidth ~= newWidth or self.previousWindowHeight ~= newHeight then
     self:updateCanvasPositionAndScale(newWidth, newHeight)
-    if self.match then
+    if self.battleRoom and self.battleRoom.match then
       self.needsAssetReload = true
     else
       self:refreshCanvasAndImagesForNewScale()
@@ -357,18 +361,13 @@ end
 -- dt is the amount of time in seconds that has passed.
 function Game:update(dt)
   self.timer = love.timer.getTime()
-  if GAME.navigationStack.transition then
-    leftover_time = leftover_time + dt
-  else
-    leftover_time = 0
-  end
 
   prof.push("battleRoom update")
   if self.battleRoom then
     self.battleRoom:update(dt)
   end
   prof.pop("battleRoom update")
-  self.netClient:update(dt)
+  self.netClient:update()
 
   handleShortcuts()
 
@@ -387,7 +386,7 @@ end
 
 function Game:draw()
   -- Setting the canvas means everything we draw is drawn to the canvas instead of the screen
-  love.graphics.setCanvas(self.globalCanvas)
+  love.graphics.setCanvas({self.globalCanvas, stencil = true})
   love.graphics.setBackgroundColor(unpack(self.backgroundColor))
   love.graphics.clear()
 
@@ -429,8 +428,8 @@ function Game:drawScaleInfo()
 end
 
 function Game.errorData(errorString, traceBack)
-  local systemInfo = "OS: " .. (love.system.getOS() or "Unknown")
-  local loveVersion = Game.loveVersionString() or "Unknown"
+  local systemInfo = system.getOsInfo()
+  local loveVersion = system.loveVersionString()
   local username = config.name or "Unknown"
   local buildVersion
   if GAME.updater then
@@ -454,14 +453,14 @@ function Game.errorData(errorString, traceBack)
       theme = config.theme
     }
 
-  if GAME.battleRoom then
-    errorData.battleRoomInfo = GAME.battleRoom:getInfo()
-  end
-  if GAME.navigationStack and GAME.navigationStack.scenes
-      and #GAME.navigationStack.scenes > 0
-      and GAME.navigationStack.scenes[#GAME.navigationStack.scenes].match then
-    errorData.matchInfo = GAME.navigationStack.scenes[#GAME.navigationStack.scenes].match:getInfo()
-  end
+  -- if GAME.battleRoom then
+  --   errorData.battleRoomInfo = GAME.battleRoom:getInfo()
+  -- end
+  -- if GAME.navigationStack and GAME.navigationStack.scenes
+  --     and #GAME.navigationStack.scenes > 0
+  --     and GAME.navigationStack.scenes[#GAME.navigationStack.scenes].match then
+  --   errorData.matchInfo = GAME.navigationStack.scenes[#GAME.navigationStack.scenes].match:getInfo()
+  -- end
 
   return errorData
 end
@@ -535,17 +534,6 @@ function Game.detailedErrorLogString(errorData)
   return detailedErrorLogString
 end
 
-local loveVersionStringValue = nil
-
-function Game.loveVersionString()
-  if loveVersionStringValue then
-    return loveVersionStringValue
-  end
-  local major, minor, revision, codename = love.getVersion()
-  loveVersionStringValue = string.format("%d.%d.%d", major, minor, revision)
-  return loveVersionStringValue
-end
-
 -- Calculates the proper dimensions to not stretch the game for various sizes
 function scale_letterbox(width, height, w_ratio, h_ratio)
   if height / h_ratio > width / w_ratio then
@@ -569,7 +557,7 @@ function Game:updateCanvasPositionAndScale(newWindowWidth, newWindowHeight)
     -- Go from biggest to smallest and used the highest one that still fits
     for i = #availableScales, 1, -1 do
       local scale = availableScales[i]
-      if config.gameScaleType ~= "auto" or 
+      if config.gameScaleType ~= "auto" or
         (newWindowWidth >= self.globalCanvas:getWidth() * scale and newWindowHeight >= self.globalCanvas:getHeight() * scale) then
         self.canvasXScale = scale
         self.canvasYScale = scale
@@ -616,9 +604,9 @@ function Game:refreshCanvasAndImagesForNewScale()
   panels_init()
   -- Reload characters to get the new resolution assets
   characters_reload_graphics()
-  
+
   -- Reload loc to get the new font
-  self.setLanguage(config.language_code)
+  self:setLanguage(config.language_code)
 end
 
 -- Transform from window coordinates to game coordinates
@@ -637,7 +625,7 @@ function Game:drawLoadingString(loadingString)
   GraphicsUtil.printf(loadingString, x, y, consts.CANVAS_WIDTH, "center", nil, nil, 10)
 end
 
-function Game.setLanguage(lang_code)
+function Game:setLanguage(lang_code)
   for i, v in ipairs(Localization.codes) do
     if v == lang_code then
       Localization.lang_index = i
@@ -647,13 +635,13 @@ function Game.setLanguage(lang_code)
   config.language_code = Localization.codes[Localization.lang_index]
 
   if themes[config.theme] and themes[config.theme].font and themes[config.theme].font.path then
-    GraphicsUtil.setGlobalFont(themes[config.theme].font.path, themes[config.theme].font.size)
+    GraphicsUtil.setGlobalFont(themes[config.theme].font.path, themes[config.theme].font.size, self:newCanvasSnappedScale())
   elseif config.language_code == "JP" then
-    GraphicsUtil.setGlobalFont("client/assets/fonts/jp.ttf", 14)
+    GraphicsUtil.setGlobalFont("client/assets/fonts/jp.ttf", 14, self:newCanvasSnappedScale())
   elseif config.language_code == "TH" then
-    GraphicsUtil.setGlobalFont("client/assets/fonts/th.otf", 14)
+    GraphicsUtil.setGlobalFont("client/assets/fonts/th.otf", 14, self:newCanvasSnappedScale())
   else
-    GraphicsUtil.setGlobalFont(nil, 12)
+    GraphicsUtil.setGlobalFont(nil, 12, self:newCanvasSnappedScale())
   end
 
   Localization:refresh_global_strings()

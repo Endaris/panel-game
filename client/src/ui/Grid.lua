@@ -1,6 +1,7 @@
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UiElement = require(PATH .. ".UIElement")
+local GridElement = require(PATH .. ".GridElement")
 local class = require("common.lib.class")
-local UiElement = require("client.src.ui.UIElement")
-local GridElement = require("client.src.ui.GridElement")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
 local Grid = class(function(self, options)
@@ -11,6 +12,7 @@ local Grid = class(function(self, options)
   self.width = self.gridWidth * self.unitSize
   self.height = self.gridHeight * self.unitSize
   self.grid = {}
+  self.cursors = {}
   for row = 1, options.gridHeight do
     self.grid[row] = {}
     -- for col = 1, options.gridWidth do

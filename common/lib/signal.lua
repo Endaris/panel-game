@@ -1,8 +1,16 @@
 local util = require("common.lib.util")
 local logger = require("common.lib.logger")
 local tableUtils = require("common.lib.tableUtils")
+
+---@class Signal
+---@field emitsSignals boolean Marker that the table is a signal emitter
+---@field signalSubscriptions table subscribers as key and a list of callbacks to execute on emission
+
+---@class Signal
 local Signal = {}
 
+---@generic T: table
+---@type fun(t: T)
 function Signal.turnIntoEmitter(t)
   t.emitsSignals = true
   t.signalSubscriptions = {}
@@ -31,6 +39,9 @@ function Signal.createSignal(t, signalName)
 end
 
 function Signal.emitSignal(emitter, signalName, ...)
+  if not emitter.signalSubscriptions[signalName] then
+    error("Trying to emit unknown signal " .. signalName)
+  end
   for subscriber, array in pairs(emitter.signalSubscriptions[signalName]) do
     for _, callback in ipairs(array) do
       callback(subscriber, ...)

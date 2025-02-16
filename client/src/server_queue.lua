@@ -4,6 +4,11 @@ local class = require("common.lib.class")
 
 -- Tracks a queue data structure.
 -- Values are tracked via incrementing ID keys, when something is nilled it is tracked as an "empty"
+---@class ServerQueue
+---@field data table
+---@field first integer
+---@field last integer
+---@field empties integer
 ServerQueue =
   class(
   function(self)
@@ -44,10 +49,7 @@ end
 -- push a server message in queue
 function ServerQueue.push(self, msg)
   if not msg[NetworkProtocol.serverMessageTypes.opponentInput.prefix] and not msg[NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix] then
-    local t = table_to_string(msg)
-    if not msg.replay_of_match_so_far then
-      logger.debug("message received:\n" .. table_to_string(msg))
-    end
+    logger.debug("message received:\n" .. table_to_string(msg))
   end
   local last = self.last + 1
   self.last = last

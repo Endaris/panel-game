@@ -1,20 +1,25 @@
 local class = require("common.lib.class")
 local GameModes = require("common.engine.GameModes")
-local LevelPresets = require("client.src.LevelPresets")
-local input = require("common.lib.inputManager")
+local LevelPresets = require("common.data.LevelPresets")
+local input = require("client.src.inputManager")
 local MatchParticipant = require("client.src.MatchParticipant")
 local consts = require("common.engine.consts")
 local CharacterLoader = require("client.src.mods.CharacterLoader")
-local Stack = require("common.engine.Stack")
+local PlayerStack = require("client.src.PlayerStack")
+require("client.src.network.PlayerStack")
 local logger = require("common.lib.logger")
-require("client.src.graphics.Stack")
+---@module "common.data.LevelData"
 
 -- A player is mostly a data representation of a Panel Attack player
 -- It holds data pertaining to their online status (like name, public id)
 -- It holds data pertaining to their client status (like character, stage, panels, level etc)
 -- Player implements a lot of setters that emit signals on changes, allowing other components to be notified about the changes by connecting a function to it
 -- Due to this, unless for a good reason, all properties on Player should be set using the setters
-local Player = class(function(self, name, publicId, isLocal)
+---@class Player : MatchParticipant, Signal
+local Player = class(
+function(self, name, publicId, isLocal)
+  ---@class Player
+  self = self
   self.name = name
   self.settings = {
     -- these need to all be initialized so subscription works
@@ -23,6 +28,7 @@ local Player = class(function(self, name, publicId, isLocal)
     level = 1,
     difficulty = 1,
     speed = 1,
+    ---@type LevelData
     levelData = LevelPresets.getModern(1),
     style = GameModes.Styles.MODERN,
     characterId = "",
@@ -57,7 +63,6 @@ local Player = class(function(self, name, publicId, isLocal)
   self:createSignal("levelChanged")
   self:createSignal("levelDataChanged")
   self:createSignal("inputMethodChanged")
-  self:createSignal("attackEngineSettingsChanged")
   self:createSignal("puzzleSetChanged")
   self:createSignal("ratingChanged")
   self:createSignal("leagueChanged")
@@ -65,13 +70,14 @@ local Player = class(function(self, name, publicId, isLocal)
 end,
 MatchParticipant)
 
+Player.TYPE = "Player"
+
 -- creates a stack for the given match according to the player's settings and returns it
 -- the stack is also saved as a reference on player
 function Player:createStackFromSettings(match, which)
   local args = {}
   args.which = which
   args.player_number = self.playerNumber
-  args.match = match
   args.is_local = self.isLocal
   args.panels_dir = self.settings.panelId
   args.character = self.settings.characterId
@@ -87,17 +93,25 @@ function Player:createStackFromSettings(match, which)
     args.allowAdjacentColors = true
   end
 
+  ---@type LevelData
   args.levelData = self.settings.levelData
 
-  if match.isFromReplay and self.settings.allowAdjacentColors ~= nil then
+  -- the client Player does not currently allow management of allowAdjacentColors
+  -- so it is determined above by looking at match and player properties
+  -- but it is tracked in replays and set for player in createFromReplayPlayer
+  -- so if the match is from a loaded replay, use it
+  if match.replay and self.settings.allowAdjacentColors ~= nil then
     args.allowAdjacentColors = self.settings.allowAdjacentColors
   end
   args.inputMethod = self.settings.inputMethod
+  args.stackInteraction = match.stackInteraction
   args.gameOverConditions = match.gameOverConditions
+  args.seed = match.seed
+  args.match = match
 
-  self.stack = Stack(args)
-  -- so the stack can draw player information
-  self.stack.player = self
+  args.player = self
+
+  self.stack = PlayerStack(args)
 
   return self.stack
 end
@@ -141,6 +155,7 @@ function Player:setDifficulty(difficulty)
   end
 end
 
+---@param levelData LevelData
 function Player:setLevelData(levelData)
   self.settings.levelData = levelData
   self:setColorCount(levelData.colors)
@@ -205,9 +220,9 @@ end
 function Player:setPuzzleSet(puzzleSet)
   if puzzleSet ~= self.settings.puzzleSet then
     self.settings.puzzleSet = puzzleSet
-    self.settings.puzzleIndex = 1
     self:emitSignal("puzzleSetChanged", puzzleSet)
   end
+  self.settings.puzzleIndex = 1
 end
 
 function Player:setPuzzleIndex(puzzleIndex)
@@ -221,6 +236,11 @@ function Player:setRating(rating)
     -- only save a rating if we actually have one, tonumber assures that rating does not track placement progress instead
     self.ratingHistory[#self.ratingHistory + 1] = self.rating
   end
+
+  if rating and tonumber(rating) then
+    rating = math.round(tonumber(rating))
+  end
+
   self.rating = rating
   self:emitSignal("ratingChanged", rating, self:getRatingDiff())
 end
@@ -229,13 +249,6 @@ function Player:setLeague(league)
   if self.league ~= league then
     self.league = league
     self:emitSignal("leagueChanged", league)
-  end
-end
-
-function Player:setAttackEngineSettings(attackEngineSettings)
-  if attackEngineSettings ~= self.settings.attackEngineSettings then
-    self.settings.attackEngineSettings = attackEngineSettings
-    self:emitSignal("attackEngineSettingsChanged", attackEngineSettings)
   end
 end
 
@@ -259,9 +272,9 @@ function Player:unrestrictInputs()
   end
 end
 
+---@return Player
 function Player.getLocalPlayer()
-  local player = Player(config.name)
-  player.isLocal = true
+  local player = Player(config.name, -1, true)
 
   player:setDifficulty(config.endless_difficulty)
   player:setSpeed(config.endless_speed)
@@ -290,9 +303,13 @@ function Player.createFromReplayPlayer(replayPlayer, playerNumber)
   player:setCharacter(replayPlayer.settings.characterId)
   player:setInputMethod(replayPlayer.settings.inputMethod)
   -- style will be obsolete for replays with style-independent levelData
-  player:setStyle(replayPlayer.settings.style)
-  player:setLevel(replayPlayer.settings.level)
-  player:setDifficulty(replayPlayer.settings.difficulty)
+  if replayPlayer.settings.level then
+    player:setStyle(GameModes.Styles.MODERN)
+    player:setLevel(replayPlayer.settings.level)
+  else
+    player:setStyle(GameModes.Styles.CLASSIC)
+    player:setDifficulty(replayPlayer.settings.difficulty)
+  end
   -- no matter what style / level / difficulty is actually selected, levelData should have gotten preloaded correctly
   player:setLevelData(replayPlayer.settings.levelData)
   player.settings.allowAdjacentColors = replayPlayer.settings.allowAdjacentColors
@@ -301,55 +318,82 @@ function Player.createFromReplayPlayer(replayPlayer, playerNumber)
   return player
 end
 
-function Player:updateWithMenuState(menuState)
-  if characters[menuState.characterId] then
-    -- if we have their character, use it
-    self:setCharacter(menuState.characterId)
-    if characters[menuState.selectedCharacterId] then
-      -- picking their bundle for display is a bonus
-      self.settings.selectedCharacterId = menuState.selectedCharacterId
-      self:emitSignal("selectedCharacterIdChanged", self.settings.selectedCharacterId)
+function Player:updateSettings(settings)
+  if settings.characterId ~= nil then
+    if characters[settings.characterId] then
+      -- if we have their character, use it
+      self:setCharacter(settings.characterId)
+      if characters[settings.selectedCharacterId] then
+        -- picking their bundle for display is a bonus
+        self.settings.selectedCharacterId = settings.selectedCharacterId
+        self:emitSignal("selectedCharacterIdChanged", self.settings.selectedCharacterId)
+      end
+    elseif settings.selectedCharacterId and characters[settings.selectedCharacterId] then
+      -- if we don't have their character rolled from their bundle, but the bundle itself, use that
+      -- very unlikely tbh
+      self:setCharacter(settings.selectedCharacterId)
+    elseif self.settings.characterId == "" then
+      -- we don't have their character and we didn't roll them a random character yet
+      self:setCharacter(consts.RANDOM_CHARACTER_SPECIAL_VALUE)
     end
-  elseif menuState.selectedCharacterId and characters[menuState.selectedCharacterId] then
-    -- if we don't have their character rolled from their bundle, but the bundle itself, use that
-    -- very unlikely tbh
-    self:setCharacter(menuState.selectedCharacterId)
-  elseif self.settings.characterId == "" then
-    -- we don't have their character and we didn't roll them a random character yet
-    self:setCharacter(consts.RANDOM_CHARACTER_SPECIAL_VALUE)
   end
 
-  if stages[menuState.stageId] then
-    -- if we have their stage, use it
-    self:setStage(menuState.stageId)
-    if stages[menuState.selectedStageId] then
-      -- picking their bundle for display is a bonus
-      self.settings.selectedStageId = menuState.selectedStageId
-      self:emitSignal("selectedStageIdChanged", self.settings.selectedStageId)
+  if settings.stageId ~= nil then
+    if stages[settings.stageId] then
+      -- if we have their stage, use it
+      self:setStage(settings.stageId)
+      if stages[settings.selectedStageId] then
+        -- picking their bundle for display is a bonus
+        self.settings.selectedStageId = settings.selectedStageId
+        self:emitSignal("selectedStageIdChanged", self.settings.selectedStageId)
+      end
+    elseif settings.selectedStageId and stages[settings.selectedStageId] then
+      -- if we don't have their stage rolled from their bundle, but the bundle itself, use that
+      -- very unlikely tbh
+      self:setStage(settings.selectedStageId)
+    elseif self.settings.stageId == "" then
+      -- we don't have their stage and we didn't roll them a random stage yet
+      self:setStage(consts.RANDOM_STAGE_SPECIAL_VALUE)
     end
-  elseif menuState.selectedStageId and stages[menuState.selectedStageId] then
-    -- if we don't have their stage rolled from their bundle, but the bundle itself, use that
-    -- very unlikely tbh
-    self:setStage(menuState.selectedStageId)
-  elseif self.settings.stageId == "" then
-    -- we don't have their stage and we didn't roll them a random stage yet
-    self:setStage(consts.RANDOM_STAGE_SPECIAL_VALUE)
   end
 
-  self:setWantsRanked(menuState.wantsRanked)
-  self:setPanels(menuState.panelId)
+  if settings.wantsRanked ~= nil then
+    self:setWantsRanked(settings.wantsRanked)
+  end
 
-  self:setLevel(menuState.level)
-  self:setInputMethod(menuState.inputMethod)
+  if settings.panelId ~= nil then
+    self:setPanels(settings.panelId)
+  end
+
+  if settings.levelData ~= nil then
+    if settings.level ~= nil then
+      if settings.levelData.frameConstants.GARBAGE_HOVER then
+        self:setStyle(GameModes.Styles.MODERN)
+        self:setLevel(settings.level)
+      else
+        self:setStyle(GameModes.Styles.CLASSIC)
+        self:setDifficulty(settings.level)
+      end
+    end
+
+    self:setLevelData(settings.levelData)
+  end
+
+  if settings.inputMethod ~= nil then
+    self:setInputMethod(settings.inputMethod)
+  end
 
   -- these are both simply not sent by the server for some messages so make sure they are there
-  if menuState.wantsReady ~= nil then
-    self:setWantsReady(menuState.wantsReady)
+  if settings.wantsReady ~= nil then
+    self:setWantsReady(settings.wantsReady)
   end
-  if menuState.hasLoaded ~= nil then
-    self:setLoaded(menuState.hasLoaded)
+  if settings.hasLoaded ~= nil then
+    self:setLoaded(settings.hasLoaded)
   end
-  self:setReady(menuState.ready)
+
+  if settings.ready ~= nil then
+    self:setReady(settings.ready)
+  end
 end
 
 function Player:getInfo()

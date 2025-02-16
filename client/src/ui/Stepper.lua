@@ -1,22 +1,43 @@
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UIElement = require(PATH .. ".UIElement")
+local TextButton = require(PATH .. ".TextButton")
+local Label = require(PATH .. ".Label")
 local class = require("common.lib.class")
 local util = require("common.lib.util")
-local UIElement = require("client.src.ui.UIElement")
-local TextButton = require("client.src.ui.TextButton")
-local Label = require("client.src.ui.Label")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
+
+local NAV_BUTTON_WIDTH = 25
+local EMPTY_STEPPER_WIDTH = 160
 
 local function setLabels(self, labels, values, selectedIndex)
   self.selectedIndex = selectedIndex
   self.values = values
   self.labels = labels
+
+  self:removeLabelChildren()
+
+  if (#labels == 0) then
+    self.rightButton:setVisibility(false);
+    self.leftButton:setVisibility(false);
+    self.width = EMPTY_STEPPER_WIDTH
+    return
+  end
+
   for _, label in ipairs(labels) do
-    self:addChild(label)
-    label:setVisibility(false)
+      label.hAlign = "center"
+      label.vAlign = "center"
+      self.width = math.max(label.width + 10 + NAV_BUTTON_WIDTH * 2, self.width)
+      self.height = math.max(label.height + 4, self.height)
+
+      self:addChild(label)
+      label:setVisibility(false)
   end
-  if #self.labels > 0 then
-    self.labels[self.selectedIndex]:setVisibility(true)
-    self.value = self.values[self.selectedIndex]
-  end
+
+  self.labels[self.selectedIndex]:setVisibility(true)
+  self.value = self.values[self.selectedIndex]
+  self.rightButton.x = self.width - NAV_BUTTON_WIDTH
+  self.rightButton:setVisibility(true);
+  self.leftButton:setVisibility(true);
 end
 
 local function setState(self, i)
@@ -32,7 +53,6 @@ local function setState(self, i)
   self.onChange(self.value)
 end
 
---@module Stepper
 -- UIElement representing a scrolling list of options
 local Stepper = class(
   function(self, options)
@@ -61,16 +81,6 @@ local Stepper = class(
 
     self.color = {.5, .5, 1, .7}
     self.borderColor = {.7, .7, 1, .7}
-
-    if #options.labels > 0 then
-      for i = 1, #options.labels do
-        options.labels[i].hAlign = "center"
-        options.labels[i].vAlign = "center"
-        self.width = math.max(options.labels[i].width + 10 + navButtonWidth * 2, self.width)
-        self.height = math.max(options.labels[i].height + 4, self.height)
-      end
-      self.rightButton.x = self.width - navButtonWidth
-    end
 
     setLabels(self, options.labels, options.values, self.selectedIndex)
 
@@ -106,6 +116,13 @@ function Stepper:drawSelf()
     GraphicsUtil.setColor(self.borderColor)
     GraphicsUtil.drawRectangle("line", self.x, self.y, self.width, self.height)
     GraphicsUtil.setColor(1, 1, 1, 1)
+  end
+end
+
+-- Remove all attached labels, preserving the navigation buttons
+function Stepper:removeLabelChildren()
+  for i = #self.children, 3, -1 do
+    self.children[i]:detach()
   end
 end
 

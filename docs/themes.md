@@ -1,6 +1,3 @@
-You can also find this file with prettier formatting at 
-https://github.com/panel-attack/panel-game/blob/beta/docs/themes.md  
-
 This README consists of 2 parts.  
 In part 1 some general thoughts on theme creation are discussed.  
 In part 2 you can find an exhaustive list of all assets used for theme.  
@@ -202,7 +199,7 @@ They will be scaled to be quadratic if they aren't already, recommended size is 
 
 Chain cards are saved in the chain subdirectory.  
 They are displayed upon achieving a chain during gameplay and also shown in analytics.  
-Panel Attack supports up to 99 numbered chain cards plus one for a mystery chain.  
+Panel Attack supports up to 999 numbered chain cards plus one for a mystery chain.  
 Chain cards have to be named chain, followed by 2 digits for the chain index, e.g. chain02.png for a x2 chain.
 chain00.png is used as the mystery chain card and displayed for any chain index that does not have its own chain card.  
 The general recommendation is to provide chain cards up to x13, but better x19.

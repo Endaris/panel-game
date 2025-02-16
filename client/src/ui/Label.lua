@@ -1,7 +1,26 @@
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UIElement = require(PATH .. ".UIElement")
 local class = require("common.lib.class")
-local UIElement = require("client.src.ui.UIElement")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
+---@class LabelOptions : UiElementOptions
+---@field text string The raw text or localization key
+---@field translate boolean? Whether the game looks for a localization for text or not
+---@field replacements string[]? Additional strings to perform string format on a localized key with parts marked for replacement
+---@field fontSize integer? The size of the font
+---@field wrap boolean? If the font should wrap around
+---@field wrapRatio number? By which % of the unwrapped text the text should wrap
+
+---@class Label : UiElement
+---@field text string The raw text or localization key
+---@field translate boolean Whether the game looks for a localization for text or not
+---@field replacementTable string[]? Additional strings to perform string format on a localized key with parts marked for replacement
+---@field fontSize integer The size of the font
+---@field wrap boolean If the font should wrap around
+---@field wrapRatio number By which % of the unwrapped text the text should wrap
+---@field font love.Font Cached font for recreating the love.Text on changes
+---@field drawable love.Text Cached love.Text for redrawing
+---@overload fun(options: LabelOptions): Label
 local Label = class(
   function(self, options)
     self.hAlign = options.hAlign or "left"
@@ -12,19 +31,14 @@ local Label = class(
     self.wrap = options.wrap or false
     self.wrapRatio = options.wrapRatio or 1
 
-    if options.fontSize then
-      self.font = GraphicsUtil.getGlobalFontWithSize(options.fontSize)
-      self.fontSize = options.fontSize
-    else
-      self.font = GraphicsUtil.getGlobalFont()
-    end
+    self.fontSize = options.fontSize or GraphicsUtil.fontSize
 
     self:setText(options.text, options.replacements, options.translate)
 
-    self.TYPE = "Label"
   end,
   UIElement
 )
+Label.TYPE = "Label"
 
 function Label:getEffectiveDimensions()
   return self.drawable:getDimensions()
@@ -55,10 +69,10 @@ function Label:setText(text, replacementTable, translate)
 
   if self.translate then
     -- always need a new text cause the font might have changed
-    self.drawable = love.graphics.newTextBatch(self.font, loc(self.text, unpack(self.replacementTable)))
+    self.drawable = GraphicsUtil.newText(GraphicsUtil.getGlobalFontWithSize(self.fontSize), loc(self.text, unpack(self.replacementTable)))
   else
     if not self.drawable then
-      self.drawable = love.graphics.newTextBatch(self.font, self.text)
+      self.drawable = GraphicsUtil.newText(GraphicsUtil.getGlobalFontWithSize(self.fontSize), self.text)
     end
   end
 
@@ -102,19 +116,16 @@ end
 
 function Label:refreshLocalization()
   if self.translate then
-    if self.fontSize then
-      self.font = GraphicsUtil.getGlobalFontWithSize(self.fontSize)
-    else
-      self.font = GraphicsUtil.getGlobalFont()
-    end
+    local font = GraphicsUtil.getGlobalFontWithSize(self.fontSize)
+
     -- always need a new text cause the font might have changed
-    self.drawable = love.graphics.newTextBatch(self.font, loc(self.text, unpack(self.replacementTable)))
+    self.drawable = GraphicsUtil.newText(font, loc(self.text, unpack(self.replacementTable)))
     self.width, self.height = self.drawable:getDimensions()
   end
 end
 
 function Label:drawSelf()
-  GraphicsUtil.drawClearText(self.drawable, self.x, self.y)
+  GraphicsUtil.drawClearText(self.drawable, math.round(self.x), math.round(self.y))
 end
 
 return Label

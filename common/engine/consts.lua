@@ -23,8 +23,6 @@ local consts = {
   MENU_PADDING = 10
 }
 
--- TODO: Move all values below to the above table or to other files if they are only used in 1
-
 -- The values in this file are constants (except in this file perhaps) and are expected never to change during the game, not to be confused with globals!
 
 consts.ENGINE_VERSIONS = {}
@@ -33,8 +31,8 @@ consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE = "046"
 consts.ENGINE_VERSIONS.TOUCH_COMPATIBLE = "047"
 consts.ENGINE_VERSIONS.LEVELDATA = "048"
 
-consts.ENGINE_VERSION = consts.ENGINE_VERSIONS.TOUCH_COMPATIBLE -- The current engine version
-consts.VERSION_MIN_VIEW = consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE -- The lowest version number that can be watched
+consts.ENGINE_VERSION = consts.ENGINE_VERSIONS.LEVELDATA -- The current engine version
+consts.VERSION_MIN_VIEW = consts.ENGINE_VERSIONS.LEVELDATA -- The lowest version number that can be watched
 
 consts.COUNTDOWN_CURSOR_SPEED = 4 --one move every this many frames
 consts.COUNTDOWN_START = 8
@@ -51,14 +49,6 @@ consts.DEFAULT_THEME_DIRECTORY = "Panel Attack Modern"
 
 consts.SCOREMODE_TA    = 1
 consts.SCOREMODE_PDP64 = 2 -- currently not used
-
--- frames to use for the card animation
-consts.CARD_ANIMATION = {false,
-   -1, 0, 1, 2, 3, 4, 4, 5, 5, 6,
-   6, 7, 7, 8, 8, 8, 9, 9, 9, 9,
-   9, 10, 10, 10, 10, 10, 10, 10, 10, 10,
-   10, 10, 10, 10, 10, 10, 11, 11, 11, 11,
-   11}
 
 -- Yes, 2 is slower than 1 and 50..99 are the same.
 consts.SPEED_TO_RISE_TIME = tableUtils.map(

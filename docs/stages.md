@@ -1,5 +1,3 @@
-You can also find this file with prettier formatting at https://github.com/panel-attack/panel-game/blob/beta/docs/stages.md  
-
 This README consists of 3 parts.  
 In part 1 some general thoughts on stage creation are discussed.  
 In part 2 you can find an exhaustive list of all assets used for stages.  
@@ -118,6 +116,12 @@ Music will restart the normal/danger music track upon getting into/out of danger
 
 Normal music and danger music will maintain the same play time stamp and crossfade seamlessly.
 
+#### music_volume
+
+Defines a multiplier for the stage's music relative to the game volume.  
+The default multiplier is 1, meaning no change to music volume.  
+Values can be between 0 and 1.
+
 ### Display options
 
 #### visible
@@ -184,3 +188,8 @@ A player is considered as in danger if they have panels in the upper 3 rows of t
 If the client's "danger music change-back delay" (audio configuration) is enabled they will only be considered out of danger if the upper 4 rows of their screen have no panels.  
   
 If no danger_music is supplied, the normal_music will loop infinitely.
+
+# Default stage
+
+A default stage may be supplied in the theme's default/stage directory.  
+Default stages **must** have at least a thumbnail and background, otherwise the game will crash on startup.

@@ -3,22 +3,22 @@ local class = require("common.lib.class")
 local ChallengeModePlayer = require("client.src.ChallengeModePlayer")
 local GameModes = require("common.engine.GameModes")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
-local levelPresets = require("client.src.LevelPresets")
+local levelPresets = require("common.data.LevelPresets")
 local Game1pChallenge = require("client.src.scenes.Game1pChallenge")
 require("client.src.BattleRoom")
+local save = require("client.src.save")
 
 
 -- Challenge Mode is a particular play through of the challenge mode in the game, it contains all the settings for the mode.
 local ChallengeMode =
   class(
-  function(self, difficulty, stageIndex)
-    self.mode = GameModes.getPreset("ONE_PLAYER_CHALLENGE")
+  function(self, mode, gameScene, difficulty, stageIndex)
     self.stages = self:createStages(difficulty)
     self.difficulty = difficulty
     self.difficultyName = loc("challenge_difficulty_" .. difficulty)
     self.continues = 0
     self.expendedTime = 0
-    self.gameScene = Game1pChallenge
+    self.challengeComplete = false
 
     self:addPlayer(GAME.localPlayer)
     GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
@@ -31,6 +31,10 @@ local ChallengeMode =
   end,
   BattleRoom
 )
+
+function ChallengeMode.create(difficulty, stageIndex)
+  return ChallengeMode(GameModes.getPreset("ONE_PLAYER_CHALLENGE"), Game1pChallenge, difficulty, stageIndex)
+end
 
 ChallengeMode.numDifficulties = 8
 
@@ -145,7 +149,7 @@ function ChallengeMode:attackFilePath(difficulty, stageIndex)
 end
 
 function ChallengeMode:getAttackSettings(difficulty, stageIndex)
-  local attackFile = readAttackFile(self:attackFilePath(difficulty, stageIndex))
+  local attackFile = save.readAttackFile(self:attackFilePath(difficulty, stageIndex))
   assert(attackFile ~= nil, "could not find attack file for challenge mode")
   return attackFile
 end
@@ -165,10 +169,7 @@ function ChallengeMode:recordStageResult(winners, gameLength)
       if self.stages[self.stageIndex + 1] then
         self:setStage(self.stageIndex + 1)
       else
-        -- completed!
-        local message = "Congratulations!\n You cleared " .. self.difficultyName .. " in " .. frames_to_time_string(self.expendedTime, true)
-        local transition = MessageTransition(GAME.timer, 7, message)
-        GAME.navigationStack:popToTop(transition)
+        self.challengeComplete = true
       end
     end
   elseif #winners == 2 then
@@ -187,9 +188,9 @@ function ChallengeMode:onMatchEnded(match)
   -- an abort is always the responsibility of the local player in challenge mode
   -- so always record the result, even if it may have been an abort
   local gameTime = 0
-  local stack = match.stacks[1]
-  if stack ~= nil and stack.game_stopwatch then
-    gameTime = stack.game_stopwatch
+  local stackEngine = match.stacks[1].engine
+  if stackEngine ~= nil and stackEngine.game_stopwatch then
+    gameTime = stackEngine.game_stopwatch
   end
   self:recordStageResult(winners, gameTime)
 
@@ -215,8 +216,9 @@ function ChallengeMode:setStage(index)
   GAME.localPlayer:setLevel(self.stages[index].playerLevel)
 
   local stageSettings = self.stages[self.stageIndex]
-  self.player.settings.attackEngineSettings = stageSettings.attackSettings
+  self.player:setAttackEngineSettings(stageSettings.attackSettings)
   self.player.settings.healthSettings = stageSettings.healthSettings
+  self.player.settings.level = index
   if stageSettings.characterId then
     self.player:setCharacter(stageSettings.characterId)
   else

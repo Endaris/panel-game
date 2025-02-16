@@ -1,13 +1,11 @@
 local Scene = require("client.src.scenes.Scene")
-local InputField = require("client.src.ui.InputField")
-local input = require("common.lib.inputManager")
+local ui = require("client.src.ui")
+local input = require("client.src.inputManager")
 local utf8 = require("common.lib.utf8Additions")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local TextButton = require("client.src.ui.TextButton")
-local Label = require("client.src.ui.Label")
+local save = require("client.src.save")
 
--- @module setNameMenu
 -- Scene for setting the username
 local SetUserIdMenu = class(function(self, sceneParams)
   self.keepMusic = true
@@ -22,24 +20,24 @@ function SetUserIdMenu:load(sceneParams)
   self.backgroundImg = themes[config.theme].images.bg_main
   self.serverIp = sceneParams.serverIp
 
-  self.idInputField = InputField({
+  self.idInputField = ui.InputField({
     x = menuX,
     y = menuY + 30,
     vAlign = "top",
     width = 200,
     height = 25,
-    value =  read_user_id_file(self.serverIp)
+    value =  save.read_user_id_file(self.serverIp)
   })
 
-  self.confirmationButton = TextButton({
-    label = Label({text = "go_"}),
+  self.confirmationButton = ui.TextButton({
+    label = ui.Label({text = "go_"}),
     x = menuX,
     y = menuY + 60,
     vAlign = "top",
     onClick = function() self:confirmId() end
   })
 
-  self.warningLabel = Label({
+  self.warningLabel = ui.Label({
     text = "THIS IS THE EQUIVALENT TO YOUR ACCOUNT AND PASSWORD IN ONE\n" ..
            "DO NOT SHARE WITH ANYONE\n" ..
            "ONLY CHANGE TO SYNC YOUR ID BETWEEN DIFFERENT DEVICES\n" ..
@@ -65,7 +63,7 @@ function SetUserIdMenu:confirmId()
   if not hasNonDigits and self.idInputField.value:len() > 0 then
     -- not much point in doing validation but let's stay numeric and non-empty at least
     GAME.theme:playValidationSfx()
-    write_user_id_file(self.idInputField.value, self.serverIp)
+    save.write_user_id_file(self.idInputField.value, self.serverIp)
     -- this is dirty but with how stupid nested OptionsMenu is, there is no way to get back right to where we came from
     GAME.navigationStack:pop()
   else

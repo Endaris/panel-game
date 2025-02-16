@@ -1,8 +1,9 @@
-local Carousel = require("client.src.ui.Carousel")
+local PATH = (...):gsub('%.[^%.]+$', '')
+local Carousel = require(PATH .. ".Carousel")
+local StackPanel = require(PATH .. ".StackPanel")
+local Label = require(PATH .. ".Label")
+local ImageContainer = require(PATH .. ".ImageContainer")
 local class = require("common.lib.class")
-local StackPanel = require("client.src.ui.StackPanel")
-local Label = require("client.src.ui.Label")
-local ImageContainer = require("client.src.ui.ImageContainer")
 local consts = require("common.engine.consts")
 local Stage = require("client.src.mods.Stage")
 
@@ -23,12 +24,12 @@ function StageCarousel:createPassenger(id, image, text)
 end
 
 function StageCarousel:loadCurrentStages()
-  for i = 0, #stages_ids_for_current_theme do
+  for i = 0, #visibleStages do
     local stage
     if i == 0 then
-      stage = Stage.getRandomStage()
+      stage = Stage.getRandom()
     else
-      stage = stages[stages_ids_for_current_theme[i]]
+      stage = stages[visibleStages[i]]
     end
 
     if not stage.images.thumbnail then

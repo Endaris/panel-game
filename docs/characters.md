@@ -1,6 +1,3 @@
-You can also find this file with prettier formatting at  
-https://github.com/panel-attack/panel-game/blob/beta/docs/characters.md  
-
 This README consists of 3 parts.  
 In part 1 some general thoughts on character creation are discussed.  
 In part 2 you can find an exhaustive list of all assets used for characters.  
@@ -16,7 +13,7 @@ Rather than trying to read through all of this and trying to understand it, it o
 
 Well, yes and no.  
 Over the years, many things have changed and a mod created five, two, one or half a year ago may not use all features available or not use the available features optimally.  
-Chain cards for example can go up to x99, combo SFX can be assigned per combo size if you wish so and high resolution assets actually look good on high resolution monitors now (unlike in the past).  
+Chain cards for example can go up to x999, combo SFX can be assigned per combo size if you wish so and high resolution assets actually look good on high resolution monitors now (unlike in the past).  
 All of the mentioned changes happened in late 2022 and who knows what the future brings? (aside from updates for this doc)
 
 Referencing existing mods is generally a fantastic idea (especially for garbage).  
@@ -211,6 +208,11 @@ Music will restart the normal/danger music track upon getting into/out of danger
 
 Normal music and danger music will maintain the same play time stamp and crossfade seamlessly.
 
+#### music_volume
+
+Defines a multiplier for the character's music relative to the game volume.  
+The default multiplier is 1, meaning no change to music volume.  
+Values can be between 0 and 1.
 
 #### chain_style
 
@@ -267,6 +269,13 @@ Example:
 		+20 "combo20"(, "combo20_2", ...)  
 		+27 "combo27"(, "combo27_2", ...)  
 While the combo size you may provide files for is not limited, combos above +27 will not send any more garbage, having no added value as a sound cue.
+
+
+##### sfx_volume
+
+Defines a multiplier for the character's SFX relative to the game volume.  
+The default multiplier is 1, meaning no change to SFX volume.  
+Values can be between 0 and 1.
 
 
 ### Display configuration
@@ -456,6 +465,34 @@ The fade animation is centered over the panel but smaller than a panel.
 Aspect ratio of each individual frame: 1:1 (square)
 Recommended size per frame: 64x64px (scaled down to 32 pixels centered on panel center, so gives 2x resolution)
 
+#### telegraph
+
+These are the images used to render the attack animations and attacks above the player's stack before they fall
+
+##### attack
+
+The image used to send an attack from your chain or combo to the opponent's telegraph
+
+Recommended size: 96x96px (2x resolution)
+
+##### 1-wide
+
+1 through 6, these are used for single high garbage blocks, 1 and 2 can only be used in training mode
+
+Recommended size: 144x96px (2x resolution)
+
+##### 1-tall
+
+1 through 14, these are used for chain garbage
+
+Recommended size: 144x96px (2x resolution)
+
+##### 6-wide-metal
+
+Image used for metal garbage
+
+Recommended size: 144x96px (2x resolution)
+
 -----------------------------------------------------------
 
 
@@ -575,5 +612,5 @@ While a mod that varies case in filenames may work fine on Windows, it won't dis
 ## Character X is too loud/quiet!
 
 As mods are created by the community it is difficult to enforce a standard for volumes of music and SFX.  
-A general recommendation for volume of music and voice lines is to normalize the track and then reduce its volume by 6dB.  
-An option to adjust volume by character in Panel Attack itself does currently not exist.
+A general recommendation for volume of music and voice lines is to normalize the track.  
+Panel Attack does not allow making characters louder but they can be made more quiet via the `music_volume` and `sfx_volume` fields of the config.json.

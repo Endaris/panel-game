@@ -1,12 +1,11 @@
 local Scene = require("client.src.scenes.Scene")
 local consts = require("common.engine.consts")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 local tableUtils = require("common.lib.tableUtils")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local MainMenu = require("client.src.scenes.MainMenu")
 
---@module titleScreen
 -- The title screen scene
 local TitleScreen = class(
   function (self, sceneParams)
@@ -28,7 +27,7 @@ end
 
 function TitleScreen:update(dt)
   self.backgroundImg:update(dt)
-  local keyPressed = tableUtils.trueForAny(input.isDown, function(key) return key end)
+  local keyPressed = tableUtils.trueForAny(input.allKeys.isDown, function(key) return key end)
   if love.mouse.isDown(1, 2, 3) or #love.touch.getTouches() > 0 or keyPressed then
     GAME.theme:playValidationSfx()
     GAME.navigationStack:replace(MainMenu())

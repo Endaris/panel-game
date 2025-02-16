@@ -1,5 +1,3 @@
-You can also find this file with prettier formatting at https://github.com/panel-attack/panel-game/blob/beta/docs/panels.md  
-
 Adding/modding panels: step by step instructions (Windows example):
 
 1. Press the Windows key then type "%appdata%" without quotes and hit enter.
@@ -127,7 +125,8 @@ Currently a single frame and not animatable.
 #### danger
 
 Panels in the states "normal", "falling" and "hovering" in a column that is close to the top or even touching it, perform a danger animation.  
-This animation loops but is held on its first frame if the player is topped out and has no stop time left.
+This animation loops but is held on its first frame if the player is topped out and has no stop time left.  
+To make this panic state visible, the first frame of the danger animation should NOT match the normal frame.
 
 #### garbagePop
 

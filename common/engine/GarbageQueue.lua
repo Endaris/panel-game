@@ -5,6 +5,10 @@ local Queue = require("common.lib.Queue")
 require("table.clear")
 require("table.new")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
+local Signal = require("common.lib.signal")
+
+---@class GarbageQueue : Signal
+
 
 -- +1 to compensate for a compensation someone made
 -- the original thought was probably that the attack animation should only start on the frame AFTER the garbage gets queued
@@ -75,7 +79,13 @@ local function orderGarbage(garbageQueue, treatMetalAsCombo)
 end
 
 -- Holds garbage in a queue and follows a specific order for which types should be popped out first.
-GarbageQueue = class(function(self, allowIllegalStuff, treatMetalAsCombo)
+---@class GarbageQueue
+---@overload fun(allowIllegalStuff: boolean?, treatMetalAsCombo: boolean?): GarbageQueue
+GarbageQueue = class(
+---@type self GarbageQueue
+function(self, allowIllegalStuff, treatMetalAsCombo)
+  ---@class GarbageQueue
+  self = self
   -- holds all garbage in the staging phase in a continously integer indexed array
   -- garbage is reordered from lowest to highest priority every frame
   self.stagedGarbage = {}
@@ -99,6 +109,11 @@ GarbageQueue = class(function(self, allowIllegalStuff, treatMetalAsCombo)
   -- seems like the rollback method of Stack counts differently
   -- so keep one extra copy to not run out of copies when rewinding stacks in replays
   self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+
+  Signal.turnIntoEmitter(self)
+  self:createSignal("garbagePushed")
+  self:createSignal("newChainLink")
+  self:createSignal("chainEnded")
 end)
 
 function GarbageQueue:rollbackCopy(frame)
@@ -223,13 +238,14 @@ end
 --   for regular chaining you're NOT supposed to use this function
 --   use GarbageQueue:addChainLink and GarbageQueue:finalizeCurrentChain instead
 function GarbageQueue:push(garbage)
-  logger.debug("pushing garbage " .. table_to_string(garbage))
+  --logger.debug("pushing garbage " .. table_to_string(garbage))
   correctChainingFlag(self, garbage)
   self.stagedGarbage[#self.stagedGarbage+1] = garbage
   self.history[#self.history+1] = garbage
 
   orderGarbage(self.stagedGarbage, self.treatMetalAsCombo)
-  logger.debug(self:toString())
+  self:emitSignal("garbagePushed", garbage)
+  --logger.debug(self:toString())
 end
 
 -- accepts multiple pieces of garbage in an array
@@ -243,7 +259,7 @@ end
 --   for regular chaining you're NOT supposed to use this function
 --   use GarbageQueue:addChainLink and GarbageQueue:finalizeCurrentChain instead
 function GarbageQueue:pushTable(garbageArray)
-  logger.debug("pushing garbage table with " .. #garbageArray .. " entries")
+  --logger.debug("pushing garbage table with " .. #garbageArray .. " entries")
   if garbageArray then
     for _, garbage in ipairs(garbageArray) do
       self:push(garbage)
@@ -258,8 +274,8 @@ end
 function GarbageQueue:pop()
   -- default value for table.remove is the length, so the last index
   local garbage = table.remove(self.stagedGarbage)
-  logger.debug("popping garbage piece\n" .. table_to_string(garbage))
-  logger.debug("remaining staged garbage\n" .. self:toString())
+  --logger.debug("popping garbage piece\n" .. table_to_string(garbage))
+  --logger.debug("remaining staged garbage\n" .. self:toString())
   return garbage
 end
 
@@ -356,6 +372,7 @@ function GarbageQueue:addChainLink(frameEarned, row, column)
     }
     self.currentChain.linkTimes[#self.currentChain.linkTimes+1] = frameEarned
   end
+  self:emitSignal("newChainLink", self.currentChain)
 end
 
 -- returns the index of the first garbage block matching the requested type and size, or where it would go if it was in the Garbage_Queue.
@@ -376,9 +393,10 @@ function GarbageQueue:getGarbageIndex(garbage)
 end
 
 function GarbageQueue:finalizeCurrentChain(clock)
-  logger.debug("Finalizing chain at " .. clock)
+  --logger.debug("Finalizing chain at " .. clock)
   self.currentChain.finalized = true
   self.currentChain.finalizedClock = clock
+  self:emitSignal("chainEnded", self.currentChain)
   self.currentChain = nil
 end
 

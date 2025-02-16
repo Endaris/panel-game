@@ -1,5 +1,3 @@
-You can also find this file with prettier formatting at 
-https://github.com/panel-attack/panel-game/blob/beta/docs/installMods.md  
 A video explanation is available at https://youtu.be/_SA1UeLwnSE
 
 # How to install a mod
@@ -41,15 +39,13 @@ Note that running a panel.exe through wine and running a panel.love through a na
 
 ### Android
 
-Android is a special case as it is very protective of its internal data and usually does not let users edit the Panel Attack save directory on non-rooted devices.  
-That save data usually looks like this:
-  /data/data/org.love2d.android/files/save/  
+Navigate to  
+  /Android/data/com.panelattack.android/files/save/
 
-In early 2023 we changed Panel Attack to save its data in external (user-visible) storage:
-  /Android/data/org.love2d.android/files/save/
+The exact path for Android may differ, check in Options -> About -> System Info for the exact path.  
 
-This automatically applies for new installations but old installations may go through a migration process.  
-Please ask in the discord for help with this.
+Depending on your Android and file browser you may not be able to view these files on your phone.  
+It is generally recommended to connect Android devices to PC and use the file browser access from there.
 
 ## Step 2: Unpacking your mod and understanding where it belongs
 
@@ -94,20 +90,6 @@ Directories and files that start with two underscores (__) will be ignored.
 So all you need to do to disable a character or stage is to rename its folder.  
 You can also hide single replay, puzzle and training files by renaming them and adding __ in front.
 
-## How to get the default mods back
-
-You might have deleted the default mods that came with the game at some point and want to get them back. But how?  
-There are two possibilities:  
-  1. Download them again
-  2. Let Panel Attack reinstall them
-
-### Download them again
-
-You can find all default assets of Panel Attack at https://github.com/panel-attack/panel-game/tree/beta/client/assets/
-You can download the Panel Attack source code including the default mods from there any time and reinstall them via the instructions in this document.
-
-### Let Panel Attack reinstall them
-
-Panel Attack cannot function properly if you have no panels, no character or no stage available.  
-For that reason it will always install the default characters again on start-up if no mods are available at all.  
-That means to get the default characters/stages/panels back, you can simply temporarily disable all your installed mods by renaming them and then start Panel Attack.
+Alternatively, Panel Attack offers an option to disable characters or stages via an options menu.  
+This will add them to a blacklist that keeps them from being loaded but you can enable them again later on.  
+Directories prefixed with __ do not show up in this menu

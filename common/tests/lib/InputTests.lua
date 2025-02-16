@@ -1,5 +1,5 @@
 local StackReplayTestingUtils = require("common.tests.engine.StackReplayTestingUtils")
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 
 local processEvents = function()
   if love.event then
@@ -23,7 +23,7 @@ local function testSameFrameKeyPressRelease()
   match.stacks[1]:receiveConfirmedInput(string.rep(match.stacks[1]:idleInput(), 200))
   while match.stacks[1].clock < 200 do
     assert(not match:hasEnded(), "Game isn't expected to end yet")
-    assert(#match.stacks[1].input_buffer > 0)
+    assert(#match.stacks[1].confirmedInput > match.stacks[1].clock)
     match:run()
   end
   assert(match.stacks[1].clock == 200)

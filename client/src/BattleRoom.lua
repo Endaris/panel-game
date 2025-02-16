@@ -3,20 +3,32 @@ local Player = require("client.src.Player")
 local tableUtils = require("common.lib.tableUtils")
 local GameModes = require("common.engine.GameModes")
 local class = require("common.lib.class")
-local ServerMessages = require("client.src.network.ServerMessages")
-local ReplayV1 = require("common.engine.replayV1")
 local Signal = require("common.lib.signal")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
 local ModController = require("client.src.mods.ModController")
 local ModLoader = require("client.src.mods.ModLoader")
-local Match = require("common.engine.Match")
-require("client.src.graphics.match_graphics")
-local Game2pVs = require("client.src.scenes.Game2pVs")
+local ClientMatch = require("client.src.ClientMatch")
+local GameBase = require("client.src.scenes.GameBase")
 local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTransition")
 local Easings = require("client.src.Easings")
+local consts = require("common.engine.consts")
+local system = require("client.src.system")
 
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
-BattleRoom = class(function(self, mode, gameScene)
+---@class BattleRoom : Signal
+---@field mode GameMode
+---@field players Player[]
+---@field spectators string[]
+---@field spectating boolean
+---@field allAssetsLoaded boolean
+---@field ranked boolean
+---@field state BattleRoomState
+---@field matchesPlayed integer
+---@field online boolean
+---@field gameScene table
+---@overload fun(mode: GameMode, gameScene: table?): BattleRoom
+BattleRoom = class(
+function(self, mode, gameScene)
   assert(mode)
   self.mode = mode
   self.players = {}
@@ -26,7 +38,7 @@ BattleRoom = class(function(self, mode, gameScene)
   self.ranked = false
   self.state = 1
   self.matchesPlayed = 0
-  self.gameScene = gameScene
+  self.gameScene = gameScene or require("client.src.scenes." .. mode.gameScene)
   -- this is a bit naive but effective for now
   self.online = GAME.netClient:isConnected()
   if self.online then
@@ -38,8 +50,7 @@ BattleRoom = class(function(self, mode, gameScene)
   self:createSignal("allAssetsLoadedChanged")
 end)
 
--- defining these here so they're available in network.BattleRoom too
--- maybe splitting BattleRoom wasn't so smart after all
+---@enum BattleRoomState
 BattleRoom.states = { Setup = 1, MatchInProgress = 2 }
 
 
@@ -50,8 +61,9 @@ function BattleRoom.createFromMatch(match)
   gameMode.stackInteraction = match.stackInteraction
   gameMode.winConditions = deepcpy(match.winConditions)
   gameMode.gameOverConditions = deepcpy(match.gameOverConditions)
+  gameMode.timeLimit = match.timeLimit
 
-  local battleRoom = BattleRoom(gameMode, Game2pVs)
+  local battleRoom = BattleRoom(gameMode, GameBase)
 
   for i = 1, #match.players do
     battleRoom:addPlayer(match.players[i])
@@ -66,78 +78,79 @@ end
 
 function BattleRoom.createFromServerMessage(message)
   local battleRoom
-  -- two player versus being the only option so far
-  -- in the future this information should be in the message!
-  local gameMode = GameModes.getPreset("TWO_PLAYER_VS")
+  local gameMode = message.gameMode
 
   if message.spectate_request_granted then
     logger.debug("Joining a match as spectator")
-    message = ServerMessages.sanitizeSpectatorJoin(message)
-    for key, value in pairs(message) do
-      if key ~= "replay" then
-        if type(value) == "table" then
-          logger.debug(key .. ":" .. table_to_string(value))
-        else
-          logger.debug(key .. ":" .. tostring(value))
-        end
-      end
-    end
     if message.replay then
-      for key, value in pairs(message.replay.vs) do
-        if key ~= "I" and key ~= "in_buf" then
-          if key ~= "replay" then
-            if type(value) == "table" then
-              logger.debug(key .. ":" .. table_to_string(value))
-            else
-              logger.debug(key .. ":" .. tostring(value))
-            end
-          end
-        end
-      end
-      local replay = ReplayV1.transform(message.replay)
-      logger.debug("post transform:\n" .. table_to_string(replay))
-      local match = Match.createFromReplay(replay, false)
+      local replay = message.replay
+      -- if the server message lacks ENGINE_VERSION, the standard replay sanitization may conservatively guess v046
+      -- but since we're online and successfully connected we KNOW it has to be our engine version
+      replay.engineVersion = consts.ENGINE_VERSION
+      local match = ClientMatch.createFromReplay(replay, false)
       for i, player in ipairs(match.players) do
-        player:updateWithMenuState(message.players[i])
+        player:updateSettings(message.players[i].settings)
       end
       -- need this to make sure both have the same player tables
       -- there's like one stupid reference to battleRoom in engine that breaks otherwise
       battleRoom = BattleRoom.createFromMatch(match)
       battleRoom.mode.gameScene = gameMode.gameScene
-      battleRoom.mode.setupScene = gameMode.setupScene
       battleRoom.mode.richPresenceLabel = gameMode.richPresenceLabel
     else
-      battleRoom = BattleRoom(gameMode, Game2pVs)
+      battleRoom = BattleRoom(gameMode)
       for i = 1, #message.players do
-        local player = Player(message.players[i].name, message.players[i].playerNumber, false)
+        local player = Player(message.players[i].name, message.players[i].publicId or -i, false)
         battleRoom:addPlayer(player)
-        player:updateWithMenuState(message.players[i])
+        player:updateSettings(message.players[i].settings)
       end
     end
     for i = 1, #battleRoom.players do
-      battleRoom.players[i]:setRating(message.players[i].ratingInfo.new)
-      battleRoom.players[i]:setLeague(message.players[i].ratingInfo.league)
+      if message.players[i].ratingInfo then
+        local ratingInfo = message.players[i].ratingInfo
+        battleRoom.players[i]:setRating(ratingInfo.placement_match_progress or ratingInfo.new)
+        battleRoom.players[i]:setLeague(ratingInfo.league)
+      end
     end
     if message.winCounts then
       battleRoom:setWinCounts(message.winCounts)
     end
     battleRoom.spectating = true
   else
-    battleRoom = BattleRoom(gameMode, Game2pVs)
-    message = ServerMessages.sanitizeCreateRoom(message)
-    -- player 1 is always the local player so that data can be ignored in favor of local data
-    battleRoom:addPlayer(GAME.localPlayer)
-    GAME.localPlayer.playerNumber = message.players[1].playerNumber
-    GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
-    GAME.localPlayer:setRating(message.players[1].ratingInfo.new)
-    GAME.localPlayer:setLeague(message.players[1].ratingInfo.league)
+    battleRoom = BattleRoom(gameMode)
+    for i, player in ipairs(message.players) do
+      local p
 
-    local player2 = Player(message.players[2].name, -1, false)
-    player2.playerNumber = message.players[2].playerNumber
-    player2:updateWithMenuState(message.players[2])
-    player2:setRating(message.players[2].ratingInfo.new)
-    player2:setLeague(message.players[2].ratingInfo.league)
-    battleRoom:addPlayer(player2)
+      -- match by name so devs can play against themselves still; eventually we'll want to match by publicId instead
+      if player.name == GAME.localPlayer.name then
+        logger.debug("Local player is player number " .. player.playerNumber)
+        p = GAME.localPlayer
+      else
+        p = Player(player.name, player.publicId or -i, false)
+      end
+
+      -- order is important here as setting style will indirectly also override levelData so it needs to be before updateSettings
+      if gameMode.style ~= GameModes.Styles.CHOOSE then
+        p:setStyle(gameMode.style)
+      else
+        if player.settings.levelData then
+          if player.settings.levelData.frameConstants.GARBAGE_HOVER then
+            p:setStyle(GameModes.Styles.MODERN)
+          else
+            p:setStyle(GameModes.Styles.CLASSIC)
+          end
+        end
+      end
+
+      p:updateSettings(player.settings)
+
+      if player.ratingInfo then
+        p:setRating(player.ratingInfo.placement_match_progress or player.ratingInfo.new)
+        p:setLeague(player.ratingInfo.league)
+      end
+
+      p.playerNumber = player.playerNumber
+      battleRoom:addPlayer(p)
+    end
   end
 
   battleRoom:updateRankedStatus(message.ranked)
@@ -165,8 +178,10 @@ function BattleRoom.createLocalFromGameMode(gameMode, gameScene)
   end
 
   if gameMode.style ~= GameModes.Styles.CHOOSE then
-    for i = 1, #battleRoom.players do
-      battleRoom.players[i]:setStyle(gameMode.style)
+    for i, player in ipairs(battleRoom.players) do
+      if player.human then
+        battleRoom.players[i]:setStyle(gameMode.style)
+      end
     end
   end
 
@@ -240,10 +255,10 @@ end
 
 -- creates a match with the players in the BattleRoom
 function BattleRoom:createMatch()
-  local supportsPause = not self.online or #self.players == 1
+  local supportsPause = not self.online or (#self.players == 1 and self.players[1].isLocal)
   local optionalArgs = { timeLimit = self.mode.timeLimit , ranked = self.ranked}
 
-  self.match = Match(
+  self.match = ClientMatch(
     self.players,
     self.mode.doCountdown,
     self.mode.stackInteraction,
@@ -262,20 +277,22 @@ function BattleRoom:createMatch()
   return self.match
 end
 
--- creates a new Player based on their minimum information and adds them to the BattleRoom
-function BattleRoom:addNewPlayer(name, publicId, isLocal)
-  local player = Player(name, publicId, isLocal)
-  player.playerNumber = #self.players + 1
-  self:addPlayer(player)
-  return player
-end
-
 -- adds an existing Player to the BattleRoom
 function BattleRoom:addPlayer(player)
   if not player.playerNumber then
     player.playerNumber = #self.players + 1
   end
   self.players[#self.players + 1] = player
+
+  -- make sure the local player ends up as P1 (left side)
+  -- if both are local or both are not, order by playerNumber
+  table.sort(self.players, function(a, b)
+    if a.isLocal == b.isLocal then
+      return a.playerNumber < b.playerNumber
+    else
+      return a.isLocal
+    end
+  end)
 
   if player.isLocal then
     self:connectSignal("allAssetsLoadedChanged", player, player.setLoaded)
@@ -286,7 +303,7 @@ function BattleRoom:updateLoadingState()
   local fullyLoaded = true
   for i = 1, #self.players do
     local player = self.players[i]
-    if not characters[player.settings.characterId].fully_loaded or not stages[player.settings.stageId].fully_loaded then
+    if not characters[player.settings.characterId].fullyLoaded or not stages[player.settings.stageId].fullyLoaded then
       fullyLoaded = false
     end
   end
@@ -294,6 +311,11 @@ function BattleRoom:updateLoadingState()
   if self.allAssetsLoaded ~= fullyLoaded then
     self.allAssetsLoaded = fullyLoaded
     self:emitSignal("allAssetsLoadedChanged", self.allAssetsLoaded)
+    if self.allAssetsLoaded then
+      -- force a collect of assets that may have gotten unloaded as part of the modloader
+      collectgarbage("collect")
+      collectgarbage("collect")
+    end
   end
 
   if not self.allAssetsLoaded then
@@ -365,7 +387,7 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   self.state = BattleRoom.states.MatchInProgress
   local transition = BlackFadeTransition(GAME.timer, 0.4, Easings.getSineIn())
   -- for touch android players load a different scene
-  if (love.system.getOS() == "Android" or DEBUG_ENABLED) and
+  if (system.isMobileOS() or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
   --but only if they are the only local player cause for 2p vs local using portrait mode would be bad
       tableUtils.count(self.players, function(p) return p.isLocal and p.human end) == 1 then
     for _, player in ipairs(self.players) do
@@ -405,11 +427,11 @@ end
 function BattleRoom:startLoadingNewAssets()
   if ModLoader.loading_mod == nil then
     for _, player in ipairs(self.players) do
-      if not stages[player.settings.stageId].fully_loaded then
+      if not stages[player.settings.stageId].fullyLoaded then
         logger.debug("Loading stage " .. player.settings.stageId .. " as part of BattleRoom:startLoadingNewAssets")
         ModController:loadModFor(stages[player.settings.stageId], player)
       end
-      if not characters[player.settings.characterId].fully_loaded then
+      if not characters[player.settings.characterId].fullyLoaded then
         logger.debug("Loading stage " .. player.settings.characterId .. " as part of BattleRoom:startLoadingNewAssets")
         ModController:loadModFor(characters[player.settings.characterId], player)
       end
@@ -432,7 +454,7 @@ function BattleRoom.updateInputConfigurationForPlayer(player, lock)
       end
     end
     if not player.inputConfiguration and not GAME.input.mouse.claimed then
-      if GAME.input.mouse.isDown[1] or GAME.input.mouse.isPressed[1] then
+      if tableUtils.length(GAME.input.mouse.isDown) > 0 or tableUtils.length(GAME.input.mouse.isPressed) > 0 then
         player:setInputMethod("touch")
         logger.debug("Claiming touch configuration for player " .. player.playerNumber)
         player:restrictInputs(GAME.input.mouse)
@@ -538,7 +560,7 @@ function BattleRoom:shutdown()
   self = nil
 end
 
--- a callback function that is getting registered to the Match:onMatchEnded signal
+-- a callback function that is getting registered to the ClientMatch's matchEnded signal
 -- may get unregistered from the match in case of abortion
 function BattleRoom:onMatchEnded(match)
   self.matchesPlayed = self.matchesPlayed + 1
@@ -549,6 +571,7 @@ function BattleRoom:onMatchEnded(match)
     if #winners == 1 then
       -- increment win count on winning player if there is only one
       winners[1]:incrementWinCount()
+      winners[1].stack.character:playWinSfx()
     end
     if self.online and match:hasLocalPlayer() then
       GAME.netClient:reportLocalGameResult(winners)
@@ -556,19 +579,27 @@ function BattleRoom:onMatchEnded(match)
   else
     -- match:deinit is the responsibility of the one switching out of the game scene
     match:deinit()
-    -- in the case of a network based abort, the network part of the battleRoom would unregister from the onMatchEnded signal
-    -- and initialise the transition to wherever else before calling abort on the match to finalize it
-    -- that means whenever we land here, it was a match-side local abort that leaves the room intact
-    if match.desyncError then
-      -- match could have a desync error
-      -- -> back to select screen, battleRoom stays intact
-      -- ^ this behaviour is different to the past but until the server tells us the room is dead there is no reason to assume it to be dead
-      local transition = MessageTransition(GAME.timer, 5, "ss_latency_error")
-      GAME.navigationStack:pop(transition)
-    else
-      -- local player could pause and leave
-      -- -> back to select screen, battleRoom stays intact
-      GAME.navigationStack:pop()
+
+    -- in the case of a network based abort (== opponent left / disconnected in some way),
+    --  the network part of the battleRoom would unregister from the onMatchEnded signal
+    --  and initialise the transition to wherever else before calling abort on the match to finalize it
+    -- that means whenever we land here, it was a CLIENT SIDE abort that leaves the room intact
+
+    if self.online and match:hasLocalPlayer() then
+      -- as the abort is client side we NEED to tell the server we aborted as otherwise the server match stalls
+      GAME.netClient:sendMatchAbort()
+
+      if match.engine.desyncError then
+        -- match could have a desync error
+        -- -> back to select screen, battleRoom stays intact
+        -- ^ this behaviour is different to the past but until the server tells us the room is dead there is no reason to assume it to be dead
+        local transition = MessageTransition(GAME.timer, 5, "ss_latency_error")
+        GAME.navigationStack:pop(transition)
+      else
+        -- local player could pause and leave
+        -- -> back to select screen, battleRoom stays intact
+        -- the UI used to abort handles the pop directly
+      end
     end
 
     -- other aborts come via network and are directly handled in response to the network message (or lack thereof)

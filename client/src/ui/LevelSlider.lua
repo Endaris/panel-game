@@ -1,9 +1,9 @@
+local PATH = (...):gsub('%.[^%.]+$', '')
+local Slider = require(PATH .. ".Slider")
 local class = require("common.lib.class")
-local Slider = require("client.src.ui.Slider")
 local util = require("common.lib.util")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
---@module LevelSlider
 local LevelSlider = class(
   function(self, options)
     self.min = 1

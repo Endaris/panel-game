@@ -1,22 +1,19 @@
 local Scene = require("client.src.scenes.Scene")
-local Label = require("client.src.ui.Label")
-local Menu = require("client.src.ui.Menu")
-local MenuItem = require("client.src.ui.MenuItem")
+local ui = require("client.src.ui")
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local util = require("common.lib.util")
 local NetClient = require("client.src.network.NetClient")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
-local Leaderboard = require("client.src.ui.Leaderboard")
+local GameModes = require("common.engine.GameModes")
 
--- @module Lobby
 -- expects a serverIp and serverPort as a param (unless already set in GAME.connected_server_ip & GAME.connected_server_port respectively)
 local Lobby = class(function(self, sceneParams)
   self.music = "main"
 
   -- ui
-  self.leaderboard = Leaderboard({isVisible = false, x = 200, hAlign = "center", vAlign = "center"})
-  self.lobbyMessage = Label({text = "lb_select_player"})
+  self.leaderboard = ui.Leaderboard({isVisible = false, x = 200, hAlign = "center", vAlign = "center"})
+  self.lobbyMessage = ui.Label({text = "lb_select_player"})
   self.backgroundImg = themes[config.theme].images.bg_main
   self.lobbyMenu = nil
   self.lobbyMenuXoffsetMap = {
@@ -62,16 +59,29 @@ end
 
 function Lobby:initLobbyMenu()
   local menuItems = {
-    MenuItem.createMenuItem(self.lobbyMessage),
-    MenuItem.createButtonMenuItem("lb_show_board", nil, nil, function()
+    ui.MenuItem.createMenuItem(self.lobbyMessage),
+    ui.MenuItem.createButtonMenuItem("mm_1_endless", nil, nil, function()
+      GAME.netClient:requestRoom(GameModes.getPreset("ONE_PLAYER_ENDLESS"))
+    end),
+    ui.MenuItem.createButtonMenuItem("mm_1_time", nil, nil, function()
+      GAME.netClient:requestRoom(GameModes.getPreset("ONE_PLAYER_TIME_ATTACK"))
+    end),
+    ui.MenuItem.createButtonMenuItem("mm_1_vs", nil, nil, function()
+      if GAME.localPlayer.settings.style ~= GameModes.Styles.MODERN then
+        GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
+        GAME.netClient:sendPlayerSettings(GAME.localPlayer)
+      end
+      GAME.netClient:requestRoom(GameModes.getPreset("ONE_PLAYER_VS_SELF"))
+    end),
+    ui.MenuItem.createButtonMenuItem("lb_show_board", nil, nil, function()
       self:toggleLeaderboard()
     end),
-    MenuItem.createButtonMenuItem("lb_back", nil, nil, exitMenu)
+    ui.MenuItem.createButtonMenuItem("lb_back", nil, nil, exitMenu)
   }
-  self.leaderboardToggleLabel = menuItems[2].textButton.children[1]
+  self.leaderboardToggleLabel = menuItems[5].textButton.children[1]
 
   self.lobbyMenuStartingUp = true
-  self.lobbyMenu = Menu.createCenteredMenu(menuItems)
+  self.lobbyMenu = ui.Menu.createCenteredMenu(menuItems)
   self.lobbyMenu.x = self.lobbyMenuXoffsetMap[false]
 
   self.uiRoot:addChild(self.lobbyMenu)
@@ -110,6 +120,10 @@ end
 -- challenges the opponent with that name
 function Lobby:requestGameFunction(opponentName)
   return function()
+    if GAME.localPlayer.settings.style ~= GameModes.Styles.MODERN then
+      GAME.localPlayer:setStyle(GameModes.Styles.MODERN)
+      GAME.netClient:sendPlayerSettings(GAME.localPlayer)
+    end
     GAME.netClient:challengePlayer(opponentName)
     GAME.theme:playValidationSfx()
   end
@@ -132,7 +146,7 @@ function Lobby:onLobbyStateUpdate(lobbyState)
   local desiredIndex = self.lobbyMenu.selectedIndex
 
   -- cleanup previous lobby menu
-  while #self.lobbyMenu.menuItems > 3 do
+  while #self.lobbyMenu.menuItems > 6 do
     self.lobbyMenu:removeMenuItemAtIndex(2)
   end
   self.lobbyMenu:setSelectedIndex(1)
@@ -146,15 +160,18 @@ function Lobby:onLobbyStateUpdate(lobbyState)
       if lobbyState.willingPlayers[v] then
         unmatchedPlayer = unmatchedPlayer .. " " .. loc("lb_received")
       end
-      self.lobbyMenu:addMenuItem(2, MenuItem.createButtonMenuItem(unmatchedPlayer, nil, false, self:requestGameFunction(v)))
+      self.lobbyMenu:addMenuItem(2, ui.MenuItem.createButtonMenuItem(unmatchedPlayer, nil, false, self:requestGameFunction(v)))
     end
   end
   for _, room in ipairs(lobbyState.spectatableRooms) do
-    if room.name then
+    if room.b then
       local playerA = room.a .. self:playerRatingString(room.a)
       local playerB = room.b .. self:playerRatingString(room.b)
       local roomName = loc("lb_spectate") .. " " .. playerA .. " vs " .. playerB .. " (" .. room.state .. ")"
-      self.lobbyMenu:addMenuItem(2, MenuItem.createButtonMenuItem(roomName, nil, false, self:requestSpectateFunction(room)))
+      self.lobbyMenu:addMenuItem(2, ui.MenuItem.createButtonMenuItem(roomName, nil, false, self:requestSpectateFunction(room)))
+    else
+      local roomName = loc("lb_spectate") .. " " .. room.name .. " (" .. room.state .. ")"
+      self.lobbyMenu:addMenuItem(2, ui.MenuItem.createButtonMenuItem(roomName, nil, false, self:requestSpectateFunction(room)))
     end
   end
 
@@ -175,7 +192,7 @@ end
 ------------------------------
 -- scene core functionality --
 ------------------------------
-local loginStateLabel = Label({text = loc("lb_login"), translate = false, x = 500, y = 350})
+local loginStateLabel = ui.Label({text = loc("lb_login"), translate = false, x = 500, y = 350})
 function Lobby:update(dt)
   self.backgroundImg:update(dt)
 

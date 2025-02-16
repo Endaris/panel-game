@@ -1,11 +1,11 @@
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UIElement = require(PATH .. ".UIElement")
 local class = require("common.lib.class")
-local UIElement = require("client.src.ui.UIElement")
 local util = require("common.lib.util")
 local tableUtils = require("common.lib.tableUtils")
 
 local BUTTON_PADDING = 5
 
---@module ButtonGroup
 -- UIElement representing a set of buttons which share state (think radio buttons)
 
 -- forced override for each of the button's onClick function

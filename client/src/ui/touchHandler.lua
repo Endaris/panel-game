@@ -1,8 +1,9 @@
-local input = require("common.lib.inputManager")
+local input = require("client.src.inputManager")
 -- handles all touch interactions
 -- all elements that implement touch interactions must register themselves with the touch handler on construction
 
 local touchHandler = {
+  ---@type UiElement?
   touchedElement = nil,
   holdTimer = 0,
   draggedThisFrame = false,

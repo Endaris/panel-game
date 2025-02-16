@@ -1,10 +1,12 @@
 local consts = require("common.engine.consts")
 local logger = require("common.lib.logger")
+local FileUtils = require("client.src.FileUtils")
 
 -- Utility methods for drawing
 local GraphicsUtil = {
   fontFile = nil,
   fontSize = 12,
+  fontDpiScale = 1,
   fontCache = {},
   quadPool = {}
 }
@@ -62,7 +64,7 @@ function GraphicsUtil.privateLoadImageWithExtensionAndScale(pathAndName, extensi
       end
       return result
     end
-    
+
     logger.error("Error loading image: " .. fileName .. " Check it is valid and try resaving it in an image editor. If you are not the owner please get them to update it or download the latest version.")
     result = GraphicsUtil.privateLoadImageWithExtensionAndScale("themes/Panel Attack/transparent", ".png", 1)
     assert(result ~= next)
@@ -72,10 +74,9 @@ function GraphicsUtil.privateLoadImageWithExtensionAndScale(pathAndName, extensi
   return nil
 end
 
+local supportedScales = {3, 2, 1}
 function GraphicsUtil.loadImageFromSupportedExtensions(pathAndName)
-  local supportedImageFormats = {".png", ".jpg", ".jpeg"}
-  local supportedScales = {3, 2, 1}
-  for _, extension in ipairs(supportedImageFormats) do
+  for _, extension in ipairs(FileUtils.SUPPORTED_IMAGE_FORMATS) do
     for _, scale in ipairs(supportedScales) do
       local image = GraphicsUtil.privateLoadImageWithExtensionAndScale(pathAndName, extension, scale)
       if image then
@@ -140,6 +141,13 @@ end
 
 local maxQuadPool = 100
 -- Creates a new quad, recycling one if one exists in the pool to reduce memory.
+---@param x number
+---@param y number
+---@param width number
+---@param height number
+---@param sw number Reference width of the texture the quad is used with
+---@param sh number Reference height of the texture the quad is used with
+---@return love.Quad
 function GraphicsUtil:newRecycledQuad(x, y, width, height, sw, sh)
   local result = nil
   if #self.quadPool == 0 then
@@ -191,14 +199,13 @@ function GraphicsUtil.drawStraightLine(x1, y1, x2, y2, r, g, b, a)
   GraphicsUtil.setColor(1, 1, 1, 1)
 end
 
-local function privateMakeFont(fontPath, size)
+local function privateMakeFont(fontPath, size, dpiScale)
   local f
   local hinting = "normal"
-  local dpi = GAME:newCanvasSnappedScale()
   if fontPath then
-    f = love.graphics.newFont(fontPath, size, hinting, dpi)
+    f = love.graphics.newFont(fontPath, size, hinting, dpiScale)
   else
-    f = love.graphics.newFont(size, hinting, dpi)
+    f = love.graphics.newFont(size, hinting, dpiScale)
   end
 
   return f
@@ -207,19 +214,26 @@ end
 -- Creates a new font based on the current font and a delta
 function GraphicsUtil.getGlobalFontWithSize(fontSize)
   local f = GraphicsUtil.fontCache[fontSize]
-  if not f then
-    f = privateMakeFont(GraphicsUtil.fontFile, fontSize)
+  if not f or f:getDPIScale() ~= GraphicsUtil.fontDpiScale then
+    f = privateMakeFont(GraphicsUtil.fontFile, fontSize, GraphicsUtil.fontDpiScale)
     GraphicsUtil.fontCache[fontSize] = f
   end
   return f
 end
 
-function GraphicsUtil.setGlobalFont(filepath, size)
+function GraphicsUtil.setGlobalFont(filepath, size, dpiScale)
+  GraphicsUtil.setFontDpiScale(dpiScale)
   GraphicsUtil.fontCache = {}
   GraphicsUtil.fontFile = filepath
   GraphicsUtil.fontSize = size
   local createdFont = GraphicsUtil.getGlobalFontWithSize(size)
   love.graphics.setFont(createdFont)
+end
+
+function GraphicsUtil.setFontDpiScale(dpiScale)
+  if dpiScale and tonumber(dpiScale) then
+    GraphicsUtil.fontDpiScale = dpiScale
+  end
 end
 
 -- Returns the current global font
@@ -328,7 +342,7 @@ function GraphicsUtil.getAlignmentOffset(parentElement, childElement)
     yOffset = 0
   end
 
-  return xOffset, yOffset
+  return math.round(xOffset), math.round(yOffset)
 end
 
 -- sets the translation for a childElement inside of a parentElement so that
@@ -341,6 +355,14 @@ end
 -- resets the translation of the last alignment adjustment
 function GraphicsUtil.resetAlignment()
   love.graphics.pop()
+end
+
+local loveMajor = love.getVersion()
+
+if loveMajor >= 12 then
+  GraphicsUtil.newText = love.graphics.newTextBatch
+else
+  GraphicsUtil.newText = love.graphics.newText
 end
 
 return GraphicsUtil
