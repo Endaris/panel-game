@@ -55,6 +55,7 @@ local PANELS_TO_NEXT_SPEED =
 ---@field passiveRaise boolean if the stack will passively rise on its own
 ---@field allowManualRaise boolean manual raise inputs are ignored or not
 ---@field swapStallingMode integer how swaps are treated with respect to stalling passive raise
+---@field swapStallingPunish integer how much health is deducted for stalling swaps
 
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
@@ -168,6 +169,7 @@ local Stack = class(
       passiveRaise = true,
       allowManualRaise = true,
       swapStallingMode = 1,
+      swapStallingPunish = 4,
     }
 
     s.swapStallingBackLog = {}
@@ -1417,19 +1419,24 @@ function Stack:swap(row, col)
   local rightPanel = panels[row][col + 1]
   if self.behaviours.swapStallingMode == 1 then
     if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 then
-      local newRecord = { { row = row, col = col, id = leftPanel.id}, { row = row, col = col + 1, id = rightPanel.id } }
-      for i, oldRecord in ipairs(self.swapStallingBackLog) do
+      local newRecord = { leftId = leftPanel.id, rightId = rightPanel.id, row = row, col = col }
+      local punish = false
+      for _, oldRecord in ipairs(self.swapStallingBackLog) do
         if deep_content_equal(newRecord, oldRecord) then
-          print("reducing health for repeated swap")
-          self.health = self.health - 1
-          if self:checkGameOver() then
-            self:setGameOver()
-            return
-          end
+          punish = true
           break
         end
       end
-      self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
+
+      if punish then
+        self.health = self.health - self.behaviours.swapStallingPunish
+        if self:checkGameOver() then
+          self:setGameOver()
+          return
+        end
+      else
+        self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
+      end
     elseif #self.swapStallingBackLog > 0 then
       self.swapStallingBackLog = {}
     end
