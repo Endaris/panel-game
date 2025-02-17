@@ -17,6 +17,16 @@ local ReplayPlayer = require("common.data.ReplayPlayer")
 local TouchInputController = require("common.engine.TouchInputController")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
 
+local rollbackPanelBuffer = {}
+-- this is a bit of an opportunistic thing:
+-- one issue with rollback is that it allocates a ton of memory while it boots up which in turn accelerates the garbage collector
+-- that creates a situation where more memory is allocated, the GC starts running faster and the odds of having to run double updates for the opponent is high
+-- by preallocating memory for the panels (which is responsible for 90% of rollback memory), the load is less concentrated and stacks are generally more "rollback ready"
+-- as each table gets cleared before reuse it can be shared by all stacks
+for i = 1, (15 * 6) * MAX_LAG * 2 do
+  rollbackPanelBuffer[#rollbackPanelBuffer+1] = table.new(0, 24)
+end
+
 -- Stuff defined in this file:
 --  . the data structures that store the configuration of
 --    the stack of panels
@@ -138,7 +148,6 @@ local PANELS_TO_NEXT_SPEED =
 ---@field puzzle table? Optional puzzle
 ---@field game_stopwatch integer? Clock time minus time that swaps were blocked
 ---@field rollbackBuffer RollbackBuffer
----@field rollbackPanelBuffer Panel[]
 ---@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
 
 
@@ -261,14 +270,6 @@ local Stack = class(
     s.garbageGenCount = 0
 
     s.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
-    s.rollbackPanelBuffer = {}
-    -- this is a bit of an opportunistic thing:
-    -- one issue with rollback is that it allocates a ton of memory while it boots up which in turn accelerates the garbage collector
-    -- that creates a situation where more memory is allocated, the GC starts running faster and the odds of having to run double updates for the opponent is high
-    -- by preallocating memory for the panels (which is responsible for 90% of rollback memory), the load is less concentrated and stacks are generally more "rollback ready"
-    for i = 1, ((s.height + 1) * s.width) * MAX_LAG do
-      s.rollbackPanelBuffer[#s.rollbackPanelBuffer+1] = table.new(0, 24)
-    end
 
     s.warningsTriggered = {}
 
@@ -340,8 +341,8 @@ function Stack:rollbackCopyPanels(copy)
       -- if it's a fresh copy or the current stack is higher than the stale copy there may not be any preexisting table at this location
       local panelCopy = panels[index]
       if not panelCopy then
-        if #self.rollbackPanelBuffer > 0 then
-          panelCopy = table.remove(self.rollbackPanelBuffer)
+        if #rollbackPanelBuffer > 0 then
+          panelCopy = table.remove(rollbackPanelBuffer)
         else
           -- panels have 13 base props and up to 11 garbage specific props OR 7 non-garbage specific props
           panelCopy = table.new(0, 24)
@@ -369,7 +370,7 @@ function Stack:rollbackCopy()
     -- this is to eliminate offscreen rows of chain garbage higher up from the old copy so they don't linger in the new copy
     for i = #copy.panels, (#self.panels + 1) * self.width + 1, -1 do
       -- but as offscreen rows come and go and we don't want to reallocate them every time, buffer them as well!
-      self.rollbackPanelBuffer[#self.rollbackPanelBuffer+1] = copy.panels[i]
+      rollbackPanelBuffer[#rollbackPanelBuffer+1] = copy.panels[i]
       copy.panels[i] = nil
     end
   else
@@ -1941,6 +1942,17 @@ end
 ---@param enable boolean
 function Stack:enableShockPanels(enable)
   self.shockEnabled = enable
+end
+
+function Stack:deinit()
+  -- put allocations used for storing panel information back into the rollbackPanelBuffer
+  for i = self.rollbackBuffer.size, 1, -1 do
+    if self.rollbackBuffer.buffer[i] then
+      for j = #self.rollbackBuffer.buffer[i].panels, 1, -1 do
+        rollbackPanelBuffer[#rollbackPanelBuffer+1] = self.rollbackBuffer.buffer[i].panels[j]
+      end
+    end
+  end
 end
 
 return Stack
