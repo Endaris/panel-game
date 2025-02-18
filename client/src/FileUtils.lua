@@ -148,15 +148,12 @@ function fileUtils.loadSoundDataFromSupportedExtensions(path, filename)
       local decoder = love.sound.newDecoder(fullPath, buffersize)
       local sampleRate = decoder:getSampleRate()
       local chunks = {}
-      -- interestingly enough, getDuration seems to return a "sensible", meaning to say one that likely does NOT consider jumps after reaching the end
-      local duration = decoder:getDuration()
-      local sampleLimit = duration * sampleRate
       local channelCount = decoder:getChannelCount()
       local chunk = decoder:decode()
       -- basically limiting decoding to files that were encoded to less than 0.2% of their real size (I think...a conservative limit anyway)
       local chunkLimit = math.ceil(info.size / buffersize) * 500
       local totalSampleCount = 0
-      while chunk and #chunks <= chunkLimit and ((totalSampleCount < sampleLimit) or (sampleLimit < 0)) do
+      while chunk and #chunks <= chunkLimit do
         totalSampleCount = totalSampleCount + chunk:getSampleCount()
         chunks[#chunks + 1] = chunk
         chunk = decoder:decode()
@@ -172,22 +169,17 @@ function fileUtils.loadSoundDataFromSupportedExtensions(path, filename)
       if system.meetsLoveVersionRequirement(12, 0) then
         for i, chunk in ipairs(chunks) do
           local sampleCount = chunk:getSampleCount()
-          if sampleLimit > 0 and position + sampleCount > sampleLimit then
-            sampleCount = sampleLimit - position
-          end
           soundData:copyFrom(chunk, 0, sampleCount, position)
           position = position + sampleCount
         end
       else
         for i, chunk in ipairs(chunks) do
           for j = 0, chunk:getSampleCount() - 1 do
-            if position < sampleLimit or sampleLimit < 0 then
-              for channel = 1, channelCount do
-                local sample = chunk:getSample(j, channel)
-                soundData:setSample(position, channel, sample)
-              end
-              position = position + 1
+            for channel = 1, channelCount do
+              local sample = chunk:getSample(j, channel)
+              soundData:setSample(position, channel, sample)
             end
+            position = position + 1
           end
         end
       end
@@ -214,14 +206,16 @@ function fileUtils.findSound(sound_name, dirs_to_check, streamed)
   return nil
 end
 
-function fileUtils.soundFileExists(soundName, path)
+---@param soundName string
+---@param path string
+---@return string? error
+function fileUtils.getSoundFileName(soundName, path)
+  local p = path .. "/" .. soundName
   for _, extension in pairs(fileUtils.SUPPORTED_SOUND_FORMATS) do
-    if love.filesystem.getInfo(path .. "/" .. soundName .. extension, "file") then
-      return true
+    if love.filesystem.getInfo(p .. extension, "file") then
+      return p .. extension
     end
   end
-
-  return false
 end
 
 function fileUtils.saveTextureToFile(texture, filePath, format)
