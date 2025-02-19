@@ -9,7 +9,7 @@ local PREFIX_OF_IGNORED_DIRECTORIES = "__"
 local fileUtils = {}
 
 fileUtils.SUPPORTED_IMAGE_FORMATS = {".png", ".jpg", ".jpeg"}
-fileUtils.SUPPORTED_SOUND_FORMATS = {".mp3", ".ogg", ".wav", ".it", ".flac"}
+fileUtils.SUPPORTED_SOUND_FORMATS = {".mp3", ".ogg", ".wav", ".flac", ".699", ".amf", ".ams", ".dbm", ".dmf", ".dsm", ".far", ".it", ".j2b", ".mdl", ".med", ".mod", ".mt2", ".mtm", ".okt", ".psm", ".s3m", ".stm", ".ult", ".umx", ".xm"}
 
 -- returns the directory items with a default filter and an optional filetype filter
 -- by default, filters out everything starting with __ and Mac's .DS_Store file
@@ -128,64 +128,61 @@ end
 ---@return love.Source?
 function fileUtils.loadSoundFromSupportExtensions(path_and_filename, streamed)
   for k, extension in ipairs(fileUtils.SUPPORTED_SOUND_FORMATS) do
-    if love.filesystem.getInfo(path_and_filename .. extension) then
+    if love.filesystem.exists(path_and_filename .. extension) then
       return love.audio.newSource(path_and_filename .. extension, streamed and "stream" or "static")
     end
   end
   return nil
 end
 
----@param path string
----@param filename string
+---@param path string the path to the file without the filename itself
+---@param exactFilename string the filename including extension
 ---@return love.SoundData?
----@return string? exactFilename
-function fileUtils.loadSoundDataFromSupportedExtensions(path, filename)
-  for k, extension in ipairs(fileUtils.SUPPORTED_SOUND_FORMATS) do
-    local fullPath = path .. "/" .. filename .. extension
-    local info = love.filesystem.getInfo(fullPath)
-    if info then
-      local buffersize = 2048
-      local decoder = love.sound.newDecoder(fullPath, buffersize)
-      local sampleRate = decoder:getSampleRate()
-      local chunks = {}
-      local channelCount = decoder:getChannelCount()
-      local chunk = decoder:decode()
-      -- basically limiting decoding to files that were encoded to less than 0.2% of their real size (I think...a conservative limit anyway)
-      local chunkLimit = math.ceil(info.size / buffersize) * 500
-      local totalSampleCount = 0
-      while chunk and #chunks <= chunkLimit do
-        totalSampleCount = totalSampleCount + chunk:getSampleCount()
-        chunks[#chunks + 1] = chunk
-        chunk = decoder:decode()
-      end
-
-      if chunk and #chunks > chunkLimit then
-        error("Failed to load " .. fullPath ..
-              "\ndata seems to loop infinitely")
-      end
-
-      local soundData = love.sound.newSoundData(totalSampleCount, sampleRate, decoder:getBitDepth(), channelCount)
-      local position = 0
-      if system.meetsLoveVersionRequirement(12, 0) then
-        for i, chunk in ipairs(chunks) do
-          local sampleCount = chunk:getSampleCount()
-          soundData:copyFrom(chunk, 0, sampleCount, position)
-          position = position + sampleCount
-        end
-      else
-        for i, chunk in ipairs(chunks) do
-          for j = 0, chunk:getSampleCount() - 1 do
-            for channel = 1, channelCount do
-              local sample = chunk:getSample(j, channel)
-              soundData:setSample(position, channel, sample)
-            end
-            position = position + 1
-          end
-        end
-      end
-
-      return soundData, filename .. extension
+function fileUtils.loadSoundData(path, exactFilename)
+  local fullPath = path .. "/" .. exactFilename
+  local info = love.filesystem.getInfo(fullPath)
+  if info then
+    local buffersize = 4096
+    local decoder = love.sound.newDecoder(fullPath, buffersize)
+    local sampleRate = decoder:getSampleRate()
+    local chunks = {}
+    local channelCount = decoder:getChannelCount()
+    local chunk = decoder:decode()
+    -- basically limiting decoding to files that were encoded to more than 0.2% of their real size (I think...a conservative limit anyway)
+    local chunkLimit = math.ceil(info.size / buffersize) * 500
+    local totalSampleCount = 0
+    while chunk and #chunks <= chunkLimit do
+      totalSampleCount = totalSampleCount + chunk:getSampleCount()
+      chunks[#chunks + 1] = chunk
+      chunk = decoder:decode()
     end
+
+    if chunk and #chunks > chunkLimit then
+      error("Failed to load " .. fullPath ..
+            "\ndata seems to loop infinitely")
+    end
+
+    local soundData = love.sound.newSoundData(totalSampleCount, sampleRate, decoder:getBitDepth(), channelCount)
+    local position = 0
+    if system.meetsLoveVersionRequirement(12, 0) then
+      for i, chunk in ipairs(chunks) do
+        local sampleCount = chunk:getSampleCount()
+        soundData:copyFrom(chunk, 0, sampleCount, position)
+        position = position + sampleCount
+      end
+    else
+      for i, chunk in ipairs(chunks) do
+        for j = 0, chunk:getSampleCount() - 1 do
+          for channel = 1, channelCount do
+            local sample = chunk:getSample(j, channel)
+            soundData:setSample(position, channel, sample)
+          end
+          position = position + 1
+        end
+      end
+    end
+
+    return soundData
   end
 end
 
@@ -212,8 +209,8 @@ end
 function fileUtils.getSoundFileName(soundName, path)
   local p = path .. "/" .. soundName
   for _, extension in pairs(fileUtils.SUPPORTED_SOUND_FORMATS) do
-    if love.filesystem.getInfo(p .. extension, "file") then
-      return p .. extension
+    if love.filesystem.exists(p .. extension) then
+      return soundName .. extension
     end
   end
 end

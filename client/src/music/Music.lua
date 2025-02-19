@@ -10,20 +10,21 @@ local function playSource(source)
   musicThread:start(source)
 end
 
+local BUFFER_SIZE = 4096
+local BUFFER_COUNT = 16
+
 ---@class Music
 ---@operator call:Music
 ---@field package mainDecoder love.Decoder
----@field package main love.SoundData looping source of the music
----@field package start love.SoundData? start source of the music
----@field package paused boolean if the music is currently paused
+---@field package startData love.SoundData? start source of the music
+---@field package paused boolean? if the music is currently playing (false), paused (true) or stopped (nil)
 ---@field package queueableSource love.Source
----@field package timeStarted number in seconds for love.timer.getTime
----@field package buffersize integer
 ---@field path string?
 ---@field mainFilename string?
 ---@field startFilename string?
 
 -- construct a music object with a looping `main` music and an optional `start` played as the intro
+-- the music is streamed via a queueable source 
 ---@class Music
 ---@overload fun(main: love.Decoder, start: love.SoundData?): Music
 local Music = class(
@@ -32,11 +33,9 @@ local Music = class(
 ---@param startData love.SoundData?
 function(music, mainDecoder, startData)
   music.mainDecoder = mainDecoder
-  music.start = startData
-  music.queueableSource = love.audio.newQueueableSource(mainDecoder:getSampleRate(), mainDecoder:getBitDepth(), mainDecoder:getChannelCount(), 8)
-
-  music.timeStarted = 0
-  music.paused = false
+  music.startData = startData
+  -- with the default buffer count of 8, in some scenarios the music would end prematurely due to Music:update not being called frequently enough
+  music.queueableSource = love.audio.newQueueableSource(mainDecoder:getSampleRate(), mainDecoder:getBitDepth(), mainDecoder:getChannelCount(), BUFFER_COUNT)
 end)
 
 Music.TYPE = "Music"
@@ -56,28 +55,25 @@ end
 
 -- starts playing the music if it was not already playing
 function Music:play()
-  if not self.queueableSource:isPlaying() and not self.paused then
-    if self.start then
-      self.queueableSource:queue(self.start)
-    end
-    self:buffer()
+  if self.paused == nil and self.startData then
+    self.queueableSource:queue(self.startData)
   end
+  self:buffer()
 
   logger.debug("playing " .. (self.path or "Unknown") .. "/" .. (self.mainFilename or "Unknown"))
 
-  self.timeStarted = love.timer.getTime()
   playSource(self.queueableSource)
   self.paused = false
 end
 
 ---@return boolean? # if the music is currently playing
 function Music:isPlaying()
-  return self.queueableSource:isPlaying()
+  return self.paused == false
 end
 
 -- stops the music and resets it (whether it was playing or not)
 function Music:stop()
-  self.paused = false
+  self.paused = nil
   self.queueableSource:stop()
   self.mainDecoder:seek(0)
 end
@@ -103,10 +99,15 @@ function Music:getVolume()
   return self.queueableSource:getVolume()
 end
 
--- update the music to advance the timer
--- this is important to try and (roughly) get the transition from start to main right
 function Music:update()
-  self:buffer()
+  if self.paused == false then
+    self:buffer()
+    -- on very long frames it could happen that the music runs out of buffers and stopped due to that even though we never intended to stop the music
+    if not self.queueableSource:isPlaying() then
+      -- in that case, resume playing rather than starting over
+      playSource(self.queueableSource)
+    end
+  end
 end
 
 ---@param path string
@@ -122,10 +123,10 @@ function Music.load(path, name)
   end
 
   if startName then
-    startData = FileUtils.loadSoundDataFromSupportedExtensions(path, startName)
+    startData = FileUtils.loadSoundData(path, startName)
   end
 
-  local mainDecoder = love.sound.newDecoder(mainName, Music.buffersize)
+  local mainDecoder = love.sound.newDecoder(path .. "/" .. mainName, BUFFER_SIZE)
 
   if startData then
     if mainDecoder:getSampleRate() ~= startData:getSampleRate() or mainDecoder:getBitDepth() ~= startData:getBitDepth() or mainDecoder:getChannelCount() ~= startData:getChannelCount() then
