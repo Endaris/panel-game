@@ -485,6 +485,9 @@ local function internalRollbackToFrame(stack, frame)
   for i, panelCopy in ipairs(copy.panels) do
     local row = panelCopy.row
     local column = panelCopy.column
+    if not stack.panels[row] then
+      stack.panels[row] = {}
+    end
 
     if stack.panels[row][column] then
       table.clear(stack.panels[row][column])
