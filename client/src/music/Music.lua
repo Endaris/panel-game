@@ -11,7 +11,7 @@ local function playSource(source)
 end
 
 local BUFFER_SIZE = 4096
-local BUFFER_COUNT = 16
+local BUFFER_COUNT = 32
 
 ---@class Music
 ---@operator call:Music
@@ -73,6 +73,7 @@ end
 
 -- stops the music and resets it (whether it was playing or not)
 function Music:stop()
+  logger.debug("stopped " .. (self.path or "Unknown") .. "/" .. (self.mainFilename or "Unknown"))
   self.paused = nil
   self.queueableSource:stop()
   self.mainDecoder:seek(0)
@@ -103,8 +104,9 @@ function Music:update()
   if self.paused == false then
     self:buffer()
     -- on very long frames it could happen that the music runs out of buffers and stopped due to that even though we never intended to stop the music
-    if not self.queueableSource:isPlaying() then
+    if not self.queueableSource:isPlaying() and not musicThread:isRunning() then
       -- in that case, resume playing rather than starting over
+      logger.debug("Resumed music play after interrupt")
       playSource(self.queueableSource)
     end
   end
