@@ -137,7 +137,8 @@ function Music.load(path, name)
     end
   end
 
-  if mainDecoder:getDuration() < 3 then
+  local duration = mainDecoder:getDuration()
+  if duration > 0 and duration < 3 then
     error("Failed to load music " .. mainName .. " for " .. path .. ":\n"
     .. "The looping portion of music has to be at least 3 seconds long")
   end
