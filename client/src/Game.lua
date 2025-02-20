@@ -398,7 +398,7 @@ function Game:draw()
   love.graphics.setBlendMode("alpha", "premultiplied")
   -- now we draw the finished canvas at scale
   -- this way we don't have to worry about scaling singular elements, just draw everything at 1280x720 to the canvas
-  love.graphics.draw(self.globalCanvas, self.canvasX, self.canvasY, 0, self.canvasXScale, self.canvasYScale, consts.CANVAS_WIDTH / 2, consts.CANVAS_HEIGHT / 2)
+  love.graphics.draw(self.globalCanvas, self.canvasX, self.canvasY, 0, self.canvasXScale, self.canvasYScale, self.globalCanvas:getWidth() / 2, self.globalCanvas:getHeight() / 2)
   love.graphics.setBlendMode("alpha", "alphamultiply")
 end
 
@@ -619,7 +619,7 @@ end
 
 -- Transform from window coordinates to game coordinates
 function Game:transform_coordinates(x, y)
-  local newX, newY = (x - self.canvasX) / self.canvasXScale + consts.CANVAS_WIDTH / 2, (y - self.canvasY) / self.canvasYScale + consts.CANVAS_HEIGHT / 2
+  local newX, newY = (x - self.canvasX) / self.canvasXScale + self.globalCanvas:getWidth() / 2, (y - self.canvasY) / self.canvasYScale + self.globalCanvas:getHeight() / 2
   return newX, newY
 end
 
