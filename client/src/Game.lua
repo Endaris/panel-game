@@ -191,6 +191,15 @@ function Game:writeReleaseStreamDefinition()
             prefix = "panel-beta-"
           }
         },
+        {
+          name = "engine-preview",
+          versioningType = "timestamp",
+          serverEndPoint = {
+            type = "filesystem",
+            url = "https://panelattack.com/downloads/updates/engine-preview",
+            prefix = "panel-"
+          }
+        }
       },
       default = "stable"
     }
