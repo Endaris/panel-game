@@ -61,7 +61,6 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
 
-
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
 ---@field height integer How many rows of panels the stack has
@@ -70,10 +69,9 @@ local PANELS_TO_NEXT_SPEED =
 ---@field gameOverConditions table Array of enumerated values signifying ways of going game over
 ---@field gameWinConditions table Array of enumerated values signifying ways of ending the game without going game over
 ---@field levelData LevelData
----@field allowAdjacentColors boolean if the panel generator is allowed to put panels of the same color next to each other (horizontally only)
 ---@field allowAdjacentColorsOnStartingBoard boolean if the panel generator is allowed to put panels of the same color next to each other on the starting board
 ---@field shockEnabled boolean whether shock panels may be queued
----@field behaviours table<string, boolean> a table of toggleable physics behaviours; currently mainly around raise
+---@field behaviours StackBehaviours a table of flags and settings to modify the stack behaviour in chunks of functionality
 ---@field do_first_row boolean? if the stack still needs to initiate its starting board
 ---@field speed integer Index for accessing the table for the rise_timer, thus indirectly determining how quickly the stack rises
 ---@field nextSpeedIncreaseClock integer? at which clock time the speed is going to increase the next time; only relevant if the levelData's speedIncreaseMode is 1
@@ -149,6 +147,8 @@ local PANELS_TO_NEXT_SPEED =
 ---@field game_stopwatch integer? Clock time minus time that swaps were blocked
 ---@field rollbackBuffer RollbackBuffer
 ---@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
+---@field swapStallingBackLog table
+---@field swappingPanelCount integer
 
 
 -- Represents the full panel stack for one player
@@ -158,19 +158,19 @@ local Stack = class(
 ---@param s Stack
   function(s, arguments)
     assert(arguments.levelData ~= nil)
-    assert(arguments.allowAdjacentColors ~= nil)
+    assert(arguments.behaviours ~= nil)
 
     s.gameOverConditions = arguments.gameOverConditions or {GameModes.GameOverConditions.NEGATIVE_HEALTH}
     s.gameWinConditions = arguments.gameWinConditions or {}
     s.engineVersion = arguments.engineVersion
     s.levelData = arguments.levelData
-    s.allowAdjacentColors = arguments.allowAdjacentColors
+    s.behaviours = arguments.behaviours
+
     s.seed = arguments.seed
 
     -- the behaviour table contains a bunch of flags to modify the stack behaviour for custom game modes in broader chunks of functionality
-    s.behaviours = {}
-    s.behaviours.passiveRaise = true
-    s.behaviours.allowManualRaise = true
+
+    s.swapStallingBackLog = {}
 
     if not s.puzzle then
       s.do_first_row = true
@@ -240,6 +240,7 @@ local Stack = class(
 
     s.n_active_panels = 0
     s.n_prev_active_panels = 0
+    s.swappingPanelCount = 0
 
     -- Player input stuff:
     s.manual_raise = false
@@ -396,6 +397,7 @@ function Stack:rollbackCopy()
   copy.chain_counter = self.chain_counter
   copy.n_active_panels = self.n_active_panels
   copy.n_prev_active_panels = self.n_prev_active_panels
+  copy.swappingPanelCount = self.swappingPanelCount
   copy.rise_timer = self.rise_timer
   copy.manual_raise = self.manual_raise
   copy.manual_raise_yet = self.manual_raise_yet
@@ -452,6 +454,7 @@ local function internalRollbackToFrame(stack, frame)
   stack.chain_counter = copy.chain_counter
   stack.n_active_panels = copy.n_active_panels
   stack.n_prev_active_panels = copy.n_prev_active_panels
+  stack.swappingPanelCount = copy.swappingPanelCount
   stack.rise_timer = copy.rise_timer
   stack.manual_raise = copy.manual_raise
   stack.manual_raise_yet = copy.manual_raise_yet
@@ -1081,7 +1084,8 @@ function Stack.simulate(self)
   prof.pop("passive raise")
 
   prof.push("reset stuff")
-  if not self.panels_in_top_row and not self:has_falling_garbage() then
+  local hasFallingGarbage = self:has_falling_garbage()
+  if not self.panels_in_top_row and not hasFallingGarbage then
     self.health = self.levelData.maxHealth
   end
 
@@ -1256,13 +1260,11 @@ function Stack.simulate(self)
   end
   prof.pop("pop from incoming garbage q")
 
-  prof.push("update times")
   self.clock = self.clock + 1
 
   if self.game_stopwatch_running then
     self.game_stopwatch = (self.game_stopwatch or -1) + 1
   end
-  prof.pop("update times")
 end
 
 function Stack:runCountDownIfNeeded()
@@ -1409,9 +1411,36 @@ end
 -- Swaps panels at the current cursor location
 function Stack:swap(row, col)
   local panels = self.panels
-  self:processPuzzleSwap()
   local leftPanel = panels[row][col]
   local rightPanel = panels[row][col + 1]
+  if self.behaviours.swapStallingMode == 1 then
+    if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 and (self.n_active_panels - self.swappingPanelCount) == 0 then
+      local newRecord = { leftId = leftPanel.id, rightId = rightPanel.id, row = row, col = col }
+      local punish = false
+      for _, oldRecord in ipairs(self.swapStallingBackLog) do
+        if deep_content_equal(newRecord, oldRecord) then
+          punish = true
+          break
+        end
+      end
+
+      if punish then
+        self.health = self.health - self.behaviours.swapStallingPunish
+        if self:checkGameOver() then
+          self:setGameOver()
+          return
+        end
+      else
+        -- mark the reverse swap of the swap initiated just now
+        self.swapStallingBackLog[#self.swapStallingBackLog+1] = { leftId = newRecord.rightId, rightId = newRecord.leftId, row = row, col = col }
+        -- and the swap itself so it's already marked in case the reverse swap happens and logic stays simple for when data is added
+        self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
+      end
+    elseif #self.swapStallingBackLog > 0 then
+      self.swapStallingBackLog = {}
+    end
+  end
+  self:processPuzzleSwap()
   leftPanel:startSwap(true)
   rightPanel:startSwap(false)
   Panel.switch(leftPanel, rightPanel, panels)
@@ -1747,11 +1776,14 @@ end
 
 function Stack.updateActivePanels(self)
   self.n_prev_active_panels = self.n_active_panels
-  self.n_active_panels = self:getActivePanelCount()
+  self.n_active_panels, self.swappingPanelCount = self:getActivePanelCount()
 end
 
-function Stack.getActivePanelCount(self)
+---@return integer activePanelCount
+---@return integer swappingPanelCount
+function Stack:getActivePanelCount()
   local count = 0
+  local swappingCount = 0
 
   for row = 1, self.height do
     for col = 1, self.width do
@@ -1766,12 +1798,15 @@ function Stack.getActivePanelCount(self)
         and panel.state ~= "normal"
         and panel.state ~= "landing" then
           count = count + 1
+          if panel.state == "swapping" then
+            swappingCount = swappingCount + 1
+          end
         end
       end
     end
   end
 
-  return count
+  return count, swappingCount
 end
 
 function Stack.updateRiseLock(self)
@@ -1810,7 +1845,7 @@ function Stack:makePanels()
   if self.panel_buffer == "" then
     ret = self:makeStartingBoardPanels()
   else
-    ret = PanelGenerator.privateGeneratePanels(100, self.width, self.levelData.colors, self.panel_buffer, not self.allowAdjacentColors)
+    ret = PanelGenerator.privateGeneratePanels(100, self.width, self.levelData.colors, self.panel_buffer, not self.behaviours.allowAdjacentColors)
     ret = PanelGenerator.assignMetalLocations(ret, self.width)
   end
 
@@ -1938,7 +1973,7 @@ function Stack:toReplayPlayer()
   local replayPlayer = ReplayPlayer("Player " .. self.which, - self.which)
   replayPlayer:setLevelData(self.levelData)
   replayPlayer:setInputMethod(self.inputMethod)
-  replayPlayer:setAllowAdjacentColors(self.allowAdjacentColors)
+  replayPlayer:setBehaviours(self.behaviours)
 
   return replayPlayer
 end
@@ -1950,8 +1985,12 @@ function Stack.createFromReplayPlayer(replayPlayer, replay)
   local args = {
     engineVersion = replay.engineVersion,
     gameOverConditions = replay.gameMode.gameOverConditions,
+    -- this being unknown is correct; replays don't save stack specific game win conditions so far
+    -- these would be for puzzle mode and similar, where a stack can finish without game over; separate from match win conditions
+    ---@see GameModes
     gameWinConditions = replay.gameMode.gameWinConditions,
     allowAdjacentColors = replayPlayer.settings.allowAdjacentColors,
+    behaviours = replayPlayer.settings.stackBehaviours,
     levelData = replayPlayer.settings.levelData,
     is_local = false,
     which = tableUtils.indexOf(replay.players, replayPlayer),
