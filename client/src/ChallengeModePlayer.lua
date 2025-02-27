@@ -56,7 +56,7 @@ function ChallengeModePlayer:createStackFromSettings(match, which)
   local stack = ChallengeModePlayerStack({
     which = which,
     character = self.settings.characterId,
-    is_local = true,
+    is_local = not (match.replay and match.replay.completed),
     attackSettings = self.settings.attackEngineSettings,
     healthSettings = self.settings.healthSettings,
     match = match,

@@ -160,7 +160,7 @@ function ClientMatch:start()
     for i, player in ipairs(self.players) do
       local attackEngineHost = ChallengeModePlayerStack({
         which = #engineStacks + 1,
-        is_local = true,
+        is_local = not (self.replay and self.replay.completed),
         character = CharacterLoader.fullyResolveCharacterSelection(),
         attackSettings = player.settings.attackEngineSettings,
         match = self,
@@ -177,9 +177,6 @@ function ClientMatch:start()
   self.engine:setSeed(self.seed)
   self.engine:start()
 
-  -- needs to happen before garbageTargets are set as it defines the set of coordinates relevant for telegraph
-  self:moveStacks()
-
   -- outgoing garbage is already correctly directed by Match
   -- but the relationship is indirect between engine stacks to reduce coupling
   -- for rendering telegraph, it helps to explicitly know where garbage is being sent
@@ -188,8 +185,8 @@ function ClientMatch:start()
   -- here on client side we can simply acknowledge that only up to 2 players per match are supported
   if self.stackInteraction == GameModes.StackInteractions.SELF then
     for i, stack in ipairs(self.stacks) do
-        stack:setGarbageTarget(stack)
-        stack:setGarbageSource(stack)
+      stack:setGarbageTarget(stack)
+      stack:setGarbageSource(stack)
     end
   elseif self.stackInteraction == GameModes.StackInteractions.VERSUS then
     for i, stack1 in ipairs(self.stacks) do
@@ -201,6 +198,8 @@ function ClientMatch:start()
       end
     end
   end
+
+  self:moveStacks()
 
   if self.engine.timeLimit then
     self.panicTicksPlayed = {}
@@ -244,20 +243,20 @@ function ClientMatch:deinit()
 end
 
 function ClientMatch:moveStacks()
--- we want to render the stacks in a particular order so that the local player ends up as P1 (left side)
+  -- we want to render the stacks in a particular order so that the local player ends up as P1 (left side)
   -- BUT: we want to keep player indexing consistent over boundaries (client <-> replay <- server) to not mess with replay saving
   -- so we solve the rendering requirement via a shallowcpy and assigning positions directly to the stacks rather than starting reordering shenanigans all across the code base
-  local players = shallowcpy(self.players)
-  table.sort(players, function(a, b)
-    if a.isLocal == b.isLocal then
-      return a.playerNumber < b.playerNumber
+  local stacks = shallowcpy(self.stacks)
+  table.sort(stacks, function(a, b)
+    if a.is_local == b.is_local then
+      return a.player_number < b.player_number
     else
-      return a.isLocal
+      return a.is_local
     end
   end)
 
-  for i, player in ipairs(players) do
-    player.stack:moveForRenderIndex(i)
+  for i, stack in ipairs(stacks) do
+    stack:moveForRenderIndex(i)
   end
 end
 
@@ -318,13 +317,18 @@ function ClientMatch:finalizeReplay()
 
     for i, replayPlayer in ipairs(replay.players) do
       local player
-      for _, p in ipairs(self.players) do
-        if p.publicId == replayPlayer.publicId then
-          player = p
-          break
+      if replayPlayer.human then
+        for _, p in ipairs(self.players) do
+          if p.publicId == replayPlayer.publicId then
+            player = p
+            break
+          end
         end
+        assert(player, "Didn't find player with publicId " .. tostring(replayPlayer.publicId))
+      else
+        player = self.players[i]
       end
-      assert(player, "Didn't find player with publicId " .. tostring(replayPlayer.publicId))
+
 
       -- attackEngines may get their own "player" in replays even though they don't have one for the Match
       -- in these cases the attackEngine data is saved with the targeted player so let's not duplicate the data
@@ -370,7 +374,7 @@ function ClientMatch:finalizeReplay()
     for _, playerStack in ipairs(self.stacks) do
       local replayPlayer
       for _, rp in ipairs(replayPlayers) do
-        if rp.publicId == playerStack.player.publicId then
+        if playerStack.player and playerStack.player.human and rp.publicId == playerStack.player.publicId then
           replayPlayer = rp
         end
 

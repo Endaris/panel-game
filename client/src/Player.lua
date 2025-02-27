@@ -16,6 +16,7 @@ local logger = require("common.lib.logger")
 -- Player implements a lot of setters that emit signals on changes, allowing other components to be notified about the changes by connecting a function to it
 -- Due to this, unless for a good reason, all properties on Player should be set using the setters
 ---@class Player : MatchParticipant, Signal
+---@overload fun(name: string, publicId: integer, isLocal: boolean?)
 local Player = class(
 function(self, name, publicId, isLocal)
   ---@class Player
@@ -295,7 +296,7 @@ function Player.getLocalPlayer()
 end
 
 function Player.createFromReplayPlayer(replayPlayer, playerNumber)
-  local player = Player(replayPlayer.name, replayPlayer.publicId)
+  local player = Player(replayPlayer.name, replayPlayer.publicId, false)
 
   player.playerNumber = playerNumber
   player:setWinCount(replayPlayer.wins)

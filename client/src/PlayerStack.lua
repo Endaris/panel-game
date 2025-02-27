@@ -1503,26 +1503,6 @@ function PlayerStack:canPlaySfx()
   return true
 end
 
-
--- Target must be able to take calls of
--- receiveGarbage(frameToReceive, garbageList)
--- and provide
--- frameOriginX
--- frameOriginY
--- mirror_x
--- canvasWidth
-function PlayerStack.setGarbageTarget(self, newGarbageTarget)
-  if newGarbageTarget ~= nil then
-    -- the abstract notion of a garbage target
-    -- in reality the target will be a stack of course but this is the interface so to speak
-    assert(newGarbageTarget.frameOriginX ~= nil)
-    assert(newGarbageTarget.frameOriginY ~= nil)
-    assert(newGarbageTarget.mirror_x ~= nil)
-    assert(newGarbageTarget.canvasWidth ~= nil)
-  end
-  self.garbageTarget = newGarbageTarget
-end
-
 -- calculates at how many frames the stack's multibar tops out
 function PlayerStack:calculateMultibarFrameCount()
   -- the multibar needs a realistic height that can encompass the sum of health and a realistic maximum stop time

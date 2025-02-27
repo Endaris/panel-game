@@ -470,6 +470,13 @@ function ClientStack:deinit()
   GraphicsUtil:releaseQuad(self.multi_shakeQuad)
 end
 
+---@alias GarbageTarget {frameOriginX: number, frameOriginY: number, mirror_x: integer, canvasWidth: number}
+
+---@param garbageTarget GarbageTarget
+function ClientStack:setGarbageTarget(garbageTarget)
+  self.garbageTarget = garbageTarget
+end
+
 --------------------------------
 ------ abstract functions ------
 --------------------------------

@@ -12,7 +12,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 ---@field sfxMetal integer
 ---@field difficultyQuads love.Quad[]
 ---@field stackHeightQuad love.Quad
----@field player ChallengeModePlayer
+---@field player ChallengeModePlayer?
 
 ---@class ChallengeModePlayerStack
 ---@overload fun(args: table): ChallengeModePlayerStack
@@ -141,14 +141,9 @@ function ChallengeModePlayerStack:renderStackHeight()
   GraphicsUtil.setColor(1, 1, 1, 1)
 end
 
+---@param garbageTarget GarbageTarget
 function ChallengeModePlayerStack:setGarbageTarget(garbageTarget)
-  if garbageTarget ~= nil then
-    assert(garbageTarget.frameOriginX ~= nil)
-    assert(garbageTarget.frameOriginY ~= nil)
-    assert(garbageTarget.mirror_x ~= nil)
-    assert(garbageTarget.canvasWidth ~= nil)
-  end
-  self.garbageTarget = garbageTarget
+  ClientStack.setGarbageTarget(self, garbageTarget)
   if self.engine.attackEngine then
     -- the target needs to match the settings about shock garbage being sorted with 
     self.engine.attackEngine:setGarbageTarget(garbageTarget)
