@@ -124,6 +124,9 @@ function BattleRoom.createFromServerMessage(message)
       if player.name == GAME.localPlayer.name then
         logger.debug("Local player is player number " .. player.playerNumber)
         p = GAME.localPlayer
+        if GAME.localPlayer.publicId < 0 and player.publicId > 0 then
+          GAME.localPlayer.publicId = player.publicId
+        end
       else
         p = Player(player.name, player.publicId or -i, false)
       end
@@ -283,16 +286,6 @@ function BattleRoom:addPlayer(player)
     player.playerNumber = #self.players + 1
   end
   self.players[#self.players + 1] = player
-
-  -- make sure the local player ends up as P1 (left side)
-  -- if both are local or both are not, order by playerNumber
-  table.sort(self.players, function(a, b)
-    if a.isLocal == b.isLocal then
-      return a.playerNumber < b.playerNumber
-    else
-      return a.isLocal
-    end
-  end)
 
   if player.isLocal then
     self:connectSignal("allAssetsLoadedChanged", player, player.setLoaded)
@@ -555,7 +548,6 @@ function BattleRoom:shutdown()
     GAME.netClient:leaveRoom()
   end
   self.hasShutdown = true
-  GAME:initializeLocalPlayer()
   GAME.battleRoom = nil
   self = nil
 end
