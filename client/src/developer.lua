@@ -4,12 +4,9 @@ local system = require("client.src.system")
 -- Put any local development changes you need in here that you don't want commited.
 
 local function enableProfiler(t)
-  local profiler = require("common.lib.zoneProfiler")
-  profiler.enable(true)
-  profiler.setDurationFilter(t)
-  -- we want to optimize in a way that our weakest platforms benefit
-  -- on our weakest platform (android), jit is default disabled
-  jit.off()
+  local prof = require("common.lib.zoneProfiler")
+  prof.enable(true)
+  prof.setDurationFilter(t)
 end
 
 local developerTools = {}

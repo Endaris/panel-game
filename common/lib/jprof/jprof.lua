@@ -86,14 +86,22 @@ if PROF_CAPTURE then
         if not profEnabled then return end
 
         if #zoneStack == 0 then
-            assert(name == "frame", "(jprof) You may only push the 'frame' zone onto an empty stack")
-            frameCount = frameCount + 1
+            if name == "frame" then
+                frameCount = frameCount + 1
+            else
+                -- we might have enabled prof at runtime so some unexpected pushes / pops are to be expected
+                if #profData == 0 then
+                    return
+                else
+                    error("(jprof) You may only push the 'frame' zone onto an empty stack")
+                end
+            end
         end
 
         local memCount = collectgarbage("count")
         --table.insert(zoneStack, name)
         zoneStack[#zoneStack+1] = name
-        addEvent(name, memCount - profMem, love.timer.getTime(), frameCount)
+        addEvent(name, memCount - profMem, love.timer.getTime(), (#zoneStack == 1 and frameCount or nil))
 
         -- Usually keeping count of the memory used by jprof is easy, but when realtime profiling is used
         -- netFlush also frees memory for garbage collection, which might happen at unknown points in time
@@ -110,23 +118,27 @@ if PROF_CAPTURE then
         if not profEnabled then return end
 
         local t = love.timer.getTime()
-        if name then
-            assert(zoneStack[#zoneStack] == name,
-                ("(jprof) Top of zone stack, does not match the zone passed to prof.pop ('%s', on top: '%s')!"):format(name, zoneStack[#zoneStack]))
-        end
 
-        local memCount = collectgarbage("count")
-        zoneStack[#zoneStack] = nil
-        --table.remove(zoneStack)
-        addEvent("pop", memCount - profMem, t)
-        if #zoneStack == 0 then
-            profiler.checkCurrentFrameForDiscard()
-        end
-        -- if profiler.socket and #zoneStack == 0 then
-        --     profiler.netFlush()
-        -- end
-        if profData then
-            profMem = profMem + (collectgarbage("count") - memCount)
+        if zoneStack[#zoneStack] == name then
+            local memCount = collectgarbage("count")
+            zoneStack[#zoneStack] = nil
+            --table.remove(zoneStack)
+            addEvent("pop", memCount - profMem, t)
+            if #zoneStack == 0 then
+                profiler.checkCurrentFrameForDiscard()
+            end
+            -- if profiler.socket and #zoneStack == 0 then
+            --     profiler.netFlush()
+            -- end
+            if profData then
+                profMem = profMem + (collectgarbage("count") - memCount)
+            end
+        else
+            if #profData == 0 then
+                -- we might have enabled prof at run time so some unexpected pushes / pops are to be expected
+            else
+                error(("(jprof) Top of zone stack, does not match the zone passed to prof.pop ('%s', on top: '%s')!"):format(name, zoneStack[#zoneStack]))
+            end
         end
     end
 

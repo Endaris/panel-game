@@ -47,7 +47,7 @@ function CustomRun.sleep()
     prof.push("manual gc")--, tostring(manualGcTime * 1000) .. "ms")
     -- Spend as much time as necessary collecting garbage, but at least 1ms
     -- manualGc itself has a ceiling at which it will stop
-    manualGc(manualGcTime, nil, true)
+    manualGc(manualGcTime)
     currentTime = love.timer.getTime()
     CustomRun.runMetrics.gcDuration = currentTime - originalTime
     originalTime = currentTime

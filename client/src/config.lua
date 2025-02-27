@@ -30,6 +30,8 @@ require("client.src.globals")
 ---@field debug_mode boolean
 ---@field debugShowServers boolean
 ---@field debugShowDesignHelper boolean
+---@field debugProfile boolean
+---@field debugProfileThreshold integer
 ---@field show_fps boolean
 ---@field activeGarbageCollectionPercent number
 ---@field show_ingame_infos boolean
@@ -96,6 +98,9 @@ config = {
     debug_mode                    = false,
     debugShowServers              = false,
     debugShowDesignHelper         = false,
+    debugProfile                  = false,
+    debugProfileThreshold         = 50,
+
     -- Show FPS in the top-left corner of the screen
     show_fps                      = false,
     -- controls how much of the remaining time after a frame is run is used for active garbage collection
@@ -236,6 +241,10 @@ config = {
           if type(read_data.debugShowDesignHelper) == "boolean" then
             configTable.debugShowDesignHelper = read_data.debugShowDesignHelper
           end
+          if type(read_data.debugProfile) == "boolean" then
+            configTable.debugProfile = read_data.debugProfile
+          end
+          -- debugProfileThreshold is not saved to prevent accidental dense profiling
           if type(read_data.show_fps) == "boolean" then
             configTable.show_fps = read_data.show_fps
           end

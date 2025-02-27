@@ -16,8 +16,12 @@ zoneProfiler.pop = noop
 function zoneProfiler.enable(enable)
   zoneProfiler.enabled = enable
   if zoneProfiler.enabled then
+    -- we want to optimize in a way that our weakest platforms benefit
+    -- on our weakest platform (android), jit is default disabled
+    jit.off()
     if zoneProfiler.profiler == profilers.jit then
-
+      -- to be implemented
+      -- for jit profiling we *might* want jit to be on but it depends
     elseif zoneProfiler.profiler == profilers.jprof then
       package.loaded["common.lib.jprof.jprof"] = nil
       PROF_CAPTURE = true
@@ -55,12 +59,3 @@ function zoneProfiler.write()
 end
 
 return zoneProfiler
-
-
---[[
-Was will ich von diesem Profiler?
-Zonenprofilierung mit push + pop
-konfigurierbare Nutzung von diversen Zonenprofilern
-Möglichkeit Frames rauszufiltern, die eine bestimmte dauer unterschreiten
-Eigentlich nur ein Interface, die Funktionalität muss jeweils auch von dem genutzten Zonenprofiler unterstützt werden
-]]

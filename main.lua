@@ -12,7 +12,6 @@ local prof = require("common.lib.zoneProfiler")
 local Replay = require("common.data.Replay")
 require("common.lib.util")
 local consts = require("common.engine.consts")
-local zoneProfiler = require("common.lib.zoneProfiler")
 local system = require("client.src.system")
 
 local Game = require("client.src.Game")
@@ -58,6 +57,7 @@ function love.load(args, rawArgs)
   GAME:updateCanvasPositionAndScale(newPixelWidth, newPixelHeight)
 
   GAME:load()
+  prof.enable(config.debugProfile)
 end
 
 function love.focus(f)
@@ -124,8 +124,8 @@ end
 
 -- quit handling
 function love.quit()
-  if zoneProfiler.enabled then
-    zoneProfiler.write()
+  if prof.enabled then
+    prof.write()
   end
   if GAME.netClient and GAME.netClient:isConnected() then
     GAME.netClient:logout()
