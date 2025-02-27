@@ -499,11 +499,11 @@ function OptionsMenu:loadDebugMenu()
     ui.MenuItem.createButtonMenuItem("Window Size Tester", nil, false, function()
       GAME.navigationStack:push(require("client.src.scenes.WindowSizeTester")())
     end),
-    ui.MenuItem.createToggleButtonGroupMenuItem("Profile", nil, nil, createToggleButtonGroup("debugProfile",
+    ui.MenuItem.createToggleButtonGroupMenuItem("Profile frame times", nil, false, createToggleButtonGroup("debugProfile",
       function()
         prof.enable(config.debugProfile)
       end)),
-    ui.MenuItem.createSliderMenuItem("Discard ms threshold for profiled frames", nil, false, createConfigSlider("debugProfileThreshold", 0, 100,
+    ui.MenuItem.createSliderMenuItem("Discard frames below duration (ms)", nil, false, createConfigSlider("debugProfileThreshold", 0, 100,
       function()
         prof.setDurationFilter(config.debugProfileThreshold / 1000)
       end)),

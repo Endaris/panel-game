@@ -58,6 +58,7 @@ function love.load(args, rawArgs)
 
   GAME:load()
   prof.enable(config.debugProfile)
+  prof.setDurationFilter(config.debugProfileThreshold)
 end
 
 function love.focus(f)

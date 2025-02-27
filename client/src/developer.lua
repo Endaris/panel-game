@@ -3,10 +3,10 @@ local system = require("client.src.system")
 
 -- Put any local development changes you need in here that you don't want commited.
 
-local function enableProfiler(t)
+local function enableProfiler()
   local prof = require("common.lib.zoneProfiler")
   prof.enable(true)
-  prof.setDurationFilter(t)
+  prof.setDurationFilter(config.debugProfileThreshold)
 end
 
 local developerTools = {}
