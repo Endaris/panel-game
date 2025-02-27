@@ -372,12 +372,12 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   match:setStage(stageId)
   match:setSeed(seed)
 
-  if (#match.players > 1 or match.stackInteraction == GameModes.StackInteractions.VERSUS) then
-    GAME.rich_presence:setPresence((match:hasLocalPlayer() and "Playing" or "Spectating") .. " a " .. (self.mode.richPresenceLabel or self.mode.gameScene) ..
-                                       " match", match.players[1].name .. " vs " .. (match.players[2].name), true)
-  else
-    GAME.rich_presence:setPresence("Playing " .. self.mode.richPresenceLabel .. " mode", nil, true)
-  end
+  -- if (#match.players > 1 or match.stackInteraction == GameModes.StackInteractions.VERSUS) then
+  --   GAME.rich_presence:setPresence((match:hasLocalPlayer() and "Playing" or "Spectating") .. " a " .. (self.mode.richPresenceLabel or self.mode.gameScene) ..
+  --                                      " match", match.players[1].name .. " vs " .. (match.players[2].name), true)
+  -- else
+  --   GAME.rich_presence:setPresence("Playing " .. self.mode.richPresenceLabel .. " mode", nil, true)
+  -- end
 
   if self.ranked and not match.room_ratings then
     match.room_ratings = {}

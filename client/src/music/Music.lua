@@ -1,13 +1,14 @@
 local class = require("common.lib.class")
-local musicThread = love.thread.newThread("client/src/music/PlayMusicThread.lua")
+--local musicThread = love.thread.newThread("client/src/music/PlayMusicThread.lua")
 local FileUtils = require("client.src.FileUtils")
 local logger = require("common.lib.logger")
 
 local function playSource(source)
-  if musicThread:isRunning() then
-    musicThread:wait()
-  end
-  musicThread:start(source)
+  -- if musicThread:isRunning() then
+  --   musicThread:wait()
+  -- end
+  -- musicThread:start(source)
+  source:play()
 end
 
 local BUFFER_SIZE = 4096
@@ -104,7 +105,7 @@ function Music:update()
   if self.paused == false then
     self:buffer()
     -- on very long frames it could happen that the music runs out of buffers and stopped due to that even though we never intended to stop the music
-    if not self.queueableSource:isPlaying() and not musicThread:isRunning() then
+    if not self.queueableSource:isPlaying() then --and not musicThread:isRunning() then
       -- in that case, resume playing rather than starting over
       logger.debug("Resumed music play after interrupt")
       playSource(self.queueableSource)

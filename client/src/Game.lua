@@ -27,7 +27,7 @@ local prof = require("common.lib.jprof.jprof")
 local tableUtils = require("common.lib.tableUtils")
 local system = require("client.src.system")
 
-local RichPresence = require("client.lib.rich_presence.RichPresence")
+--local RichPresence = require("client.lib.rich_presence.RichPresence")
 
 -- Provides a scale that is on .5 boundary to make sure it renders well.
 -- Useful for creating new canvas with a solid DPI
@@ -67,8 +67,8 @@ local Game = class(
     self.localization = Localization
     self.replay = {}
     self.currently_paused_tracks = {} -- list of tracks currently paused
-    self.rich_presence = RichPresence()
-    self.rich_presence:initialize("902897593049301004")
+    --self.rich_presence = RichPresence()
+    --self.rich_presence:initialize("902897593049301004")
 
     self.muteSound = false
     self.canvasX = 0
@@ -386,7 +386,7 @@ function Game:update(dt)
 
   self:updateMouseVisibility(dt)
   SoundController:update()
-  self.rich_presence:runCallbacks()
+  --self.rich_presence:runCallbacks()
 end
 
 function Game:draw()
