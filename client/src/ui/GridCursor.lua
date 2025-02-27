@@ -1,6 +1,7 @@
-local UiElement = require("client.src.ui.UIElement")
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UiElement = require(PATH .. ".UIElement")
 local class = require("common.lib.class")
-local directsFocus = require("client.src.ui.FocusDirector")
+local directsFocus = require(PATH .. ".FocusDirector")
 local consts = require("common.engine.consts")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 
@@ -19,7 +20,7 @@ local GridCursor = class(function(self, options)
 
   self.player = options.player
   self.player.cursor = self
-  self.frameImages = options.frameImages or themes[config.theme].images.IMG_char_sel_cursors[self.player.playerNumber]
+  self.frameImages = options.frameImages or themes[config.theme]:getGridCursor(self.player.playerNumber)
   self.imageWidth, self.imageHeight = self.frameImages[1]:getDimensions()
   self.quads = {}
   self.quads.left = love.graphics.newQuad(0, 0, self.imageWidth / 2, self.imageHeight, self.imageWidth, self.imageHeight)

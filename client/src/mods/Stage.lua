@@ -3,7 +3,6 @@ local tableUtils = require("common.lib.tableUtils")
 local fileUtils = require("client.src.FileUtils")
 local consts = require("common.engine.consts")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local Music = require("client.src.music.Music")
 local StageTrack = require("client.src.music.StageTrack")
 local DynamicStageTrack = require("client.src.music.DynamicStageTrack")
 local RelayStageTrack = require("client.src.music.RelayStageTrack")
@@ -11,6 +10,7 @@ local class = require("common.lib.class")
 local Mod = require("client.src.mods.Mod")
 local UpdatingImage = require("client.src.graphics.UpdatingImage")
 local SoundController = require("client.src.music.SoundController")
+local Music = require("client.src.music.Music")
 
 -- Stuff defined in this file:
 --  . the data structure that store a stage's data
@@ -19,10 +19,18 @@ local basic_images = {"thumbnail"}
 local allImages = {"thumbnail", "background"}
 local defaulted_images = {thumbnail = true, background = true} -- those images will be defaulted if missing
 local basic_musics = {}
-local other_musics = {"normal_music", "danger_music", "normal_music_start", "danger_music_start"}
+local other_musics = {"normal_music", "danger_music"}
 
 local randomStage = nil -- acts as the bundle stage for all theme stages
 
+---@class Stage : Mod
+---@field display_name string
+---@field music_style string defines the behaviour for music when switching between normal and danger
+---@field music_volume number defines a multiplier to apply to the StageTrack
+---@field images table<string, love.Image> graphical assets of the stage
+---@field musics table<string, Music> music of the stage
+---@field hasMusic boolean? if the stage has any music
+---@field stageTrack StageTrack? the StageTrack constructed from the stage's music assets
 local Stage =
   class(
   function(s, full_path, folder_name)
@@ -210,50 +218,36 @@ end
 
 -- initializes stage music
 function Stage.sound_init(self, full, yields)
-  self.hasMusic = fileUtils.soundFileExists("normal_music", self.path)
+  self.hasMusic = not not fileUtils.getSoundFileName("normal_music", self.path)
   if self:isBundle() then
     return
   end
   local stage_musics = full and other_musics or basic_musics
   for _, music in ipairs(stage_musics) do
-    self.musics[music] = fileUtils.loadSoundFromSupportExtensions(self.path .. "/" .. music, true)
-    -- Set looping status for music.
-    -- Intros won't loop, but other parts should.
-    if self.musics[music] then
-      if not string.find(music, "start") then
-        self.musics[music]:setLooping(true)
-      else
-        self.musics[music]:setLooping(false)
-      end
-    end
+    self.musics[music] = Music.load(self.path, music)
 
     if yields then
       coroutine.yield()
     end
   end
 
-  self:applyConfigVolume()
-
   if full and self.musics.normal_music then
-    local normalMusic = Music(self.musics.normal_music, self.musics.normal_music_start)
-    local dangerMusic
-    if self.musics.danger_music then
-      dangerMusic = Music(self.musics.danger_music, self.musics.danger_music_start)
-    end
     if self.music_style == "normal" then
-      self.stageTrack = StageTrack(normalMusic, dangerMusic, self.music_volume)
+      self.stageTrack = StageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
     elseif self.music_style == "dynamic" then
-      if dangerMusic then
-        self.stageTrack = DynamicStageTrack(normalMusic, dangerMusic, self.music_volume)
+      if self.musics.danger_music then
+        self.stageTrack = DynamicStageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
       else
         -- DynamicStageTrack HAVE to have danger music
         -- default back to a regular stage track if there is none
-        self.stageTrack = StageTrack(normalMusic, nil, self.music_volume)
+        self.stageTrack = StageTrack(self.musics.normal_music, nil, self.music_volume)
       end
     elseif self.music_style == "relay" then
-      self.stageTrack = RelayStageTrack(normalMusic, dangerMusic, self.music_volume)
+      self.stageTrack = RelayStageTrack(self.musics.normal_music, self.musics.danger_music, self.music_volume)
     end
   end
+
+  self:applyConfigVolume()
 end
 
 -- uninits stage music
@@ -268,7 +262,7 @@ function Stage:validate()
   -- validate that the mod has both normal and danger music if it is dynamic
   -- do this on initialization so modders get a crash on load and know immediately what to fix
   if self.music_style == "dynamic" then
-    if not fileUtils.soundFileExists("normal_music", self.path) or fileUtils.soundFileExists("danger_music", self.path) then
+    if not fileUtils.getSoundFileName("normal_music", self.path) or fileUtils.getSoundFileName("danger_music", self.path) then
       local err = "Error loading stage " .. self.id .. "\n at "
                   .. self.path ..
                   ":\n Stages with dynamic music must have a normal_music and danger_music file"

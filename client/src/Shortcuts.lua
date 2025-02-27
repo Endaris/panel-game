@@ -1,6 +1,7 @@
 local input = require("client.src.inputManager")
 local tableUtils = require("common.lib.tableUtils")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
+local FileUtils = require("client.src.FileUtils")
 
 local function runSystemCommands()
   -- toggle debug mode
@@ -68,7 +69,7 @@ local function handleDumpAttackPattern(playerNumber)
 
     if player and player.stack then
       local data, state = player.stack:getAttackPatternData()
-      saveJSONToPath(data, state, "dumpAttackPattern.json")
+      FileUtils.writeJson("training", data.extraInfo.dateGenerated .. "_" .. data.extraInfo.playerName .. "_" .. data.extraInfo.gpm .. "gpm.json", data, state)
       return true
     end
   end
@@ -127,12 +128,7 @@ function handleShortcuts()
     end
   elseif input.isPressed["Alt"] then
     if input.allKeys.isDown["return"] then
-      local fullscreen = love.window.getFullscreen()
-      love.window.setFullscreen(not fullscreen, "desktop")
-      fullscreen = not fullscreen
-      if not fullscreen and config.maximizeOnStartup and not love.window.isMaximized() then
-        love.window.maximize()
-      end
+      GAME:toggleFullscreen()
       input.isDown = {}
     elseif input.allKeys.isDown["1"] then
       modifyWinCounts(1)

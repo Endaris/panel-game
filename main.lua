@@ -5,7 +5,6 @@ local inputManager = require("client.src.inputManager")
 require("client.src.globals")
 local touchHandler = require("client.src.ui.touchHandler")
 local inputFieldManager = require("client.src.ui.inputFieldManager")
-local ClientMessages = require("common.network.ClientProtocol")
 local RunTimeGraph = require("client.src.RunTimeGraph")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
@@ -14,6 +13,7 @@ local Replay = require("common.data.Replay")
 require("common.lib.util")
 local consts = require("common.engine.consts")
 local zoneProfiler = require("common.lib.zoneProfiler")
+local system = require("client.src.system")
 
 local Game = require("client.src.Game")
 -- move to load once global dependencies have been resolved
@@ -38,7 +38,7 @@ function love.load(args, rawArgs)
   local desktopWidth, desktopHeight = love.window.getDesktopDimensions(displayIndex)
   local w, windowHeight, flags = love.window.getMode()
 
-  if not flags.fullscreen and not flags.borderless and love.system.getOS() ~= "Android" then
+  if not flags.fullscreen and not flags.borderless and not system.isMobileOS() then
     if y == 0 and windowHeight >= desktopHeight then
       if love.window.isMaximized() then
         love.window.restore()
@@ -54,6 +54,7 @@ function love.load(args, rawArgs)
   end
 
   local newPixelWidth, newPixelHeight = love.graphics.getWidth(), love.graphics.getHeight()
+  logger.debug("Updating canvas scale from love.load")
   GAME:updateCanvasPositionAndScale(newPixelWidth, newPixelHeight)
 
   GAME:load()
@@ -147,7 +148,7 @@ function love.quit()
   end
 
   write_conf_file()
-  pcall(love.filesystem.write, "debug.log", table.concat(logger.messages, "\n"))
+  pcall(love.filesystem.write, "debug.log", tostring(logger.messageBuffer))
 
   if GAME.updater then
     while GAME.updater.state ~= GAME_UPDATER_STATES.idle do
@@ -158,7 +159,7 @@ end
 
 function love.errorhandler(msg)
   if lldebugger then
-    pcall(love.filesystem.write, "debug.log", table.concat(logger.messages, "\n"))
+    pcall(love.filesystem.write, "debug.log", tostring(logger.messageBuffer))
     error(msg, 2)
   end
 
@@ -221,9 +222,9 @@ function love.errorhandler(msg)
     table.insert(errorLines, sanitizedMessage)
     logger.info(sanitizedMessage)
   end
-  if logger.messages then
+  if logger.messageBuffer then
     logger.info("config during crash: " .. table_to_string(config))
-    pcall(love.filesystem.write, "crash.log", table.concat(logger.messages, "\n"))
+    pcall(love.filesystem.write, "crash.log", tostring(logger.messageBuffer))
   end
   if #sanitizedMessage ~= #msg then
     table.insert(errorLines, "Invalid UTF-8 string in error message.")
@@ -336,6 +337,7 @@ end
 
 function love.resize(newWidth, newHeight)
   if GAME then
+    logger.debug("Updating canvas scale from love.resize")
     GAME:handleResize(newWidth, newHeight)
   end
 end

@@ -3,11 +3,9 @@ local class = require("common.lib.class")
 local consts = require("common.engine.consts")
 local Telegraph = require("client.src.graphics.Telegraph")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local PixelFontLabel = require("client.src.ui.PixelFontLabel")
-local TextButton = require("client.src.ui.TextButton")
-local Label = require("client.src.ui.Label")
+local ui = require("client.src.ui")
 local input = require("client.src.inputManager")
-local tableUtils = require("common.lib.tableUtils")
+local system = require("client.src.system")
 
 local PortraitGame = class(function(self, sceneParams)
 end,
@@ -15,11 +13,12 @@ GameBase)
 
 PortraitGame.name = "PortraitGame"
 
+---@param match ClientMatch
 local function getTimer(match)
   local frames = 0
   local stack = match.stacks[1]
-  if stack ~= nil and stack.game_stopwatch ~= nil and tonumber(stack.game_stopwatch) ~= nil then
-    frames = stack.game_stopwatch
+  if stack ~= nil and stack.engine.game_stopwatch ~= nil and tonumber(stack.engine.game_stopwatch) ~= nil then
+    frames = stack.engine.game_stopwatch
   end
 
   if match.timeLimit then
@@ -29,14 +28,14 @@ local function getTimer(match)
     end
   end
 
-  return frames_to_time_string(frames, match.ended)
+  return frames_to_time_string(frames, match.engine.ended)
 end
 
 function PortraitGame:customLoad()
   self.uiRoot.width = consts.CANVAS_HEIGHT
   self.uiRoot.height = consts.CANVAS_WIDTH
 
-  local communityMessage = Label({
+  local communityMessage = ui.Label({
     text = "join_community",
     replacements = {"\ndiscord." .. consts.SERVER_LOCATION},
     translate = true,
@@ -48,7 +47,7 @@ function PortraitGame:customLoad()
   self.uiRoot:addChild(self.uiRoot.communityMessage)
 
   local timerScale = themes[config.theme].time_Scale
-  self.uiRoot.timer = PixelFontLabel({
+  self.uiRoot.timer = ui.PixelFontLabel({
     text = getTimer(self.match),
     fontMap = themes[config.theme].fontMaps.time,
     hAlign = "center",
@@ -197,7 +196,7 @@ function PortraitGame:flipToPortrait()
   GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_HEIGHT, consts.CANVAS_WIDTH, {dpiscale=GAME:newCanvasSnappedScale()})
 
   local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" or DEBUG_ENABLED then
+  if system.isMobileOS() or DEBUG_ENABLED then
     -- flip the window dimensions to portrait
     love.window.updateMode(height, width, {})
     love.window.setFullscreen(true)
@@ -218,7 +217,7 @@ function PortraitGame:flipToPortrait()
       stack.origin_x = stack.frameOriginX / stack.gfxScale
 
       -- create a raise button that interacts with the touch controller
-      local raiseButton = TextButton({label = Label({text = "raise", fontSize = 20}), hAlign = "right", vAlign = "bottom", height = player.stack:canvasHeight() / 2})
+      local raiseButton = ui.TextButton({label = ui.Label({text = "raise", fontSize = 20}), hAlign = "right", vAlign = "bottom", height = player.stack:canvasHeight() / 2})
       raiseButton.onTouch = function(button, x, y)
         button.backgroundColor[4] = 1
         stack.touchInputDetector.touchingRaise = true
@@ -251,7 +250,7 @@ function PortraitGame:returnToLandscape()
   GAME.globalCanvas = love.graphics.newCanvas(consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT, {dpiscale=GAME:newCanvasSnappedScale()})
   -- flip the window dimensions to landscape
   local width, height, _ = love.window.getMode()
-  if love.system.getOS() == "Android" or DEBUG_ENABLED then
+  if system.isMobileOS() or DEBUG_ENABLED then
     love.window.updateMode(height, width, {})
     love.window.setFullscreen(false)
     --GAME:updateCanvasPositionAndScale(width, height)

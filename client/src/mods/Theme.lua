@@ -10,6 +10,8 @@ local tableUtils = require("common.lib.tableUtils")
 local SoundController = require("client.src.music.SoundController")
 local UpdatingImage = require("client.src.graphics.UpdatingImage")
 
+local MAX_SUPPORTED_PLAYERS = 2
+
 -- from https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
 local flags = {
   "cn", -- China
@@ -25,13 +27,26 @@ local flags = {
 }
 
 -- Represents the current styles and images to apply to the game UI
+---@class Theme
+---@field path string
+---@field name string
+---@field version ThemeVersion
+---@field images table
+---@field fontMaps table<string, PixelFontMap | PixelFontMap[]>
+---@field sounds table<string, (love.Source | table | nil)>
+---@field musics table<string, Music>
+---@field font table
+---@field main_menu_screen_pos number[]
+---@field main_menu_y_max number
+---@field main_menu_max_height number
+---@field defaultStage Stage
 Theme =
   class(
+---@param self Theme
   function(self, fullPath, foldername)
-    self.VERSIONS = { original = 1, two = 2, fixedOffsets = 3, current = 3}
     self.path = fullPath
     self.name = foldername
-    self.version = self.VERSIONS.original
+    self.version = Theme.THEME_VERSIONS.original
     self.images = {} -- theme images
     self.fontMaps = {}
     self.sounds = {} -- theme sfx
@@ -44,6 +59,9 @@ Theme =
     self.main_menu_max_height = 0
   end
 )
+
+---@enum ThemeVersion
+Theme.THEME_VERSIONS = { original = 1, two = 2, fixedOffsets = 3, current = 3}
 
 Theme.TYPE = "theme"
 -- name of the top level save directory for mods of this type
@@ -266,16 +284,20 @@ function Theme:loadDefaultConfig()
 end
 
 Theme.themeDirectoryPath = THEME_DIRECTORY_PATH or "themes/"
-Theme.defaultThemeDirectoryPath = "client/assets/themes/" .. consts.DEFAULT_THEME_DIRECTORY .. "/"
+Theme.defaultThemeDirectoryPath = "client/assets/themes/" .. consts.DEFAULT_THEME_DIRECTORY
 
 -- loads the image of the given name
+---@param name string
+---@param useBackup boolean?
+---@return love.Texture
 function Theme:load_theme_img(name, useBackup)
   if useBackup == nil then
     useBackup = true
   end
   local img = GraphicsUtil.loadImageFromSupportedExtensions(self.path .. "/" .. name)
   if not img and useBackup then
-    img = GraphicsUtil.loadImageFromSupportedExtensions(Theme.defaultThemeDirectoryPath .. name)
+    img = GraphicsUtil.loadImageFromSupportedExtensions(Theme.defaultThemeDirectoryPath .. "/".. name)
+    ---@cast img -nil # this is not strictly true but the default should always be able to provide a backup
   end
   return img
 end
@@ -303,6 +325,35 @@ function Theme:loadMenuGraphics()
   self.images.bg_select_screen = UpdatingImage(self:load_theme_img("background/select_screen"), self.bg_select_screen_is_tiled, self.bg_select_screen_speed_x, self.bg_select_screen_speed_y, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
   self.images.bg_readme = UpdatingImage(self:load_theme_img("background/readme"), self.bg_readme_is_tiled, self.bg_readme_speed_x, self.bg_readme_speed_y, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
   self.images.IMG_bug = self:load_theme_img("bug")
+end
+
+---@param theme Theme
+---@return table<integer, love.Texture[]>
+local function loadGridCursors(theme)
+  local gridCursors = {}
+  theme.images.IMG_char_sel_cursors = {}
+  for playerNumber = 1, MAX_SUPPORTED_PLAYERS do
+    gridCursors[playerNumber] = {}
+    for position_num = 1, 2 do
+      gridCursors[playerNumber][position_num] = theme:load_theme_img("p" .. playerNumber .. "_select_screen_cursor" .. position_num)
+    end
+  end
+
+  theme.images.IMG_char_sel_cursors = gridCursors
+
+  return theme.images.IMG_char_sel_cursors
+end
+
+---@return love.Texture[]
+local function loadPlayerNumberIcons(theme)
+  local icons = {}
+  for playerNumber = 1, MAX_SUPPORTED_PLAYERS do
+    icons[playerNumber] = theme:load_theme_img("p" .. playerNumber)
+  end
+
+  theme.images.IMG_players = icons
+
+  return theme.images.IMG_players
 end
 
 function Theme:loadSelectionGraphics()
@@ -337,16 +388,8 @@ function Theme:loadSelectionGraphics()
   self.images.IMG_random_stage = self:load_theme_img("random_stage")
   self.images.IMG_random_character = self:load_theme_img("random_character")
 
-  local MAX_SUPPORTED_PLAYERS = 2
-  self.images.IMG_char_sel_cursors = {}
-  self.images.IMG_players = {}
-  for player_num = 1, MAX_SUPPORTED_PLAYERS do
-    self.images.IMG_players[player_num] = self:load_theme_img("p" .. player_num)
-    self.images.IMG_char_sel_cursors[player_num] = {}
-    for position_num = 1, 2 do
-      self.images.IMG_char_sel_cursors[player_num][position_num] = self:load_theme_img("p" .. player_num .. "_select_screen_cursor" .. position_num)
-    end
-  end
+  loadPlayerNumberIcons(self)
+  loadGridCursors(self)
 end
 
 function Theme:loadIngameGraphics()
@@ -377,10 +420,10 @@ function Theme:loadIngameGraphics()
   --play field frames, plus the wall at the bottom.
   self.images.frames = {}
   self.images.walls = {}
-  self.images.frames[1] = self:load_theme_img("frame/frame1P")
-  self.images.frames[2] = self:load_theme_img("frame/frame2P")
-  self.images.walls[1] = self:load_theme_img("frame/wall1P")
-  self.images.walls[2] = self:load_theme_img("frame/wall2P")
+  for i = 1, MAX_SUPPORTED_PLAYERS do
+    self.images.frames[i] = self:load_theme_img("frame/frame" .. i .. "P")
+    self.images.walls[i] = self:load_theme_img("frame/wall" .. i .. "P")
+  end
 
   self:loadIngameLabels()
   self:loadMultibar()
@@ -390,49 +433,43 @@ function Theme:loadIngameGraphics()
 end
 
 function Theme:loadIngameLabels()
-  local numberAtlasCharacters = "0123456789"
-  local numberAtlas1 = self:load_theme_img("numbers_1P")
-  local numberAtlas2 = self:load_theme_img("numbers_2P")
-  self.fontMaps.numbers = {}
-  self.fontMaps.numbers[1] = GraphicsUtil.createPixelFontMap(numberAtlasCharacters, numberAtlas1)
-  self.fontMaps.numbers[2] = GraphicsUtil.createPixelFontMap(numberAtlasCharacters, numberAtlas2)
-
-  self.images.IMG_time = self:load_theme_img("time")
-
   local timeAtlasCharacters = "0123456789:'"
   local timeAtlas = self:load_theme_img("time_numbers")
   self.fontMaps.time = GraphicsUtil.createPixelFontMap(timeAtlasCharacters, timeAtlas)
 
+  local numberAtlasCharacters = "0123456789"
+  self.fontMaps.numbers = {}
+  self.images.speedLabels = {}
+  self.images.levelLabels = {}
+  self.images.scoreLabels = {}
+  self.images.ratingLabels = {}
+  for i = 1, MAX_SUPPORTED_PLAYERS do
+    self.images.speedLabels[i] = self:load_theme_img("speed_" .. i .. "P")
+    self.images.levelLabels[i] = self:load_theme_img("level_" .. i .. "P")
+    self.images.scoreLabels[i] = self:load_theme_img("score_" .. i .. "P")
+    self.images.ratingLabels[i] = self:load_theme_img("rating_" .. i .. "P")
+    local numberAtlas = self:load_theme_img("numbers_" .. i .. "P")
+    self.fontMaps.numbers[i] = GraphicsUtil.createPixelFontMap(numberAtlasCharacters, numberAtlas)
+  end
+
+  self.images.IMG_time = self:load_theme_img("time")
   self.images.IMG_moves = self:load_theme_img("moves")
-
-  self.images.IMG_score_1P = self:load_theme_img("score_1P")
-  self.images.IMG_score_2P = self:load_theme_img("score_2P")
-
-  self.images.IMG_speed_1P = self:load_theme_img("speed_1P")
-  self.images.IMG_speed_2P = self:load_theme_img("speed_2P")
-
-  self.images.IMG_level_1P = self:load_theme_img("level_1P")
-  self.images.IMG_level_2P = self:load_theme_img("level_2P")
-
   self.images.IMG_wins = self:load_theme_img("wins")
-
-  self:loadLevelNumberAtlasses()
 
   self.images.IMG_casual = self:load_theme_img("casual")
   self.images.IMG_ranked = self:load_theme_img("ranked")
 
-  self.images.IMG_rating_1P = self:load_theme_img("rating_1P")
-  self.images.IMG_rating_2P = self:load_theme_img("rating_2P")
+  self:loadLevelNumberAtlasses()
 end
 
 function Theme:loadMultibar()
   self.images.healthbarFrames = {}
   self.images.healthbarFrames.relative = {}
-  self.images.healthbarFrames.relative[1]  = self:load_theme_img("healthbar_frame_1P")
-  self.images.healthbarFrames.relative[2]  = self:load_theme_img("healthbar_frame_2P")
   self.images.healthbarFrames.absolute = {}
-  self.images.healthbarFrames.absolute[1] = self:load_theme_img("healthbar_frame_1P_absolute")
-  self.images.healthbarFrames.absolute[2] = self:load_theme_img("healthbar_frame_2P_absolute")
+  for i = 1, MAX_SUPPORTED_PLAYERS do
+    self.images.healthbarFrames.relative[i]  = self:load_theme_img("healthbar_frame_" .. i .. "P")
+    self.images.healthbarFrames.absolute[i] = self:load_theme_img("healthbar_frame_" .. i .. "P_absolute")
+  end
 
   self.images.IMG_healthbar = self:load_theme_img("healthbar")
 
@@ -482,14 +519,13 @@ function Theme:loadCards()
   end
 end
 
+-- effectively these are the same as PixelFontMaps, convert them?
 function Theme:loadLevelNumberAtlasses()
   self.images.levelNumberAtlas = {}
-  self.images.levelNumberAtlas[1] = {}
-  self.images.levelNumberAtlas[1].image = self:load_theme_img("level_numbers_1P")
-  self.images.levelNumberAtlas[2] = {}
-  self.images.levelNumberAtlas[2].image = self:load_theme_img("level_numbers_2P")
   local levels = 11
-  for i = 1, #self.images.levelNumberAtlas do
+  for i = 1, MAX_SUPPORTED_PLAYERS do
+    self.images.levelNumberAtlas[i] = {}
+    self.images.levelNumberAtlas[i].image = self:load_theme_img("level_numbers_" .. i .. "P")
     local charWidth = self.images.levelNumberAtlas[i].image:getWidth() / levels
     local charHeight = self.images.levelNumberAtlas[i].image:getHeight()
     local quads = {}
@@ -560,16 +596,15 @@ function Theme:deinitializeGraphics()
       -- numbers have 1 more level of nesting so make a union of that and set it to fontMap
       local f = {}
       for i = 1, #fontMap do
-        for _, value in pairs(fontMap[i]) do
+        for _, value in pairs(fontMap.charToQuad[i]) do
           f[#f + 1] = value
         end
       end
       fontMap = f
     end
 
-    for symbol, value in pairs(fontMap) do
-      if tostring(symbol):len() == 1 and type(value) == "userdata" and value:typeOf("Quad") then
-        -- userdata means this is a love object which in turn means we can safely use typeOf to confirm it's a quad
+    for _, value in pairs(fontMap.charToQuad) do
+      if value:typeOf("Quad") then
         GraphicsUtil:releaseQuad(value)
       end
     end
@@ -594,10 +629,14 @@ function Theme:applyConfigVolume()
   SoundController:applyMusicVolume(self.musics)
 end
 
+
+---@param theme Theme
+---@param SFX_name string
+---@return love.Source?
 local function loadThemeSfx(theme, SFX_name)
   local dirs_to_check = {
     theme.path .. "/sfx/",
-    Theme.defaultThemeDirectoryPath .. "sfx/"
+    Theme.defaultThemeDirectoryPath .. "/sfx/"
   }
   return fileUtils.findSound(SFX_name, dirs_to_check)
 end
@@ -630,12 +669,14 @@ function Theme:loadIngameSfx()
   self.sounds.game_over = loadThemeSfx(self, "gameover")
   self.sounds.countdown = loadThemeSfx(self, "countdown")
   self.sounds.go = loadThemeSfx(self, "go")
+  ---@type love.Source[]
   self.sounds.garbage_thud = {
       loadThemeSfx(self, "thud_1"),
       loadThemeSfx(self, "thud_2"),
       loadThemeSfx(self, "thud_3")
     }
-    self.sounds.pops = {}
+  ---@type love.Source[][]
+  self.sounds.pops = {}
 
   for popLevel = 1, 4 do
     self.sounds.pops[popLevel] = {}
@@ -653,40 +694,19 @@ function Theme:loadSfx(full)
   end
 end
 
-local basicMusics = {"main", "main_start"}
-local fullMusics = {"main", "main_start", "select_screen", "select_screen_start", "title_screen", "title_screen_start"} -- the music used in a theme
+local basicMusics = {"main",}
+local fullMusics = {"main", "select_screen", "title_screen",} -- the music used in a theme
 
 function Theme:loadMusic(full)
   local musics = full and fullMusics or basicMusics
   for _, music in ipairs(musics) do
-    self.musics[music] = fileUtils.loadSoundFromSupportExtensions(self.path .. "/music/" .. music, true)
-    if self.musics[music] then
-      if not string.find(music, "start") then
-        self.musics[music]:setLooping(true)
-      else
-        self.musics[music]:setLooping(false)
-      end
-    end
-  end
-
-  self.stageTracks = {}
-
-  if self.musics.main then
-    self.stageTracks.main = Music(self.musics.main, self.musics.main_start)
-  end
-
-  if self.musics.select_screen then
-    self.stageTracks.select_screen = Music(self.musics.select_screen, self.musics.select_screen_start)
-  end
-
-  if self.musics.title_screen then
-    self.stageTracks.title_screen = Music(self.musics.title_screen, self.musics.title_screen_start)
+    self.musics[music] = Music.load(self.path .. "/music", music)
   end
 end
 
 function Theme:upgradeAndSaveVerboseConfig()
-  if self.version == self.VERSIONS.original then
-    self.version = self.VERSIONS.two
+  if self.version == Theme.THEME_VERSIONS.original then
+    self.version = Theme.THEME_VERSIONS.two
     self:saveVerboseConfig()
   end
 end
@@ -703,7 +723,7 @@ function Theme:saveVerboseConfig()
     jsonData[key] = self[key]
   end
 
-  love.filesystem.write(jsonPath, json.encode(jsonData))
+  fileUtils.writeJson(self.path, "config.json", jsonData)
 end
 
 -- initializes theme using the json settings
@@ -713,9 +733,9 @@ function Theme.json_init(self)
   -- Then override with custom theme
   local customData = fileUtils.readJsonFile(self.path .. "/config.json")
   local version = self:versionForJSONVersion(customData.version)
-  if version == self.VERSIONS.original then
+  if version == Theme.THEME_VERSIONS.original then
     self:loadVersion1DefaultValues()
-  elseif version == self.VERSIONS.two then
+  elseif version == Theme.THEME_VERSIONS.two then
     self:loadVersion2DefaultValues()
   end
   self:applyJSONData(customData)
@@ -727,7 +747,7 @@ function Theme:versionForJSONVersion(jsonVersion)
   if jsonVersion and type(jsonVersion) == "number" then
     return  jsonVersion
   else
-    return self.VERSIONS.original
+    return Theme.THEME_VERSIONS.original
   end
 end
 
@@ -766,7 +786,7 @@ function Theme:final_init()
 end
 
 function Theme:offsetsAreFixed()
-  return self.version >= self.VERSIONS.fixedOffsets
+  return self.version >= Theme.THEME_VERSIONS.fixedOffsets
 end
 
 function Theme:chainImage(chainAmount)
@@ -801,7 +821,7 @@ function Theme:loadDefaultStage()
     end
     defaultStage:preload()
     defaultStage:load(true)
-  elseif self.id ~= consts.DEFAULT_THEME_DIRECTORY then
+  elseif self.path ~= consts.DEFAULT_THEME_DIRECTORY then
     defaultStage = themes[consts.DEFAULT_THEME_DIRECTORY]:loadDefaultStage()
   else
     error("No default stage available")
@@ -867,6 +887,214 @@ end
 
 function Theme:playMoveSfx()
   SoundController:playSfx(self.sounds.menu_move)
+end
+
+---@param index integer?
+---@return love.Texture[]
+function Theme:getGridCursor(index)
+  index = index or 1
+  if not (self.images.IMG_char_sel_cursors and self.images.IMG_char_sel_cursors[index]) then
+    loadGridCursors(self)
+  end
+
+  return self.images.IMG_char_sel_cursors[index]
+end
+
+---@return love.Texture
+function Theme:getWinsLabel()
+  index = index or 1
+  if not self.images.IMG_wins then
+    self:loadIngameLabels()
+  end
+
+  return self.images.IMG_wins
+end
+
+---@return love.Texture
+function Theme:getMovesLabel()
+  index = index or 1
+  if not self.images.IMG_moves then
+    self:loadIngameLabels()
+  end
+
+  return self.images.IMG_moves
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getSpeedLabel(index)
+  index = index or 1
+  if not (self.images.speedLabels and self.images.speedLabels[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.images.speedLabels[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getRatingLabel(index)
+  index = index or 1
+  if not (self.images.ratingLabels and self.images.ratingLabels[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.images.ratingLabels[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getLevelLabel(index)
+  index = index or 1
+  if not (self.images.levelLabels and self.images.levelLabels[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.images.levelLabels[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getScoreLabel(index)
+  index = index or 1
+  if not (self.images.scoreLabels and self.images.scoreLabels[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.images.scoreLabels[index]
+end
+
+---@param index integer?
+---@return PixelFontMap
+function Theme:getNumberPixelFont(index)
+  index = index or 1
+  if not (self.fontMaps.numbers and self.fontMaps.numbers[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.fontMaps.numbers[index]
+end
+
+---@param index integer?
+---@return {image: love.Texture, charWidth: integer, charHeight: integer, quads: love.Quad[]}
+function Theme:getLevelAtlas(index)
+  index = index or 1
+  if not (self.images.levelNumberAtlas and self.images.levelNumberAtlas[index]) then
+    self:loadIngameLabels()
+  end
+
+  return self.images.levelNumberAtlas[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getFrame(index)
+  index = index or 1
+  if not (self.images.frames and self.images.frames[index]) then
+    self:loadIngameGraphics()
+  end
+
+  return self.images.frames[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getWall(index)
+  index = index or 1
+  if not (self.images.walls and self.images.walls[index]) then
+    self:loadIngameGraphics()
+  end
+
+  return self.images.walls[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getPlayerNumberIcon(index)
+  index = index or 1
+  if not (self.images.IMG_players and self.images.IMG_players[index]) then
+    loadPlayerNumberIcons(self)
+  end
+
+  return self.images.IMG_players[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getHealthBarFrameAbsolute(index)
+  index = index or 1
+  if not (self.images.healthbarFrames and self.images.healthbarFrames.absolute and self.images.healthbarFrames.absolute[index]) then
+    self:loadMultibar()
+  end
+
+  return self.images.healthbarFrames.absolute[index]
+end
+
+---@param index integer?
+---@return love.Texture
+function Theme:getHealthBarFrameRelative(index)
+  index = index or 1
+  if not (self.images.healthbarFrames and self.images.healthbarFrames.relative and self.images.healthbarFrames.relative[index]) then
+    self:loadMultibar()
+  end
+
+  return self.images.healthbarFrames.relative[index]
+end
+
+---@param index integer
+---@return MultiBarPack
+function Theme:getMultibar(index)
+  ---@class MultiBarPack
+  local multibar = {
+    frameAbsolute = self:getHealthBarFrameAbsolute(index),
+    frameRelative = self:getHealthBarFrameRelative(index),
+    health = self.images.IMG_healthbar,
+    preStop = self.images.IMG_multibar_prestop_bar,
+    stop = self.images.IMG_multibar_stop_bar,
+    shake = self.images.IMG_multibar_shake_bar,
+  }
+
+  return multibar
+end
+
+---@return PixelFontMap
+function Theme:getTimePixelFont()
+  index = index or 1
+  if not self.fontMaps.time then
+    self:loadIngameLabels()
+  end
+
+  return self.fontMaps.time
+end
+
+---@param index integer
+---@return IngameAssetPack
+function Theme:getIngameAssetPack(index)
+  ---@class IngameAssetPack
+  local pack = {
+    speed = self:getSpeedLabel(index),
+    score = self:getScoreLabel(index),
+    rating = self:getRatingLabel(index),
+    level = self:getLevelLabel(index),
+    levelAtlas = self:getLevelAtlas(index),
+    numberPixelFont = self:getNumberPixelFont(index),
+    frame = self:getFrame(index),
+    wall = self:getWall(index),
+    multibar = self:getMultibar(index),
+    wins = self:getWinsLabel(),
+    moves = self:getMovesLabel(),
+  }
+
+  return pack
+end
+
+function Theme:getSelectionAssetPack(index)
+  local pack = {
+    playerNumberIcon = self:getPlayerNumberIcon(index),
+    gridCursor = self:getGridCursor(index),
+  }
+
+  return pack
 end
 
 return Theme

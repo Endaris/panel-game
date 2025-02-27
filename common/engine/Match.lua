@@ -265,7 +265,7 @@ function Match:run()
   -- for i = 1, #self.players do
   --   local stack = self.players[i].stack
   --   if stack and stack.is_local not stack:game_ended() then
-  --     assert(#stack.input_buffer == 0, "Local games should always simulate all inputs")
+  --     assert(#stack.confirmedInput == stack.clock, "Local games should always simulate all inputs")
   --   end
   -- end
 
@@ -294,7 +294,7 @@ function Match:pushGarbageTo(stack)
       end
       local garbageDelivery = st:getReadyGarbageAt(stack.clock)
       if garbageDelivery then
-        logger.debug("Pushing garbage delivery to incoming garbage queue: " .. table_to_string(garbageDelivery))
+        --logger.debug("Pushing garbage delivery to incoming garbage queue: " .. table_to_string(garbageDelivery))
         stack:receiveGarbage(garbageDelivery)
       end
     end

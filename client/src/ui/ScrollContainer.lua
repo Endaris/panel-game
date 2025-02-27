@@ -1,6 +1,10 @@
-local UiElement = require("client.src.ui.UIElement")
+local PATH = (...):gsub('%.[^%.]+$', '')
+local UiElement = require(PATH .. ".UIElement")
 local class = require("common.lib.class")
 local util = require("common.lib.util")
+
+---@class ScrollContainerOptions : UiElementOptions
+---@field scrollOrientation ("vertical" | "horizontal" | nil)
 
 ---@class ScrollContainer : UiElement
 ---@field scrollOrientation string "vertical" or "horizontal"
@@ -15,9 +19,9 @@ function(self, options)
   self.scrollOrientation = "vertical" or options.scrollOrientation
   self.scrollOffset = 0
   self.maxScrollOffset = 0
-  self.TYPE = "ScrollContainer"
 end,
 UiElement)
+ScrollContainer.TYPE = "ScrollContainer"
 
 -- bounds the scrollOffset of the container to the desired value between 0 and -maxScrollOffset
 ---@param value number desired scrollOffset value

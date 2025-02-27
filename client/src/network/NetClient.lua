@@ -214,6 +214,7 @@ local function processMatchStartMessage(self, message)
   self:setState(states.INGAME)
 end
 
+---@param self NetClient
 local function processRankedStatusMessage(self, message)
   if not self.room then
     return
@@ -249,12 +250,7 @@ local function processInputMessages(self)
   if self.room and self.room.match then
     for _, msg in ipairs(messages) do
       for type, data in pairs(msg) do
-        logger.trace("Processing: " .. type .. " with data:" .. data)
-        if type == NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix then
-          self.room.match.stacks[1]:receiveConfirmedInput(data)
-        elseif type == NetworkProtocol.serverMessageTypes.opponentInput.prefix then
-          self.room.match.stacks[2]:receiveConfirmedInput(data)
-        end
+        self.room.match:receiveInput(type, data)
       end
     end
   end

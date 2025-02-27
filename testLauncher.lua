@@ -91,13 +91,13 @@ end
 function love.quit()
   print(love.timer.getTime() - t .. "s elapsed")
   require("jit.p").stop()
-  love.filesystem.write("test.log", table.concat(logger.messages, "\n"))
+  love.filesystem.write("test.log", tostring(logger.messageBuffer))
 end
 
 local love_errorhandler = love.errorhandler
 function love.errorhandler(msg)
   logger.info(msg)
-  pcall(love.filesystem.write, "test-crash.log", table.concat(logger.messages, "\n"))
+  pcall(love.filesystem.write, "test-crash.log", tostring(logger.messageBuffer))
   if lldebugger then
     error(msg, 2)
   else

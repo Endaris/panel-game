@@ -12,6 +12,7 @@ local GameBase = require("client.src.scenes.GameBase")
 local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTransition")
 local Easings = require("client.src.Easings")
 local consts = require("common.engine.consts")
+local system = require("client.src.system")
 
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
 ---@class BattleRoom : Signal
@@ -123,6 +124,9 @@ function BattleRoom.createFromServerMessage(message)
       if player.name == GAME.localPlayer.name then
         logger.debug("Local player is player number " .. player.playerNumber)
         p = GAME.localPlayer
+        if GAME.localPlayer.publicId < 0 and player.publicId > 0 then
+          GAME.localPlayer.publicId = player.publicId
+        end
       else
         p = Player(player.name, player.publicId or -i, false)
       end
@@ -376,7 +380,7 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   self.state = BattleRoom.states.MatchInProgress
   local transition = BlackFadeTransition(GAME.timer, 0.4, Easings.getSineIn())
   -- for touch android players load a different scene
-  if (love.system.getOS() == "Android" or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
+  if (system.isMobileOS() or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
   --but only if they are the only local player cause for 2p vs local using portrait mode would be bad
       tableUtils.count(self.players, function(p) return p.isLocal and p.human end) == 1 then
     for _, player in ipairs(self.players) do
@@ -443,7 +447,7 @@ function BattleRoom.updateInputConfigurationForPlayer(player, lock)
       end
     end
     if not player.inputConfiguration and not GAME.input.mouse.claimed then
-      if GAME.input.mouse.isDown[1] or GAME.input.mouse.isPressed[1] then
+      if tableUtils.length(GAME.input.mouse.isDown) > 0 or tableUtils.length(GAME.input.mouse.isPressed) > 0 then
         player:setInputMethod("touch")
         logger.debug("Claiming touch configuration for player " .. player.playerNumber)
         player:restrictInputs(GAME.input.mouse)
@@ -544,7 +548,6 @@ function BattleRoom:shutdown()
     GAME.netClient:leaveRoom()
   end
   self.hasShutdown = true
-  GAME:initializeLocalPlayer()
   GAME.battleRoom = nil
   self = nil
 end

@@ -1,6 +1,3 @@
-You can also find this file with prettier formatting at  
-https://github.com/panel-attack/panel-game/blob/beta/docs/characters.md  
-
 This README consists of 3 parts.  
 In part 1 some general thoughts on character creation are discussed.  
 In part 2 you can find an exhaustive list of all assets used for characters.  
@@ -468,6 +465,34 @@ The fade animation is centered over the panel but smaller than a panel.
 Aspect ratio of each individual frame: 1:1 (square)
 Recommended size per frame: 64x64px (scaled down to 32 pixels centered on panel center, so gives 2x resolution)
 
+#### telegraph
+
+These are the images used to render the attack animations and attacks above the player's stack before they fall
+
+##### attack
+
+The image used to send an attack from your chain or combo to the opponent's telegraph
+
+Recommended size: 96x96px (2x resolution)
+
+##### 1-wide
+
+1 through 6, these are used for single high garbage blocks, 1 and 2 can only be used in training mode
+
+Recommended size: 144x96px (2x resolution)
+
+##### 1-tall
+
+1 through 14, these are used for chain garbage
+
+Recommended size: 144x96px (2x resolution)
+
+##### 6-wide-metal
+
+Image used for metal garbage
+
+Recommended size: 144x96px (2x resolution)
+
 -----------------------------------------------------------
 
 
@@ -544,8 +569,8 @@ This is forwarded to the enemy player.
 
 ## Music
 
-Allowed formats are .mp3, .ogg, .wav, .it, .flac.  
-.midi files are not supported by the framework Panel Attack uses so please refrain from asking devs to support that.
+Supported formats are .ogg, .wav, .mp3, .flac.  
+Additionally there is limited support for modplug formats see [here](modplug.md)
 
 A character's music may be used depending on Panel Attack's audio settings and game mode.  
 See the documentation of the music_style configuration for how this behaves.
