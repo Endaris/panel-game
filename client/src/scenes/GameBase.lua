@@ -26,7 +26,9 @@ local ClientStack = require("client.src.ClientStack")
 ---@field gameOverStartTime number?
 ---@field fadeOutMusicOnGameOver boolean
 ---@field frameInfo table
+---@field droppedFrameCount integer
 ---@field match ClientMatch
+---@field customDraw fun()?
 local GameBase = class(
 ---@param self GameBase
   function (self, sceneParams)
@@ -51,6 +53,7 @@ local GameBase = class(
       currentTime = nil,
       expectedFrameCount = nil
     }
+    self.droppedFrameCount = 0
 
     self:load(sceneParams)
   end,
@@ -148,7 +151,7 @@ end
 function GameBase:initializeFrameInfo()
   self.frameInfo.startTime = nil
   self.frameInfo.frameCount = 0
-  GAME.droppedFrames = 0
+  self.droppedFrameCount = 0
 end
 
 function GameBase:load(sceneParams)
@@ -274,7 +277,7 @@ function GameBase:runGame(dt)
     self.match:run()
     prof.pop("Match:run")
   until (self.frameInfo.frameCount >= self.frameInfo.expectedFrameCount)
-  GAME.droppedFrames = GAME.droppedFrames + (framesRun - 1)
+  self.droppedFrameCount = self.droppedFrameCount + (framesRun - 1)
 
   self:customRun()
 
@@ -361,6 +364,10 @@ function GameBase:draw()
   if self.match.isPaused then
     self.match:draw_pause()
     self.uiRoot:draw()
+  end
+
+  if config.show_fps then
+    GraphicsUtil.printf("Dropped Frames: " .. self.droppedFrameCount, 1, 12)
   end
 end
 

@@ -584,10 +584,6 @@ local function isRollbackActive(stack)
 end
 
 function ClientMatch:render()
-  if config.show_fps then
-    GraphicsUtil.print("Dropped Frames: " .. GAME.droppedFrames, 1, 12)
-  end
-
   if config.show_fps and #self.stacks > 1 then
     local drawY = 23
     for i = 1, #self.stacks do
