@@ -6,6 +6,7 @@ local tableUtils = require("common.lib.tableUtils")
 local consts = require("common.engine.consts")
 local CharacterLoader = require("client.src.mods.CharacterLoader")
 local SoundController = require("client.src.music.SoundController")
+local system = require("client.src.system")
 
 local ModManagement = class(function(self, options)
   self.keepMusic = true
@@ -101,6 +102,12 @@ function ModManagement:load()
     end
   )
 
+  self.openSaveDirectoryButton = ui.MenuItem.createButtonMenuItem(
+    "op_openSaveDir", nil, true, function(button, inputs)
+      love.system.openURL(love.filesystem.getSaveDirectory())
+    end
+  )
+
   self.backButton = ui.MenuItem.createButtonMenuItem("back", nil, true,
     function(button, inputs)
       GAME.theme:playCancelSfx()
@@ -108,13 +115,18 @@ function ModManagement:load()
     end
   )
 
+  local menuItems = {
+    self.manageCharactersButton,
+    self.manageStagesButton,
+    self.backButton
+  }
+
+  if system.supportsFileBrowserOpen() then
+    table.insert(menuItems, 3, self.openSaveDirectoryButton)
+  end
+
   self.menu = ui.Menu({
-    menuItems =
-    {
-      self.manageCharactersButton,
-      self.manageStagesButton,
-      self.backButton
-    },
+    menuItems = menuItems,
     x = 100,
     y = 0,
     hAlign = "left",

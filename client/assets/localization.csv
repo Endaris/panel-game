@@ -538,3 +538,4 @@ op_performance_drain,Label for the option to configure the amount of active garb
 pause_resume,Label for the resume button in the pause menu,Resume,,,,Continuar,Fortsetzen,,
 op_menu_music,Label for toggling menu music,Menu Music,,,,,Menü Musik,,
 rp_browser_info_challenge_stage,Label for displaying the stage of the challenge mode difficulty,Stage,,,,,Stufe,,
+op_openSaveDir,Button to open the save directory of Panel Attack, Open Save Directory,,,,,Speicherort öffnen,,
