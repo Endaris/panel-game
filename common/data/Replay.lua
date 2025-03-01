@@ -183,6 +183,7 @@ function Replay:generateFileName()
   return filename
 end
 
+---@param replay Replay
 function Replay.replayCanBeViewed(replay)
   if replay.engineVersion > consts.ENGINE_VERSION then
     -- replay is from a newer game version, we can't watch
@@ -193,6 +194,19 @@ function Replay.replayCanBeViewed(replay)
     -- definitely can not watch
     return false
   else
+    if replay.engineVersion == consts.ENGINE_VERSIONS.LEVELDATA and replay.gameMode.stackInteraction == GameModes.StackInteractions.ATTACK_ENGINE then
+      -- in v048 garbage matching was broken for blocks higher than 1 row that were touching horizontally, so deny viewing those
+      local hasBrokenGarbage = false
+      for i, attackPattern in ipairs(replay.players[1].settings.attackEngineSettings.attackPatterns) do
+        if attackPattern.height > 1 and attackPattern.width <= 3 then
+          hasBrokenGarbage = true
+          break
+        end
+      end
+
+      return not hasBrokenGarbage
+    end
+
     -- can view this one
     return true
   end
