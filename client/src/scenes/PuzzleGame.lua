@@ -18,7 +18,7 @@ local PuzzleGame = class(
 
 PuzzleGame.name = "PuzzleGame"
 
-function PuzzleGame:customLoad(sceneParams)
+function PuzzleGame:customLoad()
   -- we cache the player's input configuration here so that only inputs from this config can start the next puzzle
   self.inputConfiguration = self.match.players[1].inputConfiguration
   self.puzzleSet = self.match.players[1].settings.puzzleSet

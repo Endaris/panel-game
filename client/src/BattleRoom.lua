@@ -379,19 +379,24 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   match:start()
   self.state = BattleRoom.states.MatchInProgress
   local transition = BlackFadeTransition(GAME.timer, 0.4, Easings.getSineIn())
+  local scene = self:createScene(self.match)
+  scene:load()
+  GAME.navigationStack:push(scene, transition)
+end
+
+function BattleRoom:createScene(match)
   -- for touch android players load a different scene
   if (system.isMobileOS() or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
   --but only if they are the only local player cause for 2p vs local using portrait mode would be bad
       tableUtils.count(self.players, function(p) return p.isLocal and p.human end) == 1 then
     for _, player in ipairs(self.players) do
       if player.isLocal and player.human and player.settings.inputMethod == "touch" then
-        GAME.navigationStack:push(require("client.src.scenes.PortraitGame")({match = self.match}), transition)
-        return
+        return require("client.src.scenes.PortraitGame")({match = match})
       end
     end
   end
   if self.gameScene then
-    GAME.navigationStack:push(self.gameScene({match = self.match}), transition)
+    return self.gameScene({match = match})
   end
 end
 

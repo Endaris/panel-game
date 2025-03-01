@@ -19,7 +19,6 @@ local ClientStack = require("client.src.ClientStack")
 ---@class GameBase : Scene
 ---@field saveReplay boolean
 ---@field text string
----@field currentStage string stageId
 ---@field pauseState table
 ---@field minDisplayTime number
 ---@field maxDisplayTime number
@@ -29,6 +28,8 @@ local ClientStack = require("client.src.ClientStack")
 ---@field droppedFrameCount integer
 ---@field match ClientMatch
 ---@field customDraw fun()?
+---@field stage Stage
+---@field stageTrack StageTrack?
 local GameBase = class(
 ---@param self GameBase
   function (self, sceneParams)
@@ -37,7 +38,6 @@ local GameBase = class(
     -- set in load
     self.text = nil
     self.keepMusic = false
-    self.currentStage = config.stage
     self.pauseState = {
       musicWasPlaying = false
     }
@@ -55,7 +55,7 @@ local GameBase = class(
     }
     self.droppedFrameCount = 0
 
-    self:load(sceneParams)
+    self.match = sceneParams.match
   end,
   Scene
 )
@@ -66,7 +66,7 @@ GameBase.name = "GameBase"
 
 -- Game mode specific game state setup
 -- Called during load()
-function GameBase:customLoad(sceneParams) end
+function GameBase:customLoad() end
 
 -- Game mode specific behavior for leaving the game
 -- called during runGame()
@@ -126,6 +126,18 @@ function GameBase:pickMusicSource()
   end
 end
 
+---@return StageTrack? stageTrack
+function GameBase:getStageTrack()
+  if self.keepMusic and SoundController.activeTrack and SoundController.activeTrack:isPlaying() then
+    return SoundController.activeTrack
+  else
+    local musicSource = self:pickMusicSource()
+    if musicSource then
+      return musicSource.stageTrack
+    end
+  end
+end
+
 -- unlike regular asset load, this function connects the used assets to the match so they cannot be unloaded
 function GameBase:loadAssets(match)
   for i, stack in ipairs(match.stacks) do
@@ -154,24 +166,23 @@ function GameBase:initializeFrameInfo()
   self.droppedFrameCount = 0
 end
 
-function GameBase:load(sceneParams)
-  self:loadAssets(sceneParams.match)
-  self.match = sceneParams.match
+function GameBase:load()
+  self:loadAssets(self.match)
   self.match:connectSignal("matchEnded", self, self.genericOnMatchEnded)
   self.match:connectSignal("dangerMusicChanged", self, self.changeMusic)
   self.match:connectSignal("countdownEnded", self, self.onGameStart)
 
   self.stage = stages[self.match.stageId]
   self.backgroundImage = UpdatingImage(self.stage.images.background, false, 0, 0, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
-  self.musicSource = self:pickMusicSource()
+  self.stageTrack = self:getStageTrack()
 
   local pauseMenuItems = {
     ui.MenuItem.createButtonMenuItem("pause_resume", nil, true, function()
       GAME.theme:playValidationSfx()
       self.pauseMenu:setVisibility(false)
       self.match:togglePause()
-      if self.musicSource and self.musicSource.stageTrack and self.pauseState.musicWasPlaying then
-        SoundController:playMusic(self.musicSource.stageTrack)
+      if self.stageTrack and self.pauseState.musicWasPlaying then
+        SoundController:playMusic(self.stageTrack)
       end
       self:initializeFrameInfo()
     end),
@@ -193,11 +204,11 @@ function GameBase:load(sceneParams)
   self.pauseMenu:setVisibility(false)
   self.uiRoot:addChild(self.pauseMenu)
 
-  self:customLoad(sceneParams)
-
   leftover_time = 1 / 120
 
   self:initializeFrameInfo()
+
+  self:customLoad()
 end
 
 local function playerPressingStart(match)
@@ -215,8 +226,8 @@ function GameBase:handlePause()
       self.match:togglePause()
       self.pauseMenu:setVisibility(true)
 
-      if self.musicSource and self.musicSource.stageTrack then
-        self.pauseState.musicWasPlaying = self.musicSource.stageTrack:isPlaying()
+      if self.stageTrack then
+        self.pauseState.musicWasPlaying = self.stageTrack:isPlaying()
         SoundController:pauseMusic()
       end
       GAME.theme:playValidationSfx()
@@ -313,14 +324,14 @@ function GameBase:musicCanChange()
 end
 
 function GameBase:onGameStart()
-  if self.musicSource then
-    SoundController:playMusic(self.musicSource.stageTrack)
+  if self.stageTrack then
+    SoundController:playMusic(self.stageTrack)
   end
 end
 
 function GameBase:changeMusic(useDangerMusic)
-  if self.musicSource and self.musicSource.stageTrack and self:musicCanChange() then
-    self.musicSource.stageTrack:changeMusic(useDangerMusic)
+  if self.stageTrack and self:musicCanChange() then
+    self.stageTrack:changeMusic(useDangerMusic)
   end
 end
 
