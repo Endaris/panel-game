@@ -16,7 +16,19 @@ local FileUtils = require("client.src.FileUtils")
 local ClientStack = require("client.src.ClientStack")
 
 -- Scene template for running any type of game instance (endless, vs-self, replays, etc.)
+---@class GameBase : Scene
+---@field saveReplay boolean
+---@field text string
+---@field currentStage string stageId
+---@field pauseState table
+---@field minDisplayTime number
+---@field maxDisplayTime number
+---@field gameOverStartTime number?
+---@field fadeOutMusicOnGameOver boolean
+---@field frameInfo table
+---@field match ClientMatch
 local GameBase = class(
+---@param self GameBase
   function (self, sceneParams)
     self.saveReplay = true
 

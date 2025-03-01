@@ -6,6 +6,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 local consts = require("common.engine.consts")
 
 -- Scene for a puzzle mode instance of the game
+---@class PuzzleGame : GameBase
 local PuzzleGame = class(
   function (self, sceneParams)
     self.keepMusic = true

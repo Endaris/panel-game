@@ -724,7 +724,7 @@ function ClientMatch:resetPuzzle()
   engine:resetPuzzle()
 
   self.engine.clock = 0
-  self.engine:setCountdown(engine.puzzle)
+  self.engine:setCountdown(engine.puzzle.doCountdown)
   self.players[1]:incrementWinCount()
 end
 
