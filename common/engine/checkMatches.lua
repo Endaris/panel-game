@@ -3,7 +3,7 @@ local tableUtils = require("common.lib.tableUtils")
 local PanelGenerator = require("common.engine.PanelGenerator")
 local consts = require("common.engine.consts")
 local LevelData = require("common.data.LevelData")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 ---@class Stack
 local Stack = require("common.engine.Stack")
 table.clear = require("table.clear")

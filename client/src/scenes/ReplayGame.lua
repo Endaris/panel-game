@@ -4,7 +4,7 @@ local consts = require("common.engine.consts")
 local util = require("common.lib.util")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 
 local ReplayGame = class(
   function (self, sceneParams)

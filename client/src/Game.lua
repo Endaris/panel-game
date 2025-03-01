@@ -23,7 +23,7 @@ local NetClient = require("client.src.network.NetClient")
 local StartUp = require("client.src.scenes.StartUp")
 local SoundController = require("client.src.music.SoundController")
 require("client.src.BattleRoom")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 local tableUtils = require("common.lib.tableUtils")
 local system = require("client.src.system")
 

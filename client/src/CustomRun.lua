@@ -1,5 +1,5 @@
 local manualGc = require("client.lib.batteries.manual_gc")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 
 local CustomRun = {}
 CustomRun.FRAME_RATE = 1 / 60
