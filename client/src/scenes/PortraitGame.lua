@@ -76,14 +76,15 @@ end
 
 -- when using the stack function, the multibar ends up somewhere
 -- so just force absolute multibar with a somewhat fixed draw
+---@param stack PlayerStack
 function PortraitGame:drawMultibar(stack)
   local stop_time = stack.engine.stop_time
   local shake_time = stack.engine.shake_time
 
   -- before the first move, display the stop time from the puzzle, not the stack
-  if stack.puzzle and stack.puzzle.puzzleType == "clear" and stack.puzzle.moves == stack.puzzle.remaining_moves then
-    stop_time = stack.puzzle.stop_time
-    shake_time = stack.puzzle.shake_time
+  if stack.engine.puzzle and stack.engine.puzzle.puzzleType == "clear" and stack.engine.puzzle.moves == stack.engine.puzzle.remaining_moves then
+    stop_time = stack.engine.puzzle.stop_time
+    shake_time = stack.engine.puzzle.shake_time
   end
 
   framePos = framePos or themes[config.theme].healthbar_frame_Pos
@@ -92,7 +93,7 @@ function PortraitGame:drawMultibar(stack)
 
   local scale = themes[config.theme].healthbar_frame_Scale * (stack.gfxScale / 3)
 
-  GraphicsUtil.draw(themes[config.theme].images.healthbarFrames.absolute[stack.which],
+  GraphicsUtil.draw(stack.assets.multibar.frameAbsolute,
                     math.floor((stack.frameOriginX + stack.panelOriginXOffset + framePos[1] / 3) * stack.gfxScale),
                     stack.frameOriginY * stack.gfxScale,
                     0,
@@ -105,7 +106,7 @@ function PortraitGame:drawMultibar(stack)
 
   scale = themes[config.theme].multibar_Scale
   local healthHeight = (stack.engine.health / multiBarFrameCount) * multiBarMaxHeight
-  self:drawBar(stack, themes[config.theme].images.IMG_healthbar, stack.healthQuad, barPos, healthHeight, 0, 0, scale)
+  self:drawBar(stack, stack.assets.multibar.health, stack.healthQuad, barPos, healthHeight, 0, 0, scale)
 
   bottomOffset = healthHeight
 
@@ -116,12 +117,12 @@ function PortraitGame:drawMultibar(stack)
     -- shake is only drawn if it is greater than prestop + stop
     -- shake is always guaranteed to fit
     local shakeHeight = (shake_time / multiBarFrameCount) * multiBarMaxHeight
-    self:drawBar(stack, themes[config.theme].images.IMG_multibar_shake_bar, stack.multi_shakeQuad, barPos, shakeHeight, bottomOffset, 0, scale)
+    self:drawBar(stack, stack.assets.multibar.shake, stack.multi_shakeQuad, barPos, shakeHeight, bottomOffset, 0, scale)
   else
     -- stop/prestop are only drawn if greater than shake
     if stop_time > 0 then
       stopHeight = math.min(stop_time, multiBarFrameCount - stack.engine.health) / multiBarFrameCount * multiBarMaxHeight
-      self:drawBar(stack, themes[config.theme].images.IMG_multibar_stop_bar, stack.multi_stopQuad, barPos, stopHeight, bottomOffset, 0, scale)
+      self:drawBar(stack, stack.assets.multibar.stop, stack.multi_stopQuad, barPos, stopHeight, bottomOffset, 0, scale)
 
       bottomOffset = bottomOffset + stopHeight
     end
@@ -136,7 +137,7 @@ function PortraitGame:drawMultibar(stack)
         preStopHeight = stack.engine.pre_stop_time / multiBarFrameCount * multiBarMaxHeight
       end
 
-      self:drawBar(stack, themes[config.theme].images.IMG_multibar_prestop_bar, stack.multi_prestopQuad, barPos, preStopHeight, bottomOffset, 0, scale)
+      self:drawBar(stack, stack.assets.multibar.preStop, stack.multi_prestopQuad, barPos, preStopHeight, bottomOffset, 0, scale)
 
       if remainingSeconds > 0 then
         local formattedSeconds = string.format("%." .. themes[config.theme].multibar_LeftoverTime_Decimals .. "f", remainingSeconds)
