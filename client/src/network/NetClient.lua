@@ -274,6 +274,7 @@ local function spectate2pVsOnlineMatch(self, spectateRequestGrantedMessage)
   if GAME.battleRoom.match then
     self.state = states.INGAME
     local vsScene = GameBase({match = GAME.battleRoom.match})
+    vsScene:load()
     local catchUp = GameCatchUp(vsScene)
     -- need to push character select, otherwise the pop on match end will return to lobby
     -- directly add to the stack so it isn't getting displayed
