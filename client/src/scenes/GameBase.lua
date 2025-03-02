@@ -128,7 +128,8 @@ end
 
 ---@return StageTrack? stageTrack
 function GameBase:getStageTrack()
-  if self.keepMusic and SoundController.activeTrack and SoundController.activeTrack:isPlaying() then
+  -- the active track could be a regular Music instead of a StageTrack; checking for changeMusic assures it to be a StageTrack (or having the interface of one)
+  if self.keepMusic and SoundController.activeTrack and SoundController.activeTrack.changeMusic and SoundController.activeTrack:isPlaying() then
     return SoundController.activeTrack
   else
     local musicSource = self:pickMusicSource()
