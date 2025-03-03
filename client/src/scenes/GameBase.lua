@@ -283,7 +283,7 @@ function GameBase:runGame(dt)
   self.frameInfo.currentTime = love.timer.getTime()
   self.frameInfo.expectedFrameCount = math.ceil((self.frameInfo.currentTime - self.frameInfo.startTime) * 60)
   repeat
-    prof.push("Match:run", self.match.clock)
+    prof.push("Match:run")--, self.match.clock)
     self.frameInfo.frameCount = self.frameInfo.frameCount + 1
     framesRun = framesRun + 1
     self.match:run()
@@ -423,9 +423,9 @@ function GameBase:drawHUD()
 
       stack:drawLevel()
       if stack.analytic then
-        prof.push("Stack:drawAnalyticData")
+        --prof.push("Stack:drawAnalyticData")
         stack:drawAnalyticData()
-        prof.pop("Stack:drawAnalyticData")
+        --prof.pop("Stack:drawAnalyticData")
       end
     end
 

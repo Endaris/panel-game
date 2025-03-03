@@ -39,23 +39,28 @@ function CustomRun.sleep()
   local currentTime = originalTime
 
   local idleTime = targetTime - currentTime
+
+  -- Why manual collection below is commented out:
+  -- The game has been getting so good at keeping memory allocations low that it is mainly introducing a ton of extra work with finished cycles all the time
+  -- in comparison the automatic garbage collector would run not nearly as much and not even finish cycles because there is not enough garbage
+
   -- actively collecting garbage is very CPU intensive
   -- only do it while a match is on-going
   -- and only while not profiling for memory allocations
-  if not PROFILE_MEMORY and GAME and GAME.battleRoom and GAME.battleRoom.match and GAME.focused and not GAME.battleRoom.match.isPaused then
-    local manualGcTime = math.max(0.001, idleTime * config.activeGarbageCollectionPercent)
-    prof.push("manual gc")--, tostring(manualGcTime * 1000) .. "ms")
-    -- Spend as much time as necessary collecting garbage, but at least 1ms
-    -- manualGc itself has a ceiling at which it will stop
-    manualGc(manualGcTime)
-    currentTime = love.timer.getTime()
-    CustomRun.runMetrics.gcDuration = currentTime - originalTime
-    originalTime = currentTime
-    idleTime = targetTime - currentTime
-    prof.pop("manual gc")
-  else
+  -- if not PROFILE_MEMORY and GAME and GAME.battleRoom and GAME.battleRoom.match and GAME.focused and not GAME.battleRoom.match.isPaused then
+  --   local manualGcTime = math.max(0.001, idleTime * config.activeGarbageCollectionPercent)
+  --   prof.push("manual gc")--, tostring(manualGcTime * 1000) .. "ms")
+  --   -- Spend as much time as necessary collecting garbage, but at least 1ms
+  --   -- manualGc itself has a ceiling at which it will stop
+  --   manualGc(manualGcTime)
+  --   currentTime = love.timer.getTime()
+  --   CustomRun.runMetrics.gcDuration = currentTime - originalTime
+  --   originalTime = currentTime
+  --   idleTime = targetTime - currentTime
+  --   prof.pop("manual gc")
+  -- else
     CustomRun.runMetrics.gcDuration = 0
-  end
+  -- end
 
   -- Sleep any remaining amount of time to fill up the frametime to 1/60 of a second
   -- don't sleep the entire remaining idle time though:

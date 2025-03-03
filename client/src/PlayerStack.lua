@@ -243,9 +243,9 @@ function PlayerStack:onRollback(engine)
   self.clock = engine.clock
   self.game_stopwatch = engine.game_stopwatch
 
-  prof.push("rollback copy analytics")
+  --prof.push("rollback copy analytics")
   self.analytic:rollbackToFrame(self.clock)
-  prof.pop("rollback copy analytics")
+  --prof.pop("rollback copy analytics")
 end
 
 function PlayerStack:onRollbackSaved(frame)
@@ -258,12 +258,12 @@ function PlayerStack:onRun()
 
   self:playSfx()
 
-  prof.push("update popfx")
+  --prof.push("update popfx")
   self:update_popfxs()
-  prof.pop("update popfx")
-  prof.push("update cards")
+  --prof.pop("update popfx")
+  --prof.push("update cards")
   self:update_cards()
-  prof.pop("update cards")
+  --prof.pop("update cards")
 
   -- these were previously at the start of Stack:run
   -- so by putting them at the end, order is restored
@@ -1372,7 +1372,7 @@ function PlayerStack:queueAttackSoundEffect(isChainLink, chainSize, comboSize, m
 end
 
 function PlayerStack:playSfx()
-  prof.push("stack sfx")
+  --prof.push("stack sfx")
   -- Update Sound FX
   if self:canPlaySfx() then
     if self.sfxSwap then
@@ -1451,7 +1451,7 @@ function PlayerStack:playSfx()
       self.sfxGarbagePop = 0
     end
   end
-  prof.pop("stack sfx")
+  --prof.pop("stack sfx")
 end
 
 local MAX_TAUNT_PER_10_SEC = 4
@@ -1468,7 +1468,7 @@ function PlayerStack:taunt(taunt_type)
 end
 
 function PlayerStack:processTaunts()
-  prof.push("taunt")
+  --prof.push("taunt")
   -- TAUNTING
   if self:canPlaySfx() then
     if self.taunt_up ~= nil then
@@ -1481,7 +1481,7 @@ function PlayerStack:processTaunts()
       self.taunt_down = nil
     end
   end
-  prof.pop("taunt")
+  --prof.pop("taunt")
 end
 
 function PlayerStack:canPlaySfx()

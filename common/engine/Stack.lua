@@ -912,12 +912,12 @@ function Stack.run(self)
     end
   end
 
-  prof.push("Stack:setupInput")
+  --prof.push("Stack:setupInput")
   self:setupInput()
-  prof.pop("Stack:setupInput")
-  prof.push("Stack:simulate")
+  --prof.pop("Stack:setupInput")
+  --prof.push("Stack:simulate")
   self:simulate()
-  prof.pop("Stack:simulate")
+  --prof.pop("Stack:simulate")
   prof.pop("Stack:run")
   self:emitSignal("finishedRun")
 end
@@ -1007,7 +1007,7 @@ end
 
 -- One run of the engine routine.
 function Stack.simulate(self)
-  prof.push("simulate 1")
+  --prof.push("simulate 1")
   -- self:prep_first_row()
   local panels = self.panels
   local swapped_this_frame = nil
@@ -1019,22 +1019,22 @@ function Stack.simulate(self)
   elseif self.stop_time ~= 0 then
     self.stop_time = self.stop_time - 1
   end
-  prof.pop("simulate 1")
+  --prof.pop("simulate 1")
 
-  prof.push("simulate danger updates")
+  --prof.push("simulate danger updates")
   self.panels_in_top_row = self:hasPanelsInTopRow()
-  prof.pop("simulate danger updates")
+  --prof.pop("simulate danger updates")
 
-  prof.push("new row stuff")
+  --prof.push("new row stuff")
   if self.displacement == 0 and self.has_risen then
     self.top_cur_row = self.height
     self:new_row()
   end
 
   self:updateRiseLock()
-  prof.pop("new row stuff")
+  --prof.pop("new row stuff")
 
-  prof.push("speed increase")
+  --prof.push("speed increase")
   -- Increase the speed if applicable
   if self.levelData.speedIncreaseMode == 1 then
     -- increase per interval
@@ -1047,10 +1047,10 @@ function Stack.simulate(self)
     self.speed = min(self.speed + 1, 99)
     self.panels_to_speedup = self.panels_to_speedup + PANELS_TO_NEXT_SPEED[self.speed]
   end
-  prof.pop("speed increase")
+  --prof.pop("speed increase")
 
 
-  prof.push("passive raise")
+  --prof.push("passive raise")
   -- Phase 0 //////////////////////////////////////////////////////////////
   -- Stack automatic rising
   if self.behaviours.passiveRaise then
@@ -1076,9 +1076,9 @@ function Stack.simulate(self)
     end
   end
 
-  prof.pop("passive raise")
+  --prof.pop("passive raise")
 
-  prof.push("reset stuff")
+  --prof.push("reset stuff")
   if not self.panels_in_top_row and not self:has_falling_garbage() then
     self.health = self.levelData.maxHealth
   end
@@ -1086,16 +1086,16 @@ function Stack.simulate(self)
   if self.displacement % 16 ~= 0 then
     self.top_cur_row = self.height - 1
   end
-  prof.pop("reset stuff")
+  --prof.pop("reset stuff")
 
-  prof.push("old swap")
+  --prof.push("old swap")
   -- Begin the swap we input last frame.
   if self:swapQueued() then
     self:swap(self.queuedSwapRow, self.queuedSwapColumn)
     swapped_this_frame = true
     self:setQueuedSwapPosition(0, 0)
   end
-  prof.pop("old swap")
+  --prof.pop("old swap")
 
   prof.push("Stack:checkMatches")
   self:checkMatches()
@@ -1104,19 +1104,19 @@ function Stack.simulate(self)
   self:updatePanels()
   prof.pop("Stack:updatePanels")
 
-  prof.push("shake time updates")
+  --prof.push("shake time updates")
   self.prev_shake_time = self.shake_time
   self.shake_time = self.shake_time - 1
   self.shake_time = max(self.shake_time, self.shake_time_on_frame)
   if self.shake_time == 0 then
     self.peak_shake_time = 0
   end
-  prof.pop("shake time updates")
+  --prof.pop("shake time updates")
 
   -- Phase 3. /////////////////////////////////////////////////////////////
   -- Actions performed according to player input
 
-  prof.push("cursor movement")
+  --prof.push("cursor movement")
   -- CURSOR MOVEMENT
   if self.inputMethod == "touch" then
       --with touch, cursor movement happen at stack:control time
@@ -1134,9 +1134,9 @@ function Stack.simulate(self)
   if self.cur_timer ~= self.cur_wait_time then
     self.cur_timer = self.cur_timer + 1
   end
-  prof.pop("cursor movement")
+  --prof.pop("cursor movement")
 
-  prof.push("new swap")
+  --prof.push("new swap")
   -- Queue Swapping
   -- Note: Swapping is queued in Stack.controls for touch mode
   if self.inputMethod == "controller" then
@@ -1149,9 +1149,9 @@ function Stack.simulate(self)
       self.swap_2 = false
     end
   end
-  prof.pop("new swap")
+  --prof.pop("new swap")
 
-  prof.push("active raise")
+  --prof.push("active raise")
   -- MANUAL STACK RAISING
   if self.behaviours.allowManualRaise then
     if self.manual_raise then
@@ -1183,9 +1183,9 @@ function Stack.simulate(self)
     -- the raising is cancelled
     end
   end
-  prof.pop("active raise")
+  --prof.pop("active raise")
 
-  prof.push("chain update")
+  --prof.push("chain update")
   -- if at the end of the routine there are no chain panels, the chain ends.
   if self.chain_counter ~= 0 and not self:hasChainingPanels() then
     self.chain_counter = 0
@@ -1195,16 +1195,16 @@ function Stack.simulate(self)
       self.outgoingGarbage:finalizeCurrentChain(self.clock)
     end
   end
-  prof.pop("chain update")
+  --prof.pop("chain update")
 
   if (self.score > 99999) then
     self.score = 99999
   -- lol owned
   end
 
-  prof.push("updateActivePanels")
+  --prof.push("updateActivePanels")
   self:updateActivePanels()
-  prof.pop("updateActivePanels")
+  --prof.pop("updateActivePanels")
 
   if self.puzzle and self.n_active_panels == 0 and self.n_prev_active_panels == 0 then
     if self:checkGameOver() then
@@ -1212,15 +1212,15 @@ function Stack.simulate(self)
     end
   end
 
-  prof.push("process staged garbage")
+  --prof.push("process staged garbage")
   self.outgoingGarbage:processStagedGarbageForClock(self.clock)
-  prof.pop("process staged garbage")
+  --prof.pop("process staged garbage")
 
-  prof.push("remove_extra_rows")
+  --prof.push("remove_extra_rows")
   self:remove_extra_rows()
-  prof.pop("remove_extra_rows")
+  --prof.pop("remove_extra_rows")
 
-  prof.push("double-check panels_in_top_row")
+  --prof.push("double-check panels_in_top_row")
   --double-check panels_in_top_row
 
   self.panels_in_top_row = false
@@ -1230,9 +1230,9 @@ function Stack.simulate(self)
       self.panels_in_top_row = true
     end
   end
-  prof.pop("double-check panels_in_top_row")
+  --prof.pop("double-check panels_in_top_row")
 
-  prof.push("doublecheck panels above top row")
+  --prof.push("doublecheck panels above top row")
   -- If any panels (dangerous or not) are in rows above the top row, garbage should not fall.
   for row_idx = self.height + 1, #self.panels do
     for col_idx = 1, self.width do
@@ -1241,7 +1241,7 @@ function Stack.simulate(self)
       end
     end
   end
-  prof.pop("doublecheck panels above top row")
+  --prof.pop("doublecheck panels above top row")
 
 
   prof.push("pop from incoming garbage q")
@@ -1252,13 +1252,13 @@ function Stack.simulate(self)
   end
   prof.pop("pop from incoming garbage q")
 
-  prof.push("update times")
+  --prof.push("update times")
   self.clock = self.clock + 1
 
   if self.game_stopwatch_running then
     self.game_stopwatch = (self.game_stopwatch or -1) + 1
   end
-  prof.pop("update times")
+  --prof.pop("update times")
 end
 
 function Stack:runCountDownIfNeeded()
