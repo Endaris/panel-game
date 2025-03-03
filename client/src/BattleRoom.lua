@@ -223,8 +223,8 @@ end
 
 local RATING_SPREAD_MODIFIER = 400
 function BattleRoom:updateExpectedWinrates()
-  if tableUtils.trueForAll(self.players, function(p) return p.rating and tonumber(p.rating) end) then
-    -- this isn't feasible to do for n-player matchups at this point
+  -- this isn't feasible to do for n-player matchups at this point
+  if #self.players == 2 and tableUtils.trueForAll(self.players, function(p) return p.rating and tonumber(p.rating) end) then
     local p1 = self.players[1]
     local p2 = self.players[2]
     p1:setExpectedWinrate((100 * math.round(1 / (1 + 10 ^ ((p2.rating - p1.rating) / RATING_SPREAD_MODIFIER)), 2)))
