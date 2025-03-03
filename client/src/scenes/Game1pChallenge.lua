@@ -7,8 +7,6 @@ local ChallengeModeRecapScene = require("client.src.scenes.ChallengeModeRecapSce
 
 -- Scene for one battle in a challenge mode game
 local Game1pChallenge = class(function(self, sceneParams)
-  self.match:connectSignal("matchEnded", self, self.onMatchEnded)
-  self.match:connectSignal("pauseChanged", self, self.pauseChanged)
   self.totalTimeQuads = {}
   self.stageIndex = GAME.battleRoom.stageIndex
   self.timeSplitElement = ChallengeModeTimeSplitsUIElement({x = consts.CANVAS_WIDTH / 2, y = 280}, GAME.battleRoom, GAME.battleRoom.stageIndex)
@@ -17,6 +15,12 @@ local Game1pChallenge = class(function(self, sceneParams)
 end, GameBase)
 
 Game1pChallenge.name = "Game1pChallenge"
+
+
+function Game1pChallenge:customLoad()
+  self.match:connectSignal("matchEnded", self, self.onMatchEnded)
+  self.match:connectSignal("pauseChanged", self, self.pauseChanged)
+end
 
 function Game1pChallenge:startNextScene()
   if GAME.battleRoom.challengeComplete then

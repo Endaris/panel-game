@@ -15,6 +15,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 local Telegraph = require("client.src.graphics.Telegraph")
 local MatchParticipant = require("client.src.MatchParticipant")
 local ChallengeModePlayerStack = require("client.src.ChallengeModePlayerStack")
+local NetworkProtocol = require("common.network.NetworkProtocol")
 
 ---@class ClientMatch
 ---@field players table[]
@@ -159,7 +160,7 @@ function ClientMatch:start()
     for i, player in ipairs(self.players) do
       local attackEngineHost = ChallengeModePlayerStack({
         which = #engineStacks + 1,
-        is_local = true,
+        is_local = not (self.replay and self.replay.completed),
         character = CharacterLoader.fullyResolveCharacterSelection(),
         attackSettings = player.settings.attackEngineSettings,
         match = self,
@@ -167,7 +168,7 @@ function ClientMatch:start()
       attackEngineHost:setGarbageTarget(player.stack)
       player.stack:setGarbageSource(attackEngineHost)
       engineStacks[#engineStacks+1] = attackEngineHost.engine
-      self.stacks[attackEngineHost.which] = attackEngineHost
+      self.stacks[attackEngineHost.engine.which] = attackEngineHost
     end
   end
 
@@ -184,8 +185,8 @@ function ClientMatch:start()
   -- here on client side we can simply acknowledge that only up to 2 players per match are supported
   if self.stackInteraction == GameModes.StackInteractions.SELF then
     for i, stack in ipairs(self.stacks) do
-        stack:setGarbageTarget(stack)
-        stack:setGarbageSource(stack)
+      stack:setGarbageTarget(stack)
+      stack:setGarbageSource(stack)
     end
   elseif self.stackInteraction == GameModes.StackInteractions.VERSUS then
     for i, stack1 in ipairs(self.stacks) do
@@ -197,6 +198,8 @@ function ClientMatch:start()
       end
     end
   end
+
+  self:moveStacks()
 
   if self.engine.timeLimit then
     self.panicTicksPlayed = {}
@@ -236,6 +239,24 @@ end
 function ClientMatch:deinit()
   for i = 1, #self.stacks do
     self.stacks[i]:deinit()
+  end
+end
+
+function ClientMatch:moveStacks()
+  -- we want to render the stacks in a particular order so that the local player ends up as P1 (left side)
+  -- BUT: we want to keep player indexing consistent over boundaries (client <-> replay <- server) to not mess with replay saving
+  -- so we solve the rendering requirement via a shallowcpy and assigning positions directly to the stacks rather than starting reordering shenanigans all across the code base
+  local stacks = shallowcpy(self.stacks)
+  table.sort(stacks, function(a, b)
+    if a.is_local == b.is_local then
+      return a.player_number < b.player_number
+    else
+      return a.is_local
+    end
+  end)
+
+  for i, stack in ipairs(stacks) do
+    stack:moveForRenderIndex(i)
   end
 end
 
@@ -295,7 +316,19 @@ function ClientMatch:finalizeReplay()
     replay:setRanked(self.ranked)
 
     for i, replayPlayer in ipairs(replay.players) do
-      local player = self.players[i]
+      local player
+      if replayPlayer.human then
+        for _, p in ipairs(self.players) do
+          if p.publicId == replayPlayer.publicId then
+            player = p
+            break
+          end
+        end
+        assert(player, "Didn't find player with publicId " .. tostring(replayPlayer.publicId))
+      else
+        player = self.players[i]
+      end
+
 
       -- attackEngines may get their own "player" in replays even though they don't have one for the Match
       -- in these cases the attackEngine data is saved with the targeted player so let's not duplicate the data
@@ -333,6 +366,27 @@ function ClientMatch:finalizeReplay()
     end
 
     Replay.finalizeReplay(self.engine, self.replay)
+
+    -- we kept player order consistent throughout from replay creation to evade issues with properties/inputs being recorded on the wrong replayPlayer
+    -- but now all the data is there so reorder the players according to display
+    local replayPlayers = shallowcpy(self.replay.players)
+
+    for _, playerStack in ipairs(self.stacks) do
+      local replayPlayer
+      for _, rp in ipairs(replayPlayers) do
+        if playerStack.player and playerStack.player.human and rp.publicId == playerStack.player.publicId then
+          replayPlayer = rp
+        end
+
+        if replayPlayer then
+          self.replay.players[playerStack.renderIndex] = replayPlayer
+          if self.replay.winnerId == replayPlayer.publicId then
+            self.replay.winnerIndex = playerStack.renderIndex
+          end
+        end
+      end
+    end
+
   end
 
   return replay
@@ -530,15 +584,11 @@ local function isRollbackActive(stack)
 end
 
 function ClientMatch:render()
-  if config.show_fps then
-    GraphicsUtil.print("Dropped Frames: " .. GAME.droppedFrames, 1, 12)
-  end
-
   if config.show_fps and #self.stacks > 1 then
     local drawY = 23
     for i = 1, #self.stacks do
       local stack = self.stacks[i]
-      GraphicsUtil.print("P" .. stack.which .." Average Latency: " .. stack.engine.framesBehind, 1, drawY)
+      GraphicsUtil.print("P" .. stack.renderIndex .." Average Latency: " .. stack.engine.framesBehind, 1, drawY)
       drawY = drawY + 11
     end
 
@@ -670,8 +720,30 @@ function ClientMatch:resetPuzzle()
   engine:resetPuzzle()
 
   self.engine.clock = 0
-  self.engine:setCountdown(engine.puzzle)
+  self.engine:setCountdown(engine.puzzle.doCountdown)
   self.players[1]:incrementWinCount()
+end
+
+---@param prefix "I" | "U"
+---@param input string
+function ClientMatch:receiveInput(prefix, input)
+  if self:hasLocalPlayer() then
+    if self.players[1].human and self.players[1].isLocal then
+      ---@diagnostic disable-next-line: param-type-mismatch
+      self.stacks[2]:receiveConfirmedInput(input)
+    elseif self.players[2].human and self.players[2].isLocal then
+      ---@diagnostic disable-next-line: param-type-mismatch
+      self.stacks[1]:receiveConfirmedInput(input)
+    end
+  else
+    if prefix == NetworkProtocol.serverMessageTypes.opponentInput.prefix then
+      ---@diagnostic disable-next-line: param-type-mismatch
+      self.stacks[2]:receiveConfirmedInput(input)
+    else
+      ---@diagnostic disable-next-line: param-type-mismatch
+      self.stacks[1]:receiveConfirmedInput(input)
+    end
+  end
 end
 
 return ClientMatch

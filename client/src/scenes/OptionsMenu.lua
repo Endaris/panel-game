@@ -14,6 +14,7 @@ local util = require("common.lib.util")
 local ModManagement = require("client.src.scenes.ModManagement")
 local system = require("client.src.system")
 local logger = require("common.lib.logger")
+local prof = require("common.lib.zoneProfiler")
 
 -- Scene for the options menu
 local OptionsMenu = class(function(self, sceneParams)
@@ -498,6 +499,15 @@ function OptionsMenu:loadDebugMenu()
     ui.MenuItem.createButtonMenuItem("Window Size Tester", nil, false, function()
       GAME.navigationStack:push(require("client.src.scenes.WindowSizeTester")())
     end),
+    ui.MenuItem.createToggleButtonGroupMenuItem("Profile frame times", nil, false, createToggleButtonGroup("debugProfile",
+      function()
+        prof.enable(config.debugProfile)
+        prof.setDurationFilter(config.debugProfileThreshold / 1000)
+      end)),
+    ui.MenuItem.createSliderMenuItem("Discard frames below duration (ms)", nil, false, createConfigSlider("debugProfileThreshold", 0, 100,
+      function()
+        prof.setDurationFilter(config.debugProfileThreshold / 1000)
+      end)),
     ui.MenuItem.createButtonMenuItem("back", nil, nil, function()
           GAME.theme:playCancelSfx()
           self:switchToScreen("baseMenu")

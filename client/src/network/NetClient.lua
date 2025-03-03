@@ -250,12 +250,7 @@ local function processInputMessages(self)
   if self.room and self.room.match then
     for _, msg in ipairs(messages) do
       for type, data in pairs(msg) do
-        logger.trace("Processing: " .. type .. " with data:" .. data)
-        if type == NetworkProtocol.serverMessageTypes.secondOpponentInput.prefix then
-          self.room.match.stacks[1]:receiveConfirmedInput(data)
-        elseif type == NetworkProtocol.serverMessageTypes.opponentInput.prefix then
-          self.room.match.stacks[2]:receiveConfirmedInput(data)
-        end
+        self.room.match:receiveInput(type, data)
       end
     end
   end
@@ -279,6 +274,7 @@ local function spectate2pVsOnlineMatch(self, spectateRequestGrantedMessage)
   if GAME.battleRoom.match then
     self.state = states.INGAME
     local vsScene = GameBase({match = GAME.battleRoom.match})
+    vsScene:load()
     local catchUp = GameCatchUp(vsScene)
     -- need to push character select, otherwise the pop on match end will return to lobby
     -- directly add to the stack so it isn't getting displayed

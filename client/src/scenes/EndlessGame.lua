@@ -5,12 +5,15 @@ local GameModes = require("common.engine.GameModes")
 -- Scene for an endless mode instance of the game
 local EndlessGame = class(
   function (self, sceneParams)
-    self.match:connectSignal("matchEnded", self, self.onMatchEnded)
   end,
   GameBase
 )
 
 EndlessGame.name = "EndlessGame"
+
+function EndlessGame:customLoad()
+  self.match:connectSignal("matchEnded", self, self.onMatchEnded)
+end
 
 function EndlessGame:onMatchEnded(match)
   if match.players[1].settings.style == GameModes.Styles.CLASSIC then

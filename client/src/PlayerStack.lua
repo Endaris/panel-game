@@ -4,7 +4,7 @@ require("common.lib.util")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local TouchDataEncoding = require("common.data.TouchDataEncoding")
 local consts = require("common.engine.consts")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 local EngineStack = require("common.engine.Stack")
 require("common.engine.checkMatches")
 local tableUtils = require("common.lib.tableUtils")
@@ -37,7 +37,6 @@ function(self, args)
   ---@class PlayerStack
   self = self
   self.player = args.player
-  args.which = self.which
   self.stackInteraction = args.stackInteraction
 
   self.engine = EngineStack(args)
@@ -248,9 +247,9 @@ function PlayerStack:onRollback(engine)
   self.clock = engine.clock
   self.game_stopwatch = engine.game_stopwatch
 
-  prof.push("rollback copy analytics")
+  --prof.push("rollback copy analytics")
   self.analytic:rollbackToFrame(self.clock)
-  prof.pop("rollback copy analytics")
+  --prof.pop("rollback copy analytics")
 end
 
 function PlayerStack:onRollbackSaved(frame)
@@ -263,12 +262,12 @@ function PlayerStack:onRun()
 
   self:playSfx()
 
-  prof.push("update popfx")
+  --prof.push("update popfx")
   self:update_popfxs()
-  prof.pop("update popfx")
-  prof.push("update cards")
+  --prof.pop("update popfx")
+  --prof.push("update cards")
   self:update_cards()
-  prof.pop("update cards")
+  --prof.pop("update cards")
 
   -- these were previously at the start of Stack:run
   -- so by putting them at the end, order is restored
@@ -313,10 +312,7 @@ end
 -- Consider recycling any memory that might leave around a lot of garbage.
 -- Note: You can just leave the variables to clear / garbage collect on their own if they aren't large.
 function PlayerStack:deinit()
-  GraphicsUtil:releaseQuad(self.healthQuad)
-  GraphicsUtil:releaseQuad(self.multi_prestopQuad)
-  GraphicsUtil:releaseQuad(self.multi_stopQuad)
-  GraphicsUtil:releaseQuad(self.multi_shakeQuad)
+  ClientStack.deinit(self)
   self.engine:deinit()
 end
 
@@ -846,16 +842,16 @@ function PlayerStack:drawDebug()
     GraphicsUtil.printf("riselock " .. tostring(engine.rise_lock), drawX, drawY)
 
     -- drawY = drawY + padding
-    -- GraphicsUtil.printf("P" .. stack.which .." Panels: " .. stack.panel_buffer, drawX, drawY)
+    -- GraphicsUtil.printf("P" .. engine.which .." Panels: " .. stack.panel_buffer, drawX, drawY)
 
     drawY = drawY + padding
     GraphicsUtil.printf("P" .. engine.which .." Ended?: " .. tostring(engine:game_ended()), drawX, drawY)
 
     -- drawY = drawY + padding
-    -- GraphicsUtil.printf("P" .. stack.which .." attacks: " .. #stack.telegraph.attacks, drawX, drawY)
+    -- GraphicsUtil.printf("P" .. engine.which .." attacks: " .. #stack.telegraph.attacks, drawX, drawY)
 
     -- drawY = drawY + padding
-    -- GraphicsUtil.printf("P" .. stack.which .." Garbage Q: " .. stack.incomingGarbage:len(), drawX, drawY)
+    -- GraphicsUtil.printf("P" .. engine.which .." Garbage Q: " .. stack.incomingGarbage:len(), drawX, drawY)
   end
 end
 
@@ -956,7 +952,7 @@ function PlayerStack:drawRating()
   end
 
   if rating then
-    self:drawLabel(self.theme.images["IMG_rating_" .. self.which .. "P"], self.theme.ratingLabel_Pos, self.theme.ratingLabel_Scale, true)
+    self:drawLabel(self.assets.rating, self.theme.ratingLabel_Pos, self.theme.ratingLabel_Scale, true)
     self:drawNumber(rating, self.theme.rating_Pos, self.theme.rating_Scale, true)
   end
 end
@@ -1015,14 +1011,14 @@ end
 
 function PlayerStack:drawRelativeMultibar(stop_time, shake_time)
   local engine = self.engine
-  self:drawLabel(self.theme.images.healthbarFrames.relative[self.which], self.theme.healthbar_frame_Pos, self.theme.healthbar_frame_Scale)
+  self:drawLabel(self.assets.multibar.frameRelative, self.theme.healthbar_frame_Pos, self.theme.healthbar_frame_Scale)
 
   -- Healthbar
-  local healthbar = engine.health * (self.theme.images.IMG_healthbar:getHeight() / engine.levelData.maxHealth)
-  self.healthQuad:setViewport(0, self.theme.images.IMG_healthbar:getHeight() - healthbar, self.theme.images.IMG_healthbar:getWidth(), healthbar)
+  local healthbar = engine.health * (self.assets.multibar.health:getHeight() / engine.levelData.maxHealth)
+  self.healthQuad:setViewport(0, self.assets.multibar.health:getHeight() - healthbar, self.assets.multibar.health:getWidth(), healthbar)
   local x = self:elementOriginXWithOffset(self.theme.healthbar_Pos, false) / self.gfxScale
-  local y = self:elementOriginYWithOffset(self.theme.healthbar_Pos, false) + (self.theme.images.IMG_healthbar:getHeight() - healthbar) / self.gfxScale
-  drawQuadGfxScaled(self, self.theme.images.IMG_healthbar, self.healthQuad, x, y, self.theme.healthbar_Rotate, self.theme.healthbar_Scale, self.theme.healthbar_Scale, 0, 0, self.multiplication)
+  local y = self:elementOriginYWithOffset(self.theme.healthbar_Pos, false) + (self.assets.multibar.health:getHeight() - healthbar) / self.gfxScale
+  drawQuadGfxScaled(self, self.assets.multibar.health, self.healthQuad, x, y, self.theme.healthbar_Rotate, self.theme.healthbar_Scale, self.theme.healthbar_Scale, 0, 0, self.multiplication)
 
   -- Prestop bar
   if engine.pre_stop_time == 0 or self.maxPrestop == nil then
@@ -1044,51 +1040,51 @@ function PlayerStack:drawRelativeMultibar(stop_time, shake_time)
 
   local multi_shake_bar, multi_stop_bar, multi_prestop_bar = 0, 0, 0
   if engine.peak_shake_time > 0 and shake_time >= engine.pre_stop_time + stop_time then
-    multi_shake_bar = shake_time * (self.theme.images.IMG_multibar_shake_bar:getHeight() / engine.peak_shake_time) * 3
+    multi_shake_bar = shake_time * (self.assets.multibar.shake:getHeight() / engine.peak_shake_time) * 3
   end
   if self.maxStop > 0 and shake_time < engine.pre_stop_time + stop_time then
-    multi_stop_bar = stop_time * (self.theme.images.IMG_multibar_stop_bar:getHeight() / self.maxStop) * 1.5
+    multi_stop_bar = stop_time * (self.assets.multibar.stop:getHeight() / self.maxStop) * 1.5
   end
   if self.maxPrestop > 0 and shake_time < engine.pre_stop_time + stop_time then
-    multi_prestop_bar = engine.pre_stop_time * (self.theme.images.IMG_multibar_prestop_bar:getHeight() / self.maxPrestop) * 1.5
+    multi_prestop_bar = engine.pre_stop_time * (self.assets.multibar.preStop:getHeight() / self.maxPrestop) * 1.5
   end
-  self.multi_shakeQuad:setViewport(0, self.theme.images.IMG_multibar_shake_bar:getHeight() - multi_shake_bar, self.theme.images.IMG_multibar_shake_bar:getWidth(), multi_shake_bar)
-  self.multi_stopQuad:setViewport(0, self.theme.images.IMG_multibar_stop_bar:getHeight() - multi_stop_bar, self.theme.images.IMG_multibar_stop_bar:getWidth(), multi_stop_bar)
-  self.multi_prestopQuad:setViewport(0, self.theme.images.IMG_multibar_prestop_bar:getHeight() - multi_prestop_bar, self.theme.images.IMG_multibar_prestop_bar:getWidth(), multi_prestop_bar)
+  self.multi_shakeQuad:setViewport(0, self.assets.multibar.shake:getHeight() - multi_shake_bar, self.assets.multibar.shake:getWidth(), multi_shake_bar)
+  self.multi_stopQuad:setViewport(0, self.assets.multibar.stop:getHeight() - multi_stop_bar, self.assets.multibar.stop:getWidth(), multi_stop_bar)
+  self.multi_prestopQuad:setViewport(0, self.assets.multibar.preStop:getHeight() - multi_prestop_bar, self.assets.multibar.preStop:getWidth(), multi_prestop_bar)
 
   --Shake
   x = self:elementOriginXWithOffset(self.theme.multibar_Pos, false)
   y = self:elementOriginYWithOffset(self.theme.multibar_Pos, false)
-  if self.theme.images.IMG_multibar_shake_bar then
-    GraphicsUtil.drawQuad(self.theme.images.IMG_multibar_shake_bar, self.multi_shakeQuad, x, y + self.theme.images.IMG_multibar_shake_bar:getHeight() - multi_shake_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
+  if self.assets.multibar.shake then
+    GraphicsUtil.drawQuad(self.assets.multibar.shake, self.multi_shakeQuad, x, y + self.assets.multibar.shake:getHeight() - multi_shake_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
   end
   --Stop
-  if self.theme.images.IMG_multibar_stop_bar then
-    GraphicsUtil.drawQuad(self.theme.images.IMG_multibar_stop_bar, self.multi_stopQuad, x, y - multi_shake_bar + self.theme.images.IMG_multibar_stop_bar:getHeight() - multi_stop_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
+  if self.assets.multibar.stop then
+    GraphicsUtil.drawQuad(self.assets.multibar.stop, self.multi_stopQuad, x, y - multi_shake_bar + self.assets.multibar.stop:getHeight() - multi_stop_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
   end
   -- Prestop
-  if self.theme.images.IMG_multibar_prestop_bar then
-    GraphicsUtil.drawQuad(self.theme.images.IMG_multibar_prestop_bar, self.multi_prestopQuad, x, y - multi_shake_bar + multi_stop_bar + self.theme.images.IMG_multibar_prestop_bar:getHeight() - multi_prestop_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
+  if self.assets.multibar.preStop then
+    GraphicsUtil.drawQuad(self.assets.multibar.preStop, self.multi_prestopQuad, x, y - multi_shake_bar + multi_stop_bar + self.assets.multibar.preStop:getHeight() - multi_prestop_bar, 0, self.theme.multibar_Scale, self.theme.multibar_Scale, 0, 0, self.multiplication)
   end
 end
 
 function PlayerStack:drawScore()
-  self:drawLabel(self.theme.images["IMG_score_" .. self.which .. "P"], self.theme.scoreLabel_Pos, self.theme.scoreLabel_Scale)
+  self:drawLabel(self.assets.score, self.theme.scoreLabel_Pos, self.theme.scoreLabel_Scale)
   self:drawNumber(self.engine.score, self.theme.score_Pos, self.theme.score_Scale)
 end
 
 function PlayerStack:drawSpeed()
-  self:drawLabel(self.theme.images["IMG_speed_" .. self.which .. "P"], self.theme.speedLabel_Pos, self.theme.speedLabel_Scale)
+  self:drawLabel(self.assets.speed, self.theme.speedLabel_Pos, self.theme.speedLabel_Scale)
   self:drawNumber(self.engine.speed, self.theme.speed_Pos, self.theme.speed_Scale)
 end
 
 function PlayerStack:drawLevel()
   if self.level then
-    self:drawLabel(self.theme.images["IMG_level_" .. self.which .. "P"], self.theme.levelLabel_Pos, self.theme.levelLabel_Scale)
+    self:drawLabel(self.assets.level, self.theme.levelLabel_Pos, self.theme.levelLabel_Scale)
 
     local x = self:elementOriginXWithOffset(self.theme.level_Pos, false)
     local y = self:elementOriginYWithOffset(self.theme.level_Pos, false)
-    local levelAtlas = self.theme.images.levelNumberAtlas[self.which]
+    local levelAtlas = self.assets.levelAtlas
     GraphicsUtil.drawQuad(levelAtlas.image, levelAtlas.quads[self.level], x, y, 0, 28 / levelAtlas.charWidth * self.theme.level_Scale, 26 / levelAtlas.charHeight * self.theme.level_Scale, 0, 0, self.multiplication)
   end
 end
@@ -1104,7 +1100,7 @@ function PlayerStack:drawAnalyticData()
   local width = 160
   local height = 600
   local x = paddingToAnalytics + backgroundPadding
-  if self.which == 2 then
+  if self.renderIndex == 2 then
     x = consts.CANVAS_WIDTH - paddingToAnalytics - width + backgroundPadding
   end
   local y = self.frameOriginY * self.gfxScale + backgroundPadding
@@ -1217,7 +1213,7 @@ end
 function PlayerStack:drawMoveCount()
   -- draw outside of stack's frame canvas
   if self.engine.puzzle then
-    self:drawLabel(themes[config.theme].images.IMG_moves, themes[config.theme].moveLabel_Pos, themes[config.theme].moveLabel_Scale, false, true)
+    self:drawLabel(self.assets.moves, themes[config.theme].moveLabel_Pos, themes[config.theme].moveLabel_Scale, false, true)
     local moveNumber = math.abs(self.engine.puzzle.remaining_moves)
     if self.engine.puzzle.puzzleType == "moves" then
       moveNumber = self.engine.puzzle.remaining_moves
@@ -1380,7 +1376,7 @@ function PlayerStack:queueAttackSoundEffect(isChainLink, chainSize, comboSize, m
 end
 
 function PlayerStack:playSfx()
-  prof.push("stack sfx")
+  --prof.push("stack sfx")
   -- Update Sound FX
   if self:canPlaySfx() then
     if self.sfxSwap then
@@ -1459,7 +1455,7 @@ function PlayerStack:playSfx()
       self.sfxGarbagePop = 0
     end
   end
-  prof.pop("stack sfx")
+  --prof.pop("stack sfx")
 end
 
 local MAX_TAUNT_PER_10_SEC = 4
@@ -1476,7 +1472,7 @@ function PlayerStack:taunt(taunt_type)
 end
 
 function PlayerStack:processTaunts()
-  prof.push("taunt")
+  --prof.push("taunt")
   -- TAUNTING
   if self:canPlaySfx() then
     if self.taunt_up ~= nil then
@@ -1489,7 +1485,7 @@ function PlayerStack:processTaunts()
       self.taunt_down = nil
     end
   end
-  prof.pop("taunt")
+  --prof.pop("taunt")
 end
 
 function PlayerStack:canPlaySfx()
@@ -1509,26 +1505,6 @@ function PlayerStack:canPlaySfx()
   end
 
   return true
-end
-
-
--- Target must be able to take calls of
--- receiveGarbage(frameToReceive, garbageList)
--- and provide
--- frameOriginX
--- frameOriginY
--- mirror_x
--- canvasWidth
-function PlayerStack.setGarbageTarget(self, newGarbageTarget)
-  if newGarbageTarget ~= nil then
-    -- the abstract notion of a garbage target
-    -- in reality the target will be a stack of course but this is the interface so to speak
-    assert(newGarbageTarget.frameOriginX ~= nil)
-    assert(newGarbageTarget.frameOriginY ~= nil)
-    assert(newGarbageTarget.mirror_x ~= nil)
-    assert(newGarbageTarget.canvasWidth ~= nil)
-  end
-  self.garbageTarget = newGarbageTarget
 end
 
 -- calculates at how many frames the stack's multibar tops out

@@ -6,6 +6,7 @@ local GraphicsUtil = require("client.src.graphics.graphics_util")
 local consts = require("common.engine.consts")
 
 -- Scene for a puzzle mode instance of the game
+---@class PuzzleGame : GameBase
 local PuzzleGame = class(
   function (self, sceneParams)
     self.keepMusic = true
@@ -17,7 +18,7 @@ local PuzzleGame = class(
 
 PuzzleGame.name = "PuzzleGame"
 
-function PuzzleGame:customLoad(sceneParams)
+function PuzzleGame:customLoad()
   -- we cache the player's input configuration here so that only inputs from this config can start the next puzzle
   self.inputConfiguration = self.match.players[1].inputConfiguration
   self.puzzleSet = self.match.players[1].settings.puzzleSet

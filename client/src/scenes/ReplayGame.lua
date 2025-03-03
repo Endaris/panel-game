@@ -4,7 +4,7 @@ local consts = require("common.engine.consts")
 local util = require("common.lib.util")
 local class = require("common.lib.class")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 
 local ReplayGame = class(
   function (self, sceneParams)
@@ -12,6 +12,7 @@ local ReplayGame = class(
     self.playbackSpeeds = {-1, 0, 0.5, 1, 2, 3, 4, 8, 16}
     self.playbackSpeedIndex = 4
     self.saveReplay = false
+    self:load()
   end,
   GameBase
 )

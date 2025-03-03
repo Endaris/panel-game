@@ -41,7 +41,7 @@ local GameCatchUp = class(function(self, sceneParams)
   if not stage.fullyLoaded then
     state = states.loadingMods
     logger.debug("triggering stage load from catchup transition for mod " .. stage.id)
-    ModController:loadModFor(stage, match)
+    ModController:loadModFor(stage, self.match)
   end
 
   self.state = state

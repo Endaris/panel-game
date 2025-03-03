@@ -124,6 +124,9 @@ function BattleRoom.createFromServerMessage(message)
       if player.name == GAME.localPlayer.name then
         logger.debug("Local player is player number " .. player.playerNumber)
         p = GAME.localPlayer
+        if GAME.localPlayer.publicId < 0 and player.publicId > 0 then
+          GAME.localPlayer.publicId = player.publicId
+        end
       else
         p = Player(player.name, player.publicId or -i, false)
       end
@@ -220,8 +223,8 @@ end
 
 local RATING_SPREAD_MODIFIER = 400
 function BattleRoom:updateExpectedWinrates()
-  if tableUtils.trueForAll(self.players, function(p) return p.rating and tonumber(p.rating) end) then
-    -- this isn't feasible to do for n-player matchups at this point
+  -- this isn't feasible to do for n-player matchups at this point
+  if #self.players == 2 and tableUtils.trueForAll(self.players, function(p) return p.rating and tonumber(p.rating) end) then
     local p1 = self.players[1]
     local p2 = self.players[2]
     p1:setExpectedWinrate((100 * math.round(1 / (1 + 10 ^ ((p2.rating - p1.rating) / RATING_SPREAD_MODIFIER)), 2)))
@@ -283,16 +286,6 @@ function BattleRoom:addPlayer(player)
     player.playerNumber = #self.players + 1
   end
   self.players[#self.players + 1] = player
-
-  -- make sure the local player ends up as P1 (left side)
-  -- if both are local or both are not, order by playerNumber
-  table.sort(self.players, function(a, b)
-    if a.isLocal == b.isLocal then
-      return a.playerNumber < b.playerNumber
-    else
-      return a.isLocal
-    end
-  end)
 
   if player.isLocal then
     self:connectSignal("allAssetsLoadedChanged", player, player.setLoaded)
@@ -386,19 +379,24 @@ function BattleRoom:startMatch(stageId, seed, replayOfMatch)
   match:start()
   self.state = BattleRoom.states.MatchInProgress
   local transition = BlackFadeTransition(GAME.timer, 0.4, Easings.getSineIn())
+  local scene = self:createScene(self.match)
+  scene:load()
+  GAME.navigationStack:push(scene, transition)
+end
+
+function BattleRoom:createScene(match)
   -- for touch android players load a different scene
   if (system.isMobileOS() or DEBUG_ENABLED) and self.gameScene.name ~= "PuzzleGame" and
   --but only if they are the only local player cause for 2p vs local using portrait mode would be bad
       tableUtils.count(self.players, function(p) return p.isLocal and p.human end) == 1 then
     for _, player in ipairs(self.players) do
       if player.isLocal and player.human and player.settings.inputMethod == "touch" then
-        GAME.navigationStack:push(require("client.src.scenes.PortraitGame")({match = self.match}), transition)
-        return
+        return require("client.src.scenes.PortraitGame")({match = match})
       end
     end
   end
   if self.gameScene then
-    GAME.navigationStack:push(self.gameScene({match = self.match}), transition)
+    return self.gameScene({match = match})
   end
 end
 
@@ -555,7 +553,6 @@ function BattleRoom:shutdown()
     GAME.netClient:leaveRoom()
   end
   self.hasShutdown = true
-  GAME:initializeLocalPlayer()
   GAME.battleRoom = nil
   self = nil
 end

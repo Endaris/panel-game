@@ -10,20 +10,34 @@ local StageLoader = require("client.src.mods.StageLoader")
 local ModController = require("client.src.mods.ModController")
 local SoundController = require("client.src.music.SoundController")
 local UpdatingImage = require("client.src.graphics.UpdatingImage")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 local ui = require("client.src.ui")
 local FileUtils = require("client.src.FileUtils")
 local ClientStack = require("client.src.ClientStack")
 
 -- Scene template for running any type of game instance (endless, vs-self, replays, etc.)
+---@class GameBase : Scene
+---@field saveReplay boolean
+---@field text string
+---@field pauseState table
+---@field minDisplayTime number
+---@field maxDisplayTime number
+---@field gameOverStartTime number?
+---@field fadeOutMusicOnGameOver boolean
+---@field frameInfo table
+---@field droppedFrameCount integer
+---@field match ClientMatch
+---@field customDraw fun()?
+---@field stage Stage
+---@field stageTrack StageTrack?
 local GameBase = class(
+---@param self GameBase
   function (self, sceneParams)
     self.saveReplay = true
 
     -- set in load
     self.text = nil
     self.keepMusic = false
-    self.currentStage = config.stage
     self.pauseState = {
       musicWasPlaying = false
     }
@@ -39,8 +53,9 @@ local GameBase = class(
       currentTime = nil,
       expectedFrameCount = nil
     }
+    self.droppedFrameCount = 0
 
-    self:load(sceneParams)
+    self.match = sceneParams.match
   end,
   Scene
 )
@@ -51,7 +66,7 @@ GameBase.name = "GameBase"
 
 -- Game mode specific game state setup
 -- Called during load()
-function GameBase:customLoad(sceneParams) end
+function GameBase:customLoad() end
 
 -- Game mode specific behavior for leaving the game
 -- called during runGame()
@@ -111,6 +126,19 @@ function GameBase:pickMusicSource()
   end
 end
 
+---@return StageTrack? stageTrack
+function GameBase:getStageTrack()
+  -- the active track could be a regular Music instead of a StageTrack; checking for changeMusic assures it to be a StageTrack (or having the interface of one)
+  if self.keepMusic and SoundController.activeTrack and SoundController.activeTrack.changeMusic and SoundController.activeTrack:isPlaying() then
+    return SoundController.activeTrack
+  else
+    local musicSource = self:pickMusicSource()
+    if musicSource then
+      return musicSource.stageTrack
+    end
+  end
+end
+
 -- unlike regular asset load, this function connects the used assets to the match so they cannot be unloaded
 function GameBase:loadAssets(match)
   for i, stack in ipairs(match.stacks) do
@@ -136,27 +164,26 @@ end
 function GameBase:initializeFrameInfo()
   self.frameInfo.startTime = nil
   self.frameInfo.frameCount = 0
-  GAME.droppedFrames = 0
+  self.droppedFrameCount = 0
 end
 
-function GameBase:load(sceneParams)
-  self:loadAssets(sceneParams.match)
-  self.match = sceneParams.match
+function GameBase:load()
+  self:loadAssets(self.match)
   self.match:connectSignal("matchEnded", self, self.genericOnMatchEnded)
   self.match:connectSignal("dangerMusicChanged", self, self.changeMusic)
   self.match:connectSignal("countdownEnded", self, self.onGameStart)
 
   self.stage = stages[self.match.stageId]
   self.backgroundImage = UpdatingImage(self.stage.images.background, false, 0, 0, consts.CANVAS_WIDTH, consts.CANVAS_HEIGHT)
-  self.musicSource = self:pickMusicSource()
+  self.stageTrack = self:getStageTrack()
 
   local pauseMenuItems = {
     ui.MenuItem.createButtonMenuItem("pause_resume", nil, true, function()
       GAME.theme:playValidationSfx()
       self.pauseMenu:setVisibility(false)
       self.match:togglePause()
-      if self.musicSource and self.musicSource.stageTrack and self.pauseState.musicWasPlaying then
-        SoundController:playMusic(self.musicSource.stageTrack)
+      if self.stageTrack and self.pauseState.musicWasPlaying then
+        SoundController:playMusic(self.stageTrack)
       end
       self:initializeFrameInfo()
     end),
@@ -178,11 +205,11 @@ function GameBase:load(sceneParams)
   self.pauseMenu:setVisibility(false)
   self.uiRoot:addChild(self.pauseMenu)
 
-  self:customLoad(sceneParams)
-
   leftover_time = 1 / 120
 
   self:initializeFrameInfo()
+
+  self:customLoad()
 end
 
 local function playerPressingStart(match)
@@ -200,8 +227,8 @@ function GameBase:handlePause()
       self.match:togglePause()
       self.pauseMenu:setVisibility(true)
 
-      if self.musicSource and self.musicSource.stageTrack then
-        self.pauseState.musicWasPlaying = self.musicSource.stageTrack:isPlaying()
+      if self.stageTrack then
+        self.pauseState.musicWasPlaying = self.stageTrack:isPlaying()
         SoundController:pauseMusic()
       end
       GAME.theme:playValidationSfx()
@@ -256,13 +283,13 @@ function GameBase:runGame(dt)
   self.frameInfo.currentTime = love.timer.getTime()
   self.frameInfo.expectedFrameCount = math.ceil((self.frameInfo.currentTime - self.frameInfo.startTime) * 60)
   repeat
-    prof.push("Match:run", self.match.clock)
+    prof.push("Match:run")--, self.match.clock)
     self.frameInfo.frameCount = self.frameInfo.frameCount + 1
     framesRun = framesRun + 1
     self.match:run()
     prof.pop("Match:run")
   until (self.frameInfo.frameCount >= self.frameInfo.expectedFrameCount)
-  GAME.droppedFrames = GAME.droppedFrames + (framesRun - 1)
+  self.droppedFrameCount = self.droppedFrameCount + (framesRun - 1)
 
   self:customRun()
 
@@ -298,14 +325,14 @@ function GameBase:musicCanChange()
 end
 
 function GameBase:onGameStart()
-  if self.musicSource then
-    SoundController:playMusic(self.musicSource.stageTrack)
+  if self.stageTrack then
+    SoundController:playMusic(self.stageTrack)
   end
 end
 
 function GameBase:changeMusic(useDangerMusic)
-  if self.musicSource and self.musicSource.stageTrack and self:musicCanChange() then
-    self.musicSource.stageTrack:changeMusic(useDangerMusic)
+  if self.stageTrack and self:musicCanChange() then
+    self.stageTrack:changeMusic(useDangerMusic)
   end
 end
 
@@ -350,6 +377,10 @@ function GameBase:draw()
     self.match:draw_pause()
     self.uiRoot:draw()
   end
+
+  if config.show_fps then
+    GraphicsUtil.printf("Dropped Frames: " .. self.droppedFrameCount, 1, 12)
+  end
 end
 
 function GameBase:drawBackground()
@@ -392,9 +423,9 @@ function GameBase:drawHUD()
 
       stack:drawLevel()
       if stack.analytic then
-        prof.push("Stack:drawAnalyticData")
+        --prof.push("Stack:drawAnalyticData")
         stack:drawAnalyticData()
-        prof.pop("Stack:drawAnalyticData")
+        --prof.pop("Stack:drawAnalyticData")
       end
     end
 

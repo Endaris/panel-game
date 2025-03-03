@@ -8,7 +8,7 @@ local inputFieldManager = require("client.src.ui.inputFieldManager")
 local RunTimeGraph = require("client.src.RunTimeGraph")
 local CustomRun = require("client.src.CustomRun")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 local Replay = require("common.data.Replay")
 require("common.lib.util")
 local consts = require("common.engine.consts")
@@ -57,6 +57,8 @@ function love.load(args, rawArgs)
   GAME:updateCanvasPositionAndScale(newPixelWidth, newPixelHeight)
 
   GAME:load()
+  prof.enable(config.debugProfile)
+  prof.setDurationFilter(config.debugProfileThreshold)
 end
 
 function love.focus(f)
@@ -128,8 +130,8 @@ end
 
 -- quit handling
 function love.quit()
-  if PROF_CAPTURE then
-    prof.write("prof.mpack")
+  if prof.enabled then
+    prof.write()
   end
   if GAME.netClient and GAME.netClient:isConnected() then
     GAME.netClient:logout()

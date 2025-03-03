@@ -23,6 +23,9 @@ local profiler = {}
 -- the memory consumption we determine using collectgarbage("count"))
 -- since no allocations/deallocations are triggered by them anymore
 local zoneStack = table.new(16, 0)
+local eventCount = 0
+local committedEventCount = 0
+local frameCount = 0
 local profData
 if PROF_CAPTURE then
     -- if not preallocating profData will frequently rehash early on which may cause spikes in frame time
@@ -37,6 +40,8 @@ local profEnabled = true
 -- which is then subtracted from collectgarbage("count"),
 -- to measure the jprof-less (i.e. "real") memory consumption
 local profMem
+
+local minimumDuration = 0
 
 local function getByte(n, byte)
     return bit.rshift(bit.band(n, bit.lshift(0xff, 8*byte)), 8*byte)
@@ -63,12 +68,15 @@ local function msgpackListIntoFile(list, file)
     end
 end
 
-local function addEvent(name, memCount, time, annot)
-    local event = {name, time, memCount, annot}
-    if profData then
-        profData[#profData+1] = event
+local function addEvent(name, time, memCount, annot)
+    eventCount = eventCount + 1
+    local event = profData[eventCount] or {}
+    event[1] = name
+    event[2] = time
+    event[3] = memCount
+    -- event[4] = annot
+    profData[eventCount] = event
         --table.insert(profData, event)
-    end
     -- if netBuffer then
     --     table.insert(netBuffer, event)
     -- end
@@ -79,13 +87,22 @@ if PROF_CAPTURE then
         if not profEnabled then return end
 
         if #zoneStack == 0 then
-            assert(name == "frame", "(jprof) You may only push the 'frame' zone onto an empty stack")
+            if name == "frame" then
+                frameCount = frameCount + 1
+            else
+                -- we might have enabled prof at runtime so some unexpected pushes / pops are to be expected
+                if #profData == 0 then
+                    return
+                else
+                    error("(jprof) You may only push the 'frame' zone onto an empty stack")
+                end
+            end
         end
 
         local memCount = collectgarbage("count")
         --table.insert(zoneStack, name)
         zoneStack[#zoneStack+1] = name
-        addEvent(name, memCount - profMem, love.timer.getTime(), annotation)
+        addEvent(name, love.timer.getTime(), memCount - profMem)--, (#zoneStack == 1 and frameCount or nil))
 
         -- Usually keeping count of the memory used by jprof is easy, but when realtime profiling is used
         -- netFlush also frees memory for garbage collection, which might happen at unknown points in time
@@ -102,20 +119,27 @@ if PROF_CAPTURE then
         if not profEnabled then return end
 
         local t = love.timer.getTime()
-        if name then
-            assert(zoneStack[#zoneStack] == name,
-                ("(jprof) Top of zone stack, does not match the zone passed to prof.pop ('%s', on top: '%s')!"):format(name, zoneStack[#zoneStack]))
-        end
 
-        local memCount = collectgarbage("count")
-        zoneStack[#zoneStack] = nil
-        --table.remove(zoneStack)
-        addEvent("pop", memCount - profMem, t)
-        -- if profiler.socket and #zoneStack == 0 then
-        --     profiler.netFlush()
-        -- end
-        if profData then
-            profMem = profMem + (collectgarbage("count") - memCount)
+        if zoneStack[#zoneStack] == name then
+            local memCount = collectgarbage("count")
+            zoneStack[#zoneStack] = nil
+            --table.remove(zoneStack)
+            addEvent("pop", t,  memCount - profMem)
+            if #zoneStack == 0 then
+                profiler.checkCurrentFrameForCommit()
+            end
+            -- if profiler.socket and #zoneStack == 0 then
+            --     profiler.netFlush()
+            -- end
+            if profData then
+                profMem = profMem + (collectgarbage("count") - memCount)
+            end
+        else
+            if #profData == 0 then
+                -- we might have enabled prof at run time so some unexpected pushes / pops are to be expected
+            else
+                error(("(jprof) Top of zone stack, does not match the zone passed to prof.pop ('%s', on top: '%s')!"):format(name, zoneStack[#zoneStack]))
+            end
         end
     end
 
@@ -131,6 +155,9 @@ if PROF_CAPTURE then
         if not profData then
             print("(jprof) No profiling data saved (probably because you called prof.connect())")
         else
+            for i = #profData, committedEventCount + 1, -1 do
+                profData[i] = nil
+            end
             local file, msg = love.filesystem.newFile(filename, "w")
             assert(file, msg)
             msgpackListIntoFile(profData, file)
@@ -197,6 +224,19 @@ if PROF_CAPTURE then
             netBuffer = {}
         end
     end
+
+    function profiler.setMinimumDuration(duration)
+        minimumDuration = duration
+    end
+
+    function profiler.checkCurrentFrameForCommit()
+        if profData[eventCount][2] - profData[committedEventCount + 1][2] >= minimumDuration then
+            profData[committedEventCount + 1][4] = frameCount
+            committedEventCount = eventCount
+        else
+            eventCount = committedEventCount
+        end
+    end
 else
     local noop = function() end
 
@@ -206,6 +246,7 @@ else
     profiler.enabled = noop
     profiler.connect = noop
     profiler.netFlush = noop
+    profiler.setMinimumDuration = noop
 end
 
 -- only measure after all allocations

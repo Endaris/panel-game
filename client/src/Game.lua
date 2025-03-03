@@ -23,7 +23,7 @@ local NetClient = require("client.src.network.NetClient")
 local StartUp = require("client.src.scenes.StartUp")
 local SoundController = require("client.src.music.SoundController")
 require("client.src.BattleRoom")
-local prof = require("common.lib.jprof.jprof")
+local prof = require("common.lib.zoneProfiler")
 local tableUtils = require("common.lib.tableUtils")
 local system = require("client.src.system")
 
@@ -58,7 +58,6 @@ local Game = class(
     self.battleRoom = nil -- BattleRoom - the current room being used for battles
     self.focused = true -- if the window is focused
     self.backgroundImage = nil -- the background image for the game, should always be set to something with the proper dimensions
-    self.droppedFrames = 0
     self.puzzleSets = {} -- all the puzzles loaded into the game
     self.netClient = NetClient()
     self.server_queue = ServerQueue()
@@ -191,6 +190,15 @@ function Game:writeReleaseStreamDefinition()
             prefix = "panel-beta-"
           }
         },
+        {
+          name = "engine-preview",
+          versioningType = "timestamp",
+          serverEndPoint = {
+            type = "filesystem",
+            url = "https://panelattack.com/downloads/updates/engine-preview",
+            prefix = "panel-"
+          }
+        }
       },
       default = "stable"
     }

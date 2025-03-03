@@ -17,6 +17,7 @@ local StackBehaviours = require("common.data.StackBehaviours")
 -- Player implements a lot of setters that emit signals on changes, allowing other components to be notified about the changes by connecting a function to it
 -- Due to this, unless for a good reason, all properties on Player should be set using the setters
 ---@class Player : MatchParticipant, Signal
+---@overload fun(name: string, publicId: integer, isLocal: boolean?)
 local Player = class(
 function(self, name, publicId, isLocal)
   ---@class Player
@@ -291,7 +292,7 @@ function Player.getLocalPlayer()
 end
 
 function Player.createFromReplayPlayer(replayPlayer, playerNumber)
-  local player = Player(replayPlayer.name, replayPlayer.publicId)
+  local player = Player(replayPlayer.name, replayPlayer.publicId, false)
 
   player.playerNumber = playerNumber
   player:setWinCount(replayPlayer.wins)
@@ -406,7 +407,7 @@ function Player:getInfo()
   info.wantsReady = tostring(self.settings.wantsReady)
   info.wantsRanked = tostring(self.settings.wantsRanked)
   info.inputMethod = self.settings.inputMethod
-  --info.publicId = self.settings.publicId
+  info.publicId = self.publicId
   info.playerNumber = self.playerNumber
   info.isLocal = tostring(self.isLocal)
   info.human = tostring(self.human)
