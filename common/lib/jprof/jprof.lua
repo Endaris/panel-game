@@ -71,14 +71,9 @@ end
 local function addEvent(name, time, memCount, annot)
     eventCount = eventCount + 1
     local event = profData[eventCount] or {}
-    if #event == 0 then
-        print(time .. ": Made a fresh table")
-    else
-        --print("reusing a table for this event")
-    end
     event[1] = name
     event[2] = time
-    -- event[3] = memCount
+    event[3] = memCount
     -- event[4] = annot
     profData[eventCount] = event
         --table.insert(profData, event)
@@ -104,10 +99,10 @@ if PROF_CAPTURE then
             end
         end
 
-        --local memCount = collectgarbage("count")
+        local memCount = collectgarbage("count")
         --table.insert(zoneStack, name)
         zoneStack[#zoneStack+1] = name
-        addEvent(name, love.timer.getTime())--, memCount - profMem, (#zoneStack == 1 and frameCount or nil))
+        addEvent(name, love.timer.getTime(), memCount - profMem)--, (#zoneStack == 1 and frameCount or nil))
 
         -- Usually keeping count of the memory used by jprof is easy, but when realtime profiling is used
         -- netFlush also frees memory for garbage collection, which might happen at unknown points in time
@@ -116,7 +111,7 @@ if PROF_CAPTURE then
         -- memory used by jprof and all of it will be freed for garbage collection at some point, so that
         -- we should probably not try to keep track of it at all
         if profData then
-            --profMem = profMem + (collectgarbage("count") - memCount)
+            profMem = profMem + (collectgarbage("count") - memCount)
         end
     end
 
@@ -126,10 +121,10 @@ if PROF_CAPTURE then
         local t = love.timer.getTime()
 
         if zoneStack[#zoneStack] == name then
-            --local memCount = collectgarbage("count")
+            local memCount = collectgarbage("count")
             zoneStack[#zoneStack] = nil
             --table.remove(zoneStack)
-            addEvent("pop", t)--,  memCount - profMem)
+            addEvent("pop", t,  memCount - profMem)
             if #zoneStack == 0 then
                 profiler.checkCurrentFrameForCommit()
             end
@@ -137,7 +132,7 @@ if PROF_CAPTURE then
             --     profiler.netFlush()
             -- end
             if profData then
-                --profMem = profMem + (collectgarbage("count") - memCount)
+                profMem = profMem + (collectgarbage("count") - memCount)
             end
         else
             if #profData == 0 then
