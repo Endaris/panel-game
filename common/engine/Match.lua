@@ -372,7 +372,7 @@ function Match:getInfo()
 end
 
 function Match:start()
-  local allowAdjacentColorsOnStartingBoard = tableUtils.trueForAll(self.stacks, function(stack) return stack.behaviours.allowAdjacentColors end)
+  local allowAdjacentColorsOnStartingBoard = tableUtils.trueForAll(self.stacks, function(stack) return not stack.behaviours or stack.behaviours.allowAdjacentColors end)
   local shockEnabled = (self.stackInteraction ~= GameModes.StackInteractions.NONE)
 
   for i, stack in ipairs(self.stacks) do
