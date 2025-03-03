@@ -149,13 +149,13 @@ function ServerMessages.sanitizeServerMessage(message)
   elseif message.type == "spectateRequestGranted" then
     local winCounts = {}
     local players = {}
-    for publicId, player in pairs(message.content.players) do
+    for index, player in pairs(message.content.players) do
       winCounts[player.playerNumber] = player.winCount
       players[player.playerNumber] = {
         playerNumber = player.playerNumber,
         ratingInfo = player.rating,
         name = player.name,
-        publicId = publicId,
+        publicId = player.publicId or -index,
         settings = sanitizePlayerSettings1(player.settings),
       }
     end
