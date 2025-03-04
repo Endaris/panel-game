@@ -151,15 +151,15 @@ function tableUtils.getKeys(tab)
   return keys 
 end 
  
--- returns the key for the given value, key is random if value occurs multiple times 
-function tableUtils.indexOf(tab, element) 
-  for key, value in pairs(tab) do 
-    if value == element then 
-      return key 
-    end 
-  end 
- 
-  return nil 
+-- returns the key for the given value, key is random if value occurs multiple times
+function tableUtils.indexOf(tab, element)
+  for key, value in pairs(tab) do
+    if value == element then
+      return key
+    end
+  end
+
+  return nil
 end
 
 -- inserts all values from tab into a newly created table using continuous integer keys in a non-deterministic order

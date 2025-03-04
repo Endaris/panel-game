@@ -227,15 +227,10 @@ function OptionsMenu:loadGeneralMenu()
     end
   })
 
-  local performanceSlider = createConfigSlider("activeGarbageCollectionPercent", 20, 80, nil, (config.activeGarbageCollectionPercent * 100))
-  performanceSlider.onValueChange = function(slider)
-    config.activeGarbageCollectionPercent = slider.value / 100
-    GAME.theme:playMoveSfx()
-  end
-
   local releaseStreamSelection
 
   if GAME.updater and GAME.updater.releaseStreams and GAME_UPDATER_STATES then
+    ---@type string[]
     local releaseStreams = {}
 
     for name, _ in pairs(GAME.updater.releaseStreams) do
@@ -286,6 +281,7 @@ function OptionsMenu:loadGeneralMenu()
           -- for safety reasons remove the option for that button so the updater does not start in a potentially unsalvageable configuration
           local index = tableUtils.indexOf(releaseStreams, value)
           group:removeButtonByValue(value)
+          ---@cast index integer
           index = util.bound(1, index, #group.buttons)
           -- simulate changing to the button that replaces the one that got removed due to no attached versions
           group.buttons[index]:onClick(nil, 0)
@@ -301,7 +297,6 @@ function OptionsMenu:loadGeneralMenu()
       analytics.init()
     end)),
     ui.MenuItem.createToggleButtonGroupMenuItem("op_replay_public", nil, nil, publicReplayButtonGroup),
-    ui.MenuItem.createSliderMenuItem("op_performance_drain", nil, nil, performanceSlider),
   }
 
   if releaseStreamSelection then

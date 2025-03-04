@@ -262,6 +262,8 @@ function GameBase:runGameOver()
 
   if ((displayTime >= self.maxDisplayTime and self.maxDisplayTime ~= -1) or (displayTime >= self.minDisplayTime and keyPressed)) then
     GAME.theme:playValidationSfx()
+    collectgarbage("collect")
+    collectgarbage("collect")
     self:startNextScene()
   end
 end
@@ -356,7 +358,7 @@ function GameBase:update(dt)
 end
 
 function GameBase:draw()
-  if not self.match.paused or self.match.renderDuringPause then
+  if not self.match.isPaused or self.match.renderDuringPause then
     prof.push("GameBase:draw")
     self:drawBackground()
     prof.push("Match:render")
