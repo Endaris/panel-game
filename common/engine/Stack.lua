@@ -15,6 +15,7 @@ local LevelData = require("common.data.LevelData")
 table.clear = require("table.clear")
 local ReplayPlayer = require("common.data.ReplayPlayer")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
+local WigglePay = require("common.engine.WigglePay")
 
 local rollbackPanelBuffer = {}
 -- this is a bit of an opportunistic thing:
@@ -59,6 +60,13 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
+
+---@alias CursorDirection ("up" | "down" | "left" | "right")
+
+---@type table<CursorDirection, integer>
+local DIRECTION_COLUMN = {up = 0, down = 0, left = -1, right = 1}
+---@type table<CursorDirection, integer>
+local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
@@ -121,11 +129,10 @@ local PANELS_TO_NEXT_SPEED =
 --- conversely if the rise_lock happened from the start and the manual_raise never achieved a single tick of displacement of raise, this being false leads to manual_raise being set to false again, effectively cancelling the raise
 ---@field prevent_manual_raise boolean if set to true it prevents raises initiating another raise; mostly to prevent manual_raise_yet from being overwritten so it can do its cryptic work \n
 --- this set of fields can really do with a rework
----@field swap_1 boolean if there was an attempt to initiate a swap via swap1 on this frame
----@field swap_2 boolean if there was an attempt to initiate a swap via swap2 on this frame
+---@field swapThisFrame boolean if there was an attempt to initiate a swap on this frame
 ---@field cur_wait_time integer DAS delay: number of ticks a movement key has to be held before the cursor begins to move at 1 movement per frame
 ---@field cur_timer integer number of ticks the current movement key has been held
----@field cur_dir string? direction of the current movement key
+---@field cursorDirection CursorDirection? direction of the current movement key
 ---@field cur_row integer row the cursor is on
 ---@field cur_col integer column the cursor is on
 ---@field queuedSwapRow integer row in which a swap for next frame has been queued
@@ -241,13 +248,12 @@ local Stack = class(
     s.manual_raise = false
     s.manual_raise_yet = false
     s.prevent_manual_raise = false
-    s.swap_1 = false -- attempt to initiate a swap on this frame
-    s.swap_2 = false
+    s.swapThisFrame = false -- attempt to initiate a swap on this frame
 
     -- number of ticks a movement key has to be held before the cursor begins to move at 1 movement per frame
     s.cur_wait_time = consts.DEFAULT_INPUT_REPEAT_DELAY
     s.cur_timer = 0 -- number of ticks for which a new direction's been pressed
-    s.cur_dir = nil -- the direction pressed
+    s.cursorDirection = nil -- the direction pressed
     s.cur_row = 7 -- the row the cursor's on
     s.cur_col = 3 -- the column the left half of the cursor's on
     s.queuedSwapColumn = 0 -- the left column of the two columns to swap or 0 if no swap queued
@@ -274,6 +280,7 @@ local Stack = class(
     s:createSignal("panelLanded")
     s:createSignal("cursorMoved")
     s:createSignal("panelsSwapped")
+    s:createSignal("swapDenied")
     s:createSignal("garbageMatched")
     s:createSignal("newRow")
   end,
@@ -398,7 +405,7 @@ function Stack:rollbackCopy()
   copy.manual_raise_yet = self.manual_raise_yet
   copy.prevent_manual_raise = self.prevent_manual_raise
   copy.cur_timer = self.cur_timer
-  copy.cur_dir = self.cur_dir
+  copy.cursorDirection = self.cursorDirection
   copy.cur_row = self.cur_row
   copy.cur_col = self.cur_col
   copy.shake_time = self.shake_time
@@ -427,6 +434,8 @@ function Stack:rollbackCopy()
   self.rollbackBuffer:saveCopy(self.clock, copy)
 end
 
+---@param stack Stack
+---@param frame integer
 local function internalRollbackToFrame(stack, frame)
   local copy = stack.rollbackBuffer:rollbackToFrame(frame)
 
@@ -455,7 +464,7 @@ local function internalRollbackToFrame(stack, frame)
   stack.manual_raise_yet = copy.manual_raise_yet
   stack.prevent_manual_raise = copy.prevent_manual_raise
   stack.cur_timer = copy.cur_timer
-  stack.cur_dir = copy.cur_dir
+  stack.cursorDirection = copy.cursorDirection
   stack.cur_row = copy.cur_row
   stack.cur_col = copy.cur_col
   stack.shake_time = copy.shake_time
@@ -762,15 +771,7 @@ function Stack.has_falling_garbage(self)
 end
 
 function Stack:swapQueued()
-  if self.queuedSwapColumn ~= 0 and self.queuedSwapRow ~= 0 then
-    return true
-  end
-  return false
-end
-
-function Stack:setQueuedSwapPosition(column, row)
-  self.queuedSwapColumn = column
-  self.queuedSwapRow = row
+  return self.queuedSwapColumn ~= 0 and self.queuedSwapRow ~= 0
 end
 
 -- Setup the stack at a new starting state
@@ -817,10 +818,7 @@ function Stack.controls(self)
         if self.cur_col ~= 0 and self.cur_row ~= 0 and cursorColumn ~= self.cur_col and cursorRow ~= 0 then
           local panel1 = self.panels[cursorRow][cursorColumn]
           local panel2 = self.panels[self.cur_row][self.cur_col]
-          if self:canSwap(panel1, panel2) then
-            local swapColumn = math.min(self.cur_col, cursorColumn)
-            self:setQueuedSwapPosition(swapColumn, cursorRow)
-          end
+          self:tryQueueSwap(panel1, panel2)
         end
         self.cur_col = cursorColumn
         self.cur_row = cursorRow
@@ -835,8 +833,7 @@ function Stack.controls(self)
     local swap, up, down, left, right
     raise, swap, up, down, left, right = unpack(base64decode[sdata])
 
-    self.swap_1 = swap
-    self.swap_2 = swap
+    self.swapThisFrame = swap
 
     if up then
       new_dir = "up"
@@ -848,12 +845,12 @@ function Stack.controls(self)
       new_dir = "right"
     end
 
-    if new_dir == self.cur_dir then
+    if new_dir == self.cursorDirection then
       if self.cur_timer ~= self.cur_wait_time then
         self.cur_timer = self.cur_timer + 1
       end
     else
-      self.cur_dir = new_dir
+      self.cursorDirection = new_dir
       self.cur_timer = 0
     end
   end
@@ -950,9 +947,6 @@ function Stack.receiveConfirmedInput(self, input)
   --logger.debug("Player " .. self.which .. " got new input. Total length: " .. #self.confirmedInput)
 end
 
-local d_col = {up = 0, down = 0, left = -1, right = 1}
-local d_row = {up = 1, down = -1, left = 0, right = 0}
-
 function Stack.hasPanelsInTopRow(self)
   local panelRow = self.panels[self.height]
   for idx = 1, self.width do
@@ -968,6 +962,7 @@ function Stack.updatePanels(self)
     return
   end
 
+  prof.push("Stack:updatePanels")
   self.shake_time_on_frame = 0
   for row = 1, #self.panels do
     for col = 1, self.width do
@@ -975,38 +970,43 @@ function Stack.updatePanels(self)
       panel:update(self.panels)
     end
   end
+  prof.pop("Stack:updatePanels")
 end
 
-function Stack.shouldDropGarbage(self)
+function Stack:shouldDropGarbage()
   -- this is legit ugly, these should rather be returned in a parameter table
   -- or even better in a dedicated garbage class table
   local garbage = self.incomingGarbage:peek()
 
-  -- new garbage can't drop if the stack is full
-  -- new garbage always drops one by one
-  if not self.panels_in_top_row and not self:has_falling_garbage() then
-    if not self:hasActivePanels() then
-      return true
-    elseif garbage.isChain then
-      -- drop chain garbage higher than 1 row immediately
-      return garbage.height > 1
-    else
-      -- attackengine garbage higher than 1 (aka chain garbage) is treated as combo garbage
-      -- that is to circumvent the garbage queue not allowing to send multiple chains simultaneously
-      -- and because of that hack, we need to do another hack here and allow n-height combo garbage
-      -- technically garbage should get fixed garbageQueue side though so we should not reach here
-      if garbage.height > 1 then
-        logger.debug("Reached the cursed path")
+  if not garbage then
+    return false
+  else
+    -- new garbage can't drop if the stack is full
+    -- new garbage always drops one by one
+    if not self.panels_in_top_row and not self:has_falling_garbage() then
+      if not self:hasActivePanels() then
         return true
+      elseif garbage.isChain then
+        -- drop chain garbage higher than 1 row immediately
+        return garbage.height > 1
       else
-        return false
+        -- attackengine garbage higher than 1 (aka chain garbage) is treated as combo garbage
+        -- that is to circumvent the garbage queue not allowing to send multiple chains simultaneously
+        -- and because of that hack, we need to do another hack here and allow n-height combo garbage
+        -- technically garbage should get fixed garbageQueue side though so we should not reach here
+        if garbage.height > 1 then
+          logger.debug("Reached the cursed path")
+          return true
+        else
+          return false
+        end
       end
     end
   end
 end
 
 -- One run of the engine routine.
-function Stack.simulate(self)
+function Stack:simulate()
   --prof.push("simulate 1")
   -- self:prep_first_row()
   local panels = self.panels
@@ -1034,48 +1034,18 @@ function Stack.simulate(self)
   self:updateRiseLock()
   --prof.pop("new row stuff")
 
-  --prof.push("speed increase")
-  -- Increase the speed if applicable
-  if self.levelData.speedIncreaseMode == 1 then
-    -- increase per interval
-    if self.clock == self.nextSpeedIncreaseClock then
-      self.speed = min(self.speed + 1, 99)
-      self.nextSpeedIncreaseClock = self.nextSpeedIncreaseClock + DT_SPEED_INCREASE
-    end
-  elseif self.panels_to_speedup <= 0 then
-    -- mode 2: increase speed based on cleared panels
-    self.speed = min(self.speed + 1, 99)
-    self.panels_to_speedup = self.panels_to_speedup + PANELS_TO_NEXT_SPEED[self.speed]
-  end
-  --prof.pop("speed increase")
-
+  self:updateSpeed()
 
   --prof.push("passive raise")
   -- Phase 0 //////////////////////////////////////////////////////////////
   -- Stack automatic rising
   if self.behaviours.passiveRaise then
-    if not self.manual_raise and self.stop_time == 0 and not self.rise_lock then
-      if self.panels_in_top_row then
-        self.health = self.health - 1
-      else
-        self.rise_timer = self.rise_timer - 1
-        if self.rise_timer <= 0 then -- try to rise
-          self.displacement = self.displacement - 1
-          if self.displacement == 0 then
-            self.prevent_manual_raise = false
-            self.top_cur_row = self.height
-            self:new_row()
-          end
-          self.rise_timer = self.rise_timer + consts.SPEED_TO_RISE_TIME[self.speed]
-        end
-      end
-    end
+    self:advancePassiveRaise()
 
     if self:checkGameOver() then
       self:setGameOver()
     end
   end
-
   --prof.pop("passive raise")
 
   --prof.push("reset stuff")
@@ -1094,16 +1064,14 @@ function Stack.simulate(self)
   if self:swapQueued() then
     self:swap(self.queuedSwapRow, self.queuedSwapColumn)
     swapped_this_frame = true
-    self:setQueuedSwapPosition(0, 0)
+    self.queuedSwapColumn = 0
+    self.queuedSwapRow = 0
   end
   --prof.pop("old swap")
 
-  prof.push("Stack:checkMatches")
   self:checkMatches()
-  prof.pop("Stack:checkMatches")
-  prof.push("Stack:updatePanels")
   self:updatePanels()
-  prof.pop("Stack:updatePanels")
+  self:updateActivePanelCount()
 
   --prof.push("shake time updates")
   self.prev_shake_time = self.shake_time
@@ -1117,39 +1085,20 @@ function Stack.simulate(self)
   -- Phase 3. /////////////////////////////////////////////////////////////
   -- Actions performed according to player input
 
-  --prof.push("cursor movement")
-  -- CURSOR MOVEMENT
-  if self.inputMethod == "touch" then
-      --with touch, cursor movement happen at stack:control time
-  else
-    if self.cur_dir and (self.cur_timer == 0 or self.cur_timer == self.cur_wait_time) and self.cursorLock == nil then
-      local previousRow = self.cur_row
-      local previousCol = self.cur_col
-      self:moveCursorInDirection(self.cur_dir)
-      self:emitSignal("cursorMoved", previousRow, previousCol)
-    else
-      self.cur_row = util.bound(1, self.cur_row, self.top_cur_row)
-    end
-  end
-
-  if self.cur_timer ~= self.cur_wait_time then
-    self.cur_timer = self.cur_timer + 1
-  end
-  --prof.pop("cursor movement")
+  self:applyCursorDirection(self.cursorDirection)
 
   --prof.push("new swap")
   -- Queue Swapping
   -- Note: Swapping is queued in Stack.controls for touch mode
   if self.inputMethod == "controller" then
-    if (self.swap_1 or self.swap_2) and not swapped_this_frame then
-      local leftPanel = self.panels[self.cur_row][self.cur_col]
-      local rightPanel = self.panels[self.cur_row][self.cur_col + 1]
-      local canSwap = self:canSwap(leftPanel, rightPanel)
-      if canSwap then
-        self:setQueuedSwapPosition(self.cur_col, self.cur_row)
+    if self.swapThisFrame then
+      if swapped_this_frame then
+        self:emitSignal("swapDenied")
+      else
+        local leftPanel = self.panels[self.cur_row][self.cur_col]
+        local rightPanel = self.panels[self.cur_row][self.cur_col + 1]
+        self:tryQueueSwap(leftPanel, rightPanel)
       end
-      self.swap_1 = false
-      self.swap_2 = false
     end
   end
   --prof.pop("new swap")
@@ -1205,10 +1154,6 @@ function Stack.simulate(self)
   -- lol owned
   end
 
-  --prof.push("updateActivePanels")
-  self:updateActivePanels()
-  --prof.pop("updateActivePanels")
-
   if self.puzzle and self.n_active_panels == 0 and self.n_prev_active_panels == 0 then
     if self:checkGameOver() then
       self:setGameOver()
@@ -1231,6 +1176,7 @@ function Stack.simulate(self)
   for col_idx = 1, self.width do
     if panels[self.height][col_idx]:dangerous() then
       self.panels_in_top_row = true
+      break
     end
   end
   --prof.pop("double-check panels_in_top_row")
@@ -1241,17 +1187,15 @@ function Stack.simulate(self)
     for col_idx = 1, self.width do
       if panels[row_idx][col_idx].color ~= 0 then
         self.panels_in_top_row = true
+        break
       end
     end
   end
   --prof.pop("doublecheck panels above top row")
 
-
   prof.push("pop from incoming garbage q")
-  if self.incomingGarbage:len() > 0 then
-    if self:shouldDropGarbage() then
-      self:tryDropGarbage()
-    end
+  if self:shouldDropGarbage() then
+    self:tryDropGarbage()
   end
   prof.pop("pop from incoming garbage q")
 
@@ -1259,6 +1203,70 @@ function Stack.simulate(self)
 
   if self.game_stopwatch_running then
     self.game_stopwatch = (self.game_stopwatch or -1) + 1
+  end
+end
+
+---@param direction CursorDirection?
+function Stack:applyCursorDirection(direction)
+  --prof.push("cursor movement")
+  if self.inputMethod == "touch" then
+    --with touch, cursor movement happen at stack:control time
+  else
+    if direction and (self.cur_timer == 0 or self.cur_timer == self.cur_wait_time) and self.cursorLock == nil then
+      local previousRow = self.cur_row
+      local previousCol = self.cur_col
+      self:moveCursorInDirection(direction)
+      self:emitSignal("cursorMoved", previousRow, previousCol)
+    else
+      self.cur_row = util.bound(1, self.cur_row, self.top_cur_row)
+    end
+  end
+
+  if self.cur_timer ~= self.cur_wait_time then
+    self.cur_timer = self.cur_timer + 1
+  end
+  --prof.pop("cursor movement")
+end
+
+---@param direction CursorDirection
+function Stack:moveCursorInDirection(direction)
+  self.cur_row = util.bound(1, self.cur_row + DIRECTION_ROW[direction], self.top_cur_row)
+  self.cur_col = util.bound(1, self.cur_col + DIRECTION_COLUMN[direction], self.width - 1)
+end
+
+function Stack:updateSpeed()
+  --prof.push("speed increase")
+  -- Increase the speed if applicable
+  if self.levelData.speedIncreaseMode == 1 then
+    -- increase per interval
+    if self.clock == self.nextSpeedIncreaseClock then
+      self.speed = min(self.speed + 1, 99)
+      self.nextSpeedIncreaseClock = self.nextSpeedIncreaseClock + DT_SPEED_INCREASE
+    end
+  elseif self.panels_to_speedup <= 0 then
+    -- mode 2: increase speed based on cleared panels
+    self.speed = min(self.speed + 1, 99)
+    self.panels_to_speedup = self.panels_to_speedup + PANELS_TO_NEXT_SPEED[self.speed]
+  end
+  --prof.pop("speed increase")
+end
+
+function Stack:advancePassiveRaise()
+  if not self.manual_raise and self.stop_time == 0 and not self.rise_lock then
+    if self.panels_in_top_row then
+      self.health = self.health - 1
+    else
+      self.rise_timer = self.rise_timer - 1
+      if self.rise_timer <= 0 then -- try to rise
+        self.displacement = self.displacement - 1
+        if self.displacement == 0 then
+          self.prevent_manual_raise = false
+          self.top_cur_row = self.height
+          self:new_row()
+        end
+        self.rise_timer = self.rise_timer + consts.SPEED_TO_RISE_TIME[self.speed]
+      end
+    end
   end
 end
 
@@ -1314,12 +1322,6 @@ function Stack:runCountDownIfNeeded()
   end
 end
 
-function Stack:moveCursorInDirection(directionString)
-  assert(directionString ~= nil and type(directionString) == "string")
-  self.cur_row = util.bound(1, self.cur_row + d_row[directionString], self.top_cur_row)
-  self.cur_col = util.bound(1, self.cur_col + d_col[directionString], self.width - 1)
-end
-
 -- Returns true if the stack is simulated past the end of the match.
 function Stack:game_ended()
   if self.game_over_clock > 0 then
@@ -1346,6 +1348,28 @@ function Stack.setGameOver(self)
   self:emitSignal("gameOver", self)
 end
 
+---@param panel1 Panel
+---@param panel2 Panel
+---@return boolean # if the swap was queued successfully
+function Stack:tryQueueSwap(panel1, panel2)
+  local canSwap, healthCost = self:canSwap(panel1, panel2)
+  if canSwap then
+    WigglePay.registerSwap(self, panel1, panel2, healthCost or 0)
+
+    -- by convention, swap column is the left panel
+    self.queuedSwapColumn = math.min(panel1.column, panel2.column)
+    self.queuedSwapRow = panel1.row
+    return true
+  else
+    self:emitSignal("swapDenied")
+    return false
+  end
+end
+
+---@param panel1 Panel
+---@param panel2 Panel
+---@return boolean canSwap
+---@return integer? healthCost
 function Stack:canSwap(panel1, panel2)
   if math.abs(panel1.column - panel2.column) ~= 1 or panel1.row ~= panel2.row then
     -- panels are not horizontally adjacent, can't swap
@@ -1400,7 +1424,11 @@ function Stack:canSwap(panel1, panel2)
     end
   end
 
-  return true
+  if self.behaviours.swapStallingMode == 1 then
+    return WigglePay.canSwap(self, panel1, panel2)
+  else
+    return true
+  end
 end
 
 -- Swaps panels at the current cursor location
@@ -1408,33 +1436,6 @@ function Stack:swap(row, col)
   local panels = self.panels
   local leftPanel = panels[row][col]
   local rightPanel = panels[row][col + 1]
-  if self.behaviours.swapStallingMode == 1 then
-    if self.panels_in_top_row and self.pre_stop_time == 0 and self.stop_time == 0 and self.shake_time == 0 and (self.n_active_panels - self.swappingPanelCount) == 0 then
-      local newRecord = { leftId = leftPanel.id, rightId = rightPanel.id, row = row, col = col }
-      local punish = false
-      for _, oldRecord in ipairs(self.swapStallingBackLog) do
-        if deep_content_equal(newRecord, oldRecord) then
-          punish = true
-          break
-        end
-      end
-
-      if punish then
-        self.health = self.health - self.behaviours.swapStallingPunish
-        if self:checkGameOver() then
-          self:setGameOver()
-          return
-        end
-      else
-        -- mark the reverse swap of the swap initiated just now
-        self.swapStallingBackLog[#self.swapStallingBackLog+1] = { leftId = newRecord.rightId, rightId = newRecord.leftId, row = row, col = col }
-        -- and the swap itself so it's already marked in case the reverse swap happens and logic stays simple for when data is added
-        self.swapStallingBackLog[#self.swapStallingBackLog+1] = newRecord
-      end
-    elseif #self.swapStallingBackLog > 0 then
-      self.swapStallingBackLog = {}
-    end
-  end
   self:processPuzzleSwap()
   leftPanel:startSwap(true)
   rightPanel:startSwap(false)
@@ -1766,9 +1767,11 @@ function Stack.hasChainingPanels(self)
   return false
 end
 
-function Stack.updateActivePanels(self)
+function Stack:updateActivePanelCount()
+  --prof.push("updateActivePanelCount")
   self.n_prev_active_panels = self.n_active_panels
   self.n_active_panels, self.swappingPanelCount = self:getActivePanelCount()
+  --prof.pop("updateActivePanelCount")
 end
 
 ---@return integer activePanelCount
@@ -1801,7 +1804,7 @@ function Stack:getActivePanelCount()
   return count, swappingCount
 end
 
-function Stack.updateRiseLock(self)
+function Stack:updateRiseLock()
   local previousRiseLock = self.rise_lock
   if self.do_countdown then
     self.rise_lock = true
