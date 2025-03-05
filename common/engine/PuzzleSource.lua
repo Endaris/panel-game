@@ -98,9 +98,11 @@ function PuzzleSource:createPanelBuffer(stack)
     -- copy the panels into the row
     panels[row] = {}
     for column = 6, 1, -1 do
+      local panel = createPanelWithoutPosition(stack, column)
+      panels[row][column] = panel
+
       local color = string.sub(rowString, column, column)
       if not garbageStartRow and tonumber(color) then
-        local panel = createPanelWithoutPosition(stack, column)
         panel.color = tonumber(color)
       else
         -- start of a garbage block
@@ -117,7 +119,6 @@ function PuzzleSource:createPanelBuffer(stack)
             isMetal = false
           end
         end
-        local panel = createPanelWithoutPosition(stack, column)
         ---@diagnostic disable-next-line: invisible
         panel.garbageId = stack.garbageCreatedCount
         panel.isGarbage = true
@@ -140,7 +141,10 @@ function PuzzleSource:createPanelBuffer(stack)
             connectedGarbagePanels[i].x_offset = connectedGarbagePanels[i].x_offset - column
             connectedGarbagePanels[i].height = height
             connectedGarbagePanels[i].width = width
-            connectedGarbagePanels[i].shake_time = shake_time
+            if row > stack.height then
+              -- only garbage panels that end up off screen should grant shake time on land
+              connectedGarbagePanels[i].shake_time = shake_time
+            end
             ---@diagnostic disable-next-line: invisible
             connectedGarbagePanels[i].garbageId = stack.garbageCreatedCount
             -- panels are already in the main table and they should already be updated by reference
