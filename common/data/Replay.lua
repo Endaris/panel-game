@@ -185,6 +185,9 @@ end
 
 ---@param replay Replay
 function Replay.replayCanBeViewed(replay)
+  if DEBUG_ENABLED then
+    return true
+  end
   if replay.engineVersion > consts.ENGINE_VERSION then
     -- replay is from a newer game version, we can't watch
     -- or maybe we can but there is no way to verify we can

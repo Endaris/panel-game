@@ -27,6 +27,7 @@ local function testChainingPropagationThroughSwap1()
   StackReplayTestingUtils:cleanup(match)
 end
 
+-- although originally created for testing a certain application of garbage hover, this replay is also an excellent indicator for shock panel creation breaking
 local function testHoverInheritanceOverSwapOverGarbageHover()
   local match = StackReplayTestingUtils:setupReplayWithPath(testReplayFolder .. "swapOverGarbageHoverInheritance.json")
 

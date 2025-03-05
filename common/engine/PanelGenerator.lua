@@ -166,4 +166,50 @@ function PanelGenerator:generateGarbagePanels(stack, rowCount)
   return PanelGenerator.privateGeneratePanels(rowCount, stack.width, stack.levelData.colors, stack.gpanel_buffer, not stack.behaviours.allowAdjacentColors)
 end
 
+---@param stack Stack
+---@param row integer
+---@return Panel[] panelRow
+function PanelGenerator:createNewRow(stack, row)
+  if string.len(stack.panel_buffer) <= 10 * stack.width then
+    stack.panel_buffer = stack:makePanels()
+  end
+
+  -- assign colors to the new row 0
+  local metal_panels_this_row = 0
+  if stack.metal_panels_queued > 3 then
+    stack.metal_panels_queued = stack.metal_panels_queued - 2
+    metal_panels_this_row = 2
+  elseif stack.metal_panels_queued > 0 then
+    stack.metal_panels_queued = stack.metal_panels_queued - 1
+    metal_panels_this_row = 1
+  end
+
+  for col = 1, stack.width do
+    local panel = stack:createPanelAt(row, col)
+    local colorString = stack.panel_buffer:sub(col, col)
+    local color = 0
+    if tonumber(colorString) then
+      color = colorString + 0
+    elseif colorString >= "A" and colorString <= "Z" then
+      if metal_panels_this_row > 0 then
+        color = 8
+      else
+        color = self.PANEL_COLOR_TO_NUMBER[colorString]
+      end
+    elseif colorString >= "a" and colorString <= "z" then
+      if metal_panels_this_row > 1 then
+        color = 8
+      else
+        color = self.PANEL_COLOR_TO_NUMBER[colorString]
+      end
+    end
+    panel.color = color
+    panel.state = "dimmed"
+  end
+
+  stack.panel_buffer = string.sub(stack.panel_buffer, stack.width + 1)
+
+  return stack.panels[row]
+end
+
 return PanelGenerator

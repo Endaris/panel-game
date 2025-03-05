@@ -31,6 +31,9 @@ function Puzzle.getLegalCharacters()
   return { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "[", "]", "{", "}", "=" }
 end
 
+---@param width integer
+---@param height integer
+---@return string puzzleString
 function Puzzle:fillMissingPanelsInPuzzleString(width, height)
   local puzzleString = self.stack
   local boardSizeInPanels = width * height
@@ -51,6 +54,8 @@ function Puzzle:fillMissingPanelsInPuzzleString(width, height)
   return puzzleString
 end
 
+---@param puzzleString string
+---@return string puzzleString
 function Puzzle.randomizeColorsInPuzzleString(puzzleString)
   local colorArray = Panel.regularColorsArray()
   if puzzleString:find("7") then
@@ -67,16 +72,19 @@ function Puzzle.randomizeColorsInPuzzleString(puzzleString)
   return puzzleString
 end
 
-function Puzzle:horizontallyFlipPuzzleString()
-  local rowWidth = 6
-  local height = 12
-  puzzleString = self:fillMissingPanelsInPuzzleString(rowWidth, height)
+local unreverseMap = {}
+unreverseMap["{"] = "}"
+unreverseMap["}"] = "{"
+unreverseMap["["] = "]"
+unreverseMap["]"] = "["
+local rowWidth = 6
+
+---@param puzzleString string
+---@return string puzzleString
+function Puzzle.horizontallyFlipPuzzleString(puzzleString)
+  -- to flip we need it guaranteed that all rows are complete so pad out the topmost row
+  puzzleString = string.rep(0, puzzleString:len() % 6) .. puzzleString
   local result = ""
-  local unreverseMap = {}
-  unreverseMap["{"] = "}"
-  unreverseMap["}"] = "{"
-  unreverseMap["["] = "]"
-  unreverseMap["]"] = "["
   for i = 1, puzzleString:len(), rowWidth do
     local rowString = string.sub(puzzleString, i, i+rowWidth-1)
     if string.find(rowString, "%d") then
@@ -89,7 +97,9 @@ function Puzzle:horizontallyFlipPuzzleString()
   return result
 end
 
-function Puzzle.validate(self)
+---@return boolean isValid
+---@return string problems
+function Puzzle:validate()
   local errMessage = ""
 
   if type(self.doCountdown) ~= "boolean" then
@@ -168,6 +178,8 @@ function Puzzle.validate(self)
   return errMessage == "", errMessage
 end
 
+---@param panels Panel[][]
+---@return string puzzleString
 function Puzzle.toPuzzleString(panels)
   local function getPanelColor(panel)
     if panel.isGarbage then

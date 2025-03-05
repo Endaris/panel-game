@@ -38,4 +38,10 @@ function PanelSource:generateGarbagePanels(stack, rowCount)
   error("Did not implement generateGarbagePanels")
 end
 
+---@param stack Stack
+---@return Panel[]
+function PanelSource:createNewRow(stack, row)
+  error("Did not implement createNewRow")
+end
+
 return PanelSource

@@ -646,7 +646,8 @@ function Stack:setPuzzleState(puzzle)
   self.panel_buffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
 end
 
-function Stack.setPanelsForPuzzleString(self, puzzleString)
+---@param puzzleString string
+function Stack:setPanelsForPuzzleString(puzzleString)
   local panels = self.panels
 
   local garbageStartRow = nil
@@ -654,7 +655,7 @@ function Stack.setPanelsForPuzzleString(self, puzzleString)
   local isMetal = false
   local connectedGarbagePanels = {}
   local rowCount = string.len(puzzleString) / 6
-  -- chunk the aprilstack into rows
+  -- chunk the puzzle string into rows
   -- it is necessary to go bottom up because garbage block panels contain the offset relative to their bottom left corner
   for row = 1, rowCount do
       local rowString = string.sub(puzzleString, #puzzleString - 5, #puzzleString)
@@ -1566,7 +1567,7 @@ function Stack.dropGarbage(self, width, height, isMetal)
 end
 
 -- Adds a new row to the play field
-function Stack.new_row(self)
+function Stack:new_row()
   local panels = self.panels
   -- move cursor up
   if self.cur_row ~= 0 then
@@ -1579,12 +1580,9 @@ function Stack.new_row(self)
   -- create new row at the top
   local stackHeight = #panels + 1
   panels[stackHeight] = {}
+  self.panelSource:createNewRow(self, stackHeight)
 
-  for col = 1, self.width do
-    self:createPanelAt(stackHeight, col)
-  end
-
-  -- move panels up
+  -- switching the new row downwards for each panel refreshes the properties on all panels to their new row
   for row = stackHeight, 1, -1 do
     for col = #panels[row], 1, -1 do
       Panel.switch(panels[row][col], panels[row - 1][col], panels)
@@ -1592,53 +1590,14 @@ function Stack.new_row(self)
   end
 
   -- the new row we created earlier at the top is now at row 0!
-  -- while the former row 0 is at row 1 and in play
-  -- therefore we need to override dimmed state in row 1
-  -- this cannot happen in the regular updatePanels routine as checkMatches is called after
-  -- meaning the panels already need to be eligible for matches!
+  -- while the former row 0 is at row 1 and in play, therefore we need to override dimmed state in row 1
+  -- this cannot happen in the regular updatePanels routine as checkMatches is called before the update
+  -- and the panels already need to be eligible for matches!
   for col = 1, self.width do
     panels[1][col].state = "normal"
     panels[1][col].stateChanged = true
   end
 
-  if string.len(self.panel_buffer) <= 10 * self.width then
-    self.panel_buffer = self:makePanels()
-  end
-
-  -- assign colors to the new row 0
-  local metal_panels_this_row = 0
-  if self.metal_panels_queued > 3 then
-    self.metal_panels_queued = self.metal_panels_queued - 2
-    metal_panels_this_row = 2
-  elseif self.metal_panels_queued > 0 then
-    self.metal_panels_queued = self.metal_panels_queued - 1
-    metal_panels_this_row = 1
-  end
-
-  for col = 1, self.width do
-    local panel = panels[0][col]
-    ---@type string | integer
-    local this_panel_color = string.sub(self.panel_buffer, col, col)
-    --a capital letter for the place where the first shock block should spawn (if earned), and a lower case letter is where a second should spawn (if earned).  (color 8 is metal)
-    if tonumber(this_panel_color) then
-      --do nothing special
-    elseif this_panel_color >= "A" and this_panel_color <= "Z" then
-      if metal_panels_this_row > 0 then
-        this_panel_color = 8
-      else
-        this_panel_color = self.panelSource.PANEL_COLOR_TO_NUMBER[this_panel_color]
-      end
-    elseif this_panel_color >= "a" and this_panel_color <= "z" then
-      if metal_panels_this_row > 1 then
-        this_panel_color = 8
-      else
-        this_panel_color = self.panelSource.PANEL_COLOR_TO_NUMBER[this_panel_color]
-      end
-    end
-    panel.color = this_panel_color + 0
-    panel.state = "dimmed"
-  end
-  self.panel_buffer = string.sub(self.panel_buffer, 7)
   self.displacement = 16
   self:emitSignal("newRow", self)
 end
