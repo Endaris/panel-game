@@ -73,6 +73,11 @@ MatchParticipant)
 
 Player.TYPE = "Player"
 
+function Player:reset()
+  MatchParticipant.reset(self)
+  self:unrestrictInputs()
+end
+
 -- creates a stack for the given match according to the player's settings and returns it
 -- the stack is also saved as a reference on player
 function Player:createStackFromSettings(match, which)

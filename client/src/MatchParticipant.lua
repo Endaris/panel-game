@@ -34,19 +34,15 @@ local ModController = require("client.src.mods.ModController")
 local MatchParticipant = class(
 function(self)
   self.name = "participant"
-  self.wins = 0
-  self.modifiedWins = 0
-  self.winrate = 0
-  self.expectedWinrate = 0
   self.settings = {
     selectedCharacterId = consts.RANDOM_CHARACTER_SPECIAL_VALUE,
     selectedStageId = consts.RANDOM_STAGE_SPECIAL_VALUE,
     panelId = config.panels,
-    wantsReady = false,
   }
   self.hasLoaded = false
-  self.ready = false
   self.human = false
+
+  self:reset()
 
   Signal.turnIntoEmitter(self)
   self:createSignal("winsChanged")
@@ -62,6 +58,15 @@ function(self)
   self:createSignal("hasLoadedChanged")
   self:createSignal("attackEngineSettingsChanged")
 end)
+
+function MatchParticipant:reset()
+  self.wins = 0
+  self.modifiedWins = 0
+  self.winrate = 0
+  self.expectedWinrate = 0
+  self.settings.wantsReady = false
+  self.ready = false
+end
 
 -- returns the count of wins modified by the `modifiedWins` property
 function MatchParticipant:getWinCountForDisplay()

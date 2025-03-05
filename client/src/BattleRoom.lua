@@ -539,11 +539,8 @@ function BattleRoom:update(dt)
 end
 
 function BattleRoom:shutdown()
-  for i, player in ipairs(self.players) do
-    if player.human then
-      -- this is to clear the input configs for future use
-      player:unrestrictInputs()
-    end
+  for _, player in ipairs(self.players) do
+    player:reset()
   end
   if self.match then
     self.match:deinit()
