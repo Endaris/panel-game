@@ -26,6 +26,7 @@ local system = require("client.src.system")
 ---@field matchesPlayed integer
 ---@field online boolean
 ---@field gameScene table
+---@field match ClientMatch
 ---@overload fun(mode: GameMode, gameScene: table?): BattleRoom
 BattleRoom = class(
 function(self, mode, gameScene)

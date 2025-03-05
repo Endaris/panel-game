@@ -4,6 +4,7 @@ local tableUtils = require("common.lib.tableUtils")
 local MessageTransition = require("client.src.scenes.Transitions.MessageTransition")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
 local consts = require("common.engine.consts")
+local FileUtils = require("client.src.FileUtils")
 
 -- Scene for a puzzle mode instance of the game
 ---@class PuzzleGame : GameBase
@@ -38,9 +39,15 @@ end
 
 function PuzzleGame:customRun()
   -- reset level
-  if (self.inputConfiguration and self.inputConfiguration.isDown["TauntUp"]) and not self.match.isPaused then
-    GAME.theme:playValidationSfx()
-    self.match:resetPuzzle()
+  if (self.inputConfiguration and self.inputConfiguration.isDown["TauntUp"]) then
+    if self.match.ended then
+      FileUtils.saveReplay(self.match.replay)
+    else
+      if not self.match.isPaused then
+        GAME.theme:playValidationSfx()
+        self.match:resetPuzzle()
+      end
+    end
   end
 end
 

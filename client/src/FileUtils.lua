@@ -318,6 +318,8 @@ function fileUtils.write(path, filename, data)
   end
 end
 
+-- encodes the table into json and writes it to the filename at the given path
+-- throws an error on failure so it should be assumed the write always succeeds
 ---@param path string
 ---@param filename string
 ---@param tab table
