@@ -115,7 +115,7 @@ function PanelGenerator.assignMetalLocations(ret, rowWidth)
 end
 
 function PanelGenerator:getStartingBoardHeight(stack)
-  return 7 + 1
+  return 7
 end
 
 ---@param stack Stack
@@ -124,7 +124,7 @@ function PanelGenerator:generateStartingBoard(stack)
 
   local allowAdjacentColors = stack.allowAdjacentColorsOnStartingBoard
 
-  local ret = PanelGenerator.privateGeneratePanels(7, stack.width, stack.levelData.colors, stack.panel_buffer, not allowAdjacentColors)
+  local ret = PanelGenerator.privateGeneratePanels(PanelGenerator:getStartingBoardHeight(stack), stack.width, stack.levelData.colors, stack.panel_buffer, not allowAdjacentColors)
   -- technically there can never be metal on the starting board but we need to call it to advance the RNG (compatibility)
   ret = PanelGenerator.assignMetalLocations(ret, stack.width)
 
