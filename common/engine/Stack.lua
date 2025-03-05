@@ -151,7 +151,7 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field puzzle table? Optional puzzle
 ---@field game_stopwatch integer? Clock time minus time that swaps were blocked
 ---@field rollbackBuffer RollbackBuffer
----@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
+---@field panelTemplate (Panel | fun(row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
 ---@field swapStallingBackLog table
 ---@field swappingPanelCount integer
 ---@field panelSource PanelSource
@@ -291,9 +291,12 @@ local Stack = class(
 
 Stack.TYPE = "Stack"
 
----@return (Panel | fun(id: integer, row: integer, column: integer): Panel)
+---@return (Panel | fun(row: integer, column: integer): Panel)
 function Stack:createPanelTemplate()
-  local panelTemplate = class(function(p, id, row, column) end, Panel)
+  local panelTemplate = class(function(p, row, column)
+    self.panelsCreatedCount = self.panelsCreatedCount + 1
+    p.id = self.panelsCreatedCount
+  end, Panel)
   panelTemplate.frameTimes = self.levelData.frameConstants
   panelTemplate.onPop = function(panel)
     self:onPop(panel)
@@ -1637,13 +1640,11 @@ function Stack:getAttackPatternData()
 end
 
 -- creates a new panel at the specified row+column and adds it to the Stack's panels table
----@param self Stack
 ---@param row integer
 ---@param column integer
 ---@return Panel panel New Panel at the specified row+column that has been added to the Stack's panels table and subscribed to for signals
-function Stack.createPanelAt(self, row, column)
-  self.panelsCreatedCount = self.panelsCreatedCount + 1
-  local panel = self.panelTemplate(self.panelsCreatedCount, row, column)
+function Stack:createPanelAt(row, column)
+  local panel = self.panelTemplate(row, column)
   self.panels[row][column] = panel
   return panel
 end
