@@ -167,19 +167,19 @@ end
 
 local function rollbackFromDeath()
   local match = StackReplayTestingUtils:setupReplayWithPath(testReplayFolder .. "rollbackFromDeath.json")
-
+  local stack = match.stacks[1]
   StackReplayTestingUtils:fullySimulateMatch(match)
-  assert(match.stacks[1].game_over_clock == 652)
+  assert(stack.game_over_clock == 652)
 
   match:rewindToFrame(613)
-  assert(match.stacks[1].outgoingGarbage.garbageInTransit[631], "expected +4 in transit")
+  assert(stack.outgoingGarbage.garbageInTransit[631], "expected +4 in transit")
   StackReplayTestingUtils:fullySimulateMatch(match)
-  assert(match.stacks[1].game_over_clock == 652)
+  assert(stack.game_over_clock == 652)
 
   match:rewindToFrame(481)
-  assert(match.stacks[1].outgoingGarbage.stagedGarbage[1].frameEarned == 480, "expected +4 queued")
+  assert(stack.outgoingGarbage.stagedGarbage[1].frameEarned == 480, "expected +4 queued")
   StackReplayTestingUtils:fullySimulateMatch(match)
-  assert(match.stacks[1].game_over_clock == 652)
+  assert(stack.game_over_clock == 652)
 end
 
 logger.info("running rollbackFromDeath")

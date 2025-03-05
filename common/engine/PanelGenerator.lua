@@ -1,17 +1,15 @@
 local util = require("common.lib.util")
-require("common.lib.csprng")
 local logger = require("common.lib.logger")
+local tableUtils = require("common.lib.tableUtils")
+local PanelSource = require("common.engine.PanelSource")
 
 -- table of static functions used for generating panels
-local PanelGenerator = { rng = love.math.newRandomGenerator(), generatedCount = 0}
-
-PanelGenerator.PANEL_COLOR_NUMBER_TO_UPPER = {"A", "B", "C", "D", "E", "F", "G", "H", "I", [0] = "0"}
-PanelGenerator.PANEL_COLOR_NUMBER_TO_LOWER = {"a", "b", "c", "d", "e", "f", "g", "h", "i", [0] = "0" }
-PanelGenerator.PANEL_COLOR_TO_NUMBER = {
-  ["A"] = 1, ["B"] = 2, ["C"] = 3, ["D"] = 4, ["E"] = 5, ["F"] = 6, ["G"] = 7, ["H"] = 8, ["I"] = 9, ["J"] = 0,
-  ["a"] = 1, ["b"] = 2, ["c"] = 3, ["d"] = 4, ["e"] = 5, ["f"] = 6, ["g"] = 7, ["h"] = 8, ["i"] = 9, ["j"] = 0,
-  ["1"] = 1, ["2"] = 2, ["3"] = 3, ["4"] = 4, ["5"] = 5, ["6"] = 6, ["7"] = 7, ["8"] = 8, ["9"] = 9, ["0"] = 0
-}
+---@class PanelGenerator : PanelSource
+---@field rng love.RandomGenerator
+---@field generatedCount integer
+---@field seed integer
+local PanelGenerator = {rng = love.math.newRandomGenerator(), generatedCount = 0}
+setmetatable(PanelGenerator, PanelSource)
 
 -- sets the seed for the PanelGenerators own random number generator
 -- seed has to be a number
@@ -28,6 +26,12 @@ function PanelGenerator:random(min, max)
   return self.rng:random(min, max)
 end
 
+---@param rowsToMake integer
+---@param rowWidth integer
+---@param ncolors integer
+---@param previousPanels string
+---@param disallowAdjacentColors boolean
+---@return string panelBuffer
 function PanelGenerator.privateGeneratePanels(rowsToMake, rowWidth, ncolors, previousPanels, disallowAdjacentColors)
   -- logger.info("generating panels with seed: " .. PanelGenerator.rng:getSeed() ..
   --              "\nbuffer: " .. previousPanels ..
@@ -41,17 +45,17 @@ function PanelGenerator.privateGeneratePanels(rowsToMake, rowWidth, ncolors, pre
 
   for x = 0, rowsToMake - 1 do
     for y = 0, rowWidth - 1 do
-      local previousTwoMatchOnThisRow = y > 1 and PanelGenerator.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)] ==
-                                            PanelGenerator.PANEL_COLOR_TO_NUMBER[string.sub(result, -2, -2)]
+      local previousTwoMatchOnThisRow = y > 1 and PanelSource.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)] ==
+                                            PanelSource.PANEL_COLOR_TO_NUMBER[string.sub(result, -2, -2)]
       local nogood = true
       local color = 0
-      local belowColor = PanelGenerator.PANEL_COLOR_TO_NUMBER[string.sub(result, -rowWidth, -rowWidth)]
+      local belowColor = PanelSource.PANEL_COLOR_TO_NUMBER[string.sub(result, -rowWidth, -rowWidth)]
       while nogood do
         color = PanelGenerator:random(1, ncolors)
         nogood =
-            (previousTwoMatchOnThisRow and color == PanelGenerator.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)]) or -- Can't have three in a row on this column
+            (previousTwoMatchOnThisRow and color == PanelSource.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)]) or -- Can't have three in a row on this column
             color == belowColor or -- can't have the same color as below
-                (y > 0 and color == PanelGenerator.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)] and disallowAdjacentColors) -- on level 8+ vs, don't allow any adjacent colors
+                (y > 0 and color == PanelSource.PANEL_COLOR_TO_NUMBER[string.sub(result, -1, -1)] and disallowAdjacentColors) -- on level 8+ vs, don't allow any adjacent colors
       end
       result = result .. tostring(color)
     end
@@ -60,6 +64,9 @@ function PanelGenerator.privateGeneratePanels(rowsToMake, rowWidth, ncolors, pre
   return result
 end
 
+---@param ret string
+---@param rowWidth integer
+---@return string panelBuffer
 function PanelGenerator.assignMetalLocations(ret, rowWidth)
   -- logger.debug("panels before potential metal panel position assignments:")
   -- logger.debug(ret)
@@ -85,9 +92,9 @@ function PanelGenerator.assignMetalLocations(ret, rowWidth)
         local chr_from_ret = string.sub(ret, (i - 1) * rowWidth + j, (i - 1) * rowWidth + j)
         local num_from_ret = tonumber(chr_from_ret)
         if j == first then
-          new_row = new_row .. (PanelGenerator.PANEL_COLOR_NUMBER_TO_UPPER[num_from_ret] or chr_from_ret or "0")
+          new_row = new_row .. (PanelSource.PANEL_COLOR_NUMBER_TO_UPPER[num_from_ret] or chr_from_ret or "0")
         elseif j == second then
-          new_row = new_row .. (PanelGenerator.PANEL_COLOR_NUMBER_TO_LOWER[num_from_ret] or chr_from_ret or "0")
+          new_row = new_row .. (PanelSource.PANEL_COLOR_NUMBER_TO_LOWER[num_from_ret] or chr_from_ret or "0")
         else
           new_row = new_row .. chr_from_ret
         end
@@ -105,6 +112,58 @@ function PanelGenerator.assignMetalLocations(ret, rowWidth)
   -- logger.debug("panels after potential metal panel position assignments:")
   -- logger.debug(ret)
   return new_ret
+end
+
+function PanelGenerator:getStartingBoardHeight(stack)
+  return 7 + 1
+end
+
+---@param stack Stack
+function PanelGenerator:generateStartingBoard(stack)
+  PanelGenerator:setSeed(stack.seed + stack.panelGenCount)
+
+  local allowAdjacentColors = stack.allowAdjacentColorsOnStartingBoard
+
+  local ret = PanelGenerator.privateGeneratePanels(7, stack.width, stack.levelData.colors, stack.panel_buffer, not allowAdjacentColors)
+  -- technically there can never be metal on the starting board but we need to call it to advance the RNG (compatibility)
+  ret = PanelGenerator.assignMetalLocations(ret, stack.width)
+
+  -- legacy crutch, the arcane magic for the non-uniform starting board assumes this is there and it really doesn't work without it
+  ret = string.rep("0", stack.width) .. ret
+  -- arcane magic to get a non-uniform starting board
+  ret = procat(ret)
+  local maxStartingHeight = 7
+  local height = tableUtils.map(procat(string.rep(maxStartingHeight, stack.width)), function(s) return tonumber(s) end)
+  local to_remove = 2 * stack.width
+  while to_remove > 0 do
+    local idx = PanelGenerator:random(1, stack.width) -- pick a random column
+    if height[idx] > 0 then
+      ret[idx + stack.width * (-height[idx] + 8)] = "0" -- delete the topmost panel in this column
+      height[idx] = height[idx] - 1
+      to_remove = to_remove - 1
+    end
+  end
+
+  ret = table.concat(ret)
+  ret = string.sub(ret, stack.width + 1)
+
+  return ret
+end
+
+---@param stack Stack
+---@param rowCount integer
+function PanelGenerator:generatePanels(stack, rowCount)
+  PanelGenerator:setSeed(stack.seed + stack.panelGenCount)
+  local panels = PanelGenerator.privateGeneratePanels(rowCount, stack.width, stack.levelData.colors, stack.panel_buffer, not stack.behaviours.allowAdjacentColors)
+  panels = PanelGenerator.assignMetalLocations(panels, stack.width)
+  return panels
+end
+
+---@param stack Stack
+---@param rowCount integer
+function PanelGenerator:generateGarbagePanels(stack, rowCount)
+  PanelGenerator:setSeed(stack.seed + stack.garbageGenCount)
+  return PanelGenerator.privateGeneratePanels(rowCount, stack.width, stack.levelData.colors, stack.gpanel_buffer, not stack.behaviours.allowAdjacentColors)
 end
 
 return PanelGenerator

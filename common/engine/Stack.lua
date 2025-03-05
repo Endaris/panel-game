@@ -154,6 +154,7 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field panelTemplate (Panel | fun(id: integer, row: integer, column: integer): Panel) A template class based on Panel enriched by tailor made closures containing references to the Stack
 ---@field swapStallingBackLog table
 ---@field swappingPanelCount integer
+---@field panelSource PanelSource
 
 
 -- Represents the full panel stack for one player
@@ -170,6 +171,7 @@ local Stack = class(
     s.engineVersion = arguments.engineVersion
     s.levelData = arguments.levelData
     s.behaviours = arguments.behaviours
+    s.panelSource = arguments.panelSource or PanelGenerator
 
     s.seed = arguments.seed
 
@@ -774,24 +776,11 @@ function Stack:swapQueued()
   return self.queuedSwapColumn ~= 0 and self.queuedSwapRow ~= 0
 end
 
--- Setup the stack at a new starting state
-function Stack.starting_state(self, n)
-  if self.do_first_row then
-    self.do_first_row = nil
-    for i = 1, (n or 8) do
-      self:new_row()
-      self.cur_row = self.cur_row - 1
-    end
-  end
-end
-
--- relatively sure this is unused because do_first_row is always nilled by either
---   starting_state (directly above) or
---   PuzzleGame overwriting the prop with false
--- commented out the single use for now
-function Stack.prep_first_row(self)
-  if self.do_first_row then
-    self.do_first_row = nil
+-- create the initial board
+function Stack:starting_state(n)
+  local rowCount = self.panelSource:getStartingBoardHeight(self)
+  -- +1 because the new row spawns in row 0 but we want the bottom row of the starting board in row 1
+  for i = 1, rowCount + 1 do
     self:new_row()
     self.cur_row = self.cur_row - 1
   end
@@ -1008,7 +997,6 @@ end
 -- One run of the engine routine.
 function Stack:simulate()
   --prof.push("simulate 1")
-  -- self:prep_first_row()
   local panels = self.panels
   local swapped_this_frame = nil
   table.clear(self.garbageLandedThisFrame)
@@ -1638,13 +1626,13 @@ function Stack.new_row(self)
       if metal_panels_this_row > 0 then
         this_panel_color = 8
       else
-        this_panel_color = PanelGenerator.PANEL_COLOR_TO_NUMBER[this_panel_color]
+        this_panel_color = self.panelSource.PANEL_COLOR_TO_NUMBER[this_panel_color]
       end
     elseif this_panel_color >= "a" and this_panel_color <= "z" then
       if metal_panels_this_row > 1 then
         this_panel_color = 8
       else
-        this_panel_color = PanelGenerator.PANEL_COLOR_TO_NUMBER[this_panel_color]
+        this_panel_color = self.panelSource.PANEL_COLOR_TO_NUMBER[this_panel_color]
       end
     end
     panel.color = this_panel_color + 0
@@ -1834,14 +1822,13 @@ function Stack:getInfo()
   return info
 end
 
+---@return string panelBuffer
 function Stack:makePanels()
-  PanelGenerator:setSeed(self.seed + self.panelGenCount)
   local ret
   if self.panel_buffer == "" then
-    ret = self:makeStartingBoardPanels()
+    ret = self.panelSource:generateStartingBoard(self)
   else
-    ret = PanelGenerator.privateGeneratePanels(100, self.width, self.levelData.colors, self.panel_buffer, not self.behaviours.allowAdjacentColors)
-    ret = PanelGenerator.assignMetalLocations(ret, self.width)
+    ret = self.panelSource:generatePanels(self, 100)
   end
 
   self.panelGenCount = self.panelGenCount + 1
