@@ -7,6 +7,7 @@ local util = require("common.lib.util")
 local utf8 = require("common.lib.utf8Additions")
 local GameModes = require("common.engine.GameModes")
 local PanelGenerator = require("common.engine.PanelGenerator")
+local GeneratorSource = require("common.engine.GeneratorSource")
 local BaseStack = require("common.engine.BaseStack")
 local class = require("common.lib.class")
 local Panel = require("common.engine.Panel")
@@ -63,10 +64,15 @@ local PANELS_TO_NEXT_SPEED =
 
 ---@class PanelSource
 ---@field generateStartingBoard fun(self: PanelSource, stack: Stack): string
----@field generatePanels fun(self: PanelSource, stack:Stack, rowCount: integer): string
----@field generateGarbagePanels fun(self: PanelSource, stack:Stack, rowCount: integer): string
+---@field generatePanels fun(self: PanelSource, stack: Stack): string
+---@field generateGarbagePanels fun(self: PanelSource, stack:Stack): string
 ---@field getStartingBoardHeight fun(self: PanelSource, stack: Stack): integer
 ---@field createNewRow fun(self: PanelSource, stack: Stack, row: integer)
+---@field clone fun(self: PanelSource): PanelSource
+---@field panelBuffer string alphanumeric string containing a buffer of panels to rise from below; string characters indicate possible metal positions
+---@field panelGenCount integer How many times the panelBuffer was extended; relevant to keep PRNG deterministic for replays
+---@field garbagePanelBuffer string numeric string containing a buffer of panels for garbage to turn into upon matching
+---@field garbageGenCount integer How many times the garbagePanelBuffer was extended; relevant to keep PRNG deterministic for replays
 
 ---@alias CursorDirection ("up" | "down" | "left" | "right")
 
@@ -78,7 +84,6 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
 ---@field height integer How many rows of panels the stack has
----@field engineVersion string
 ---@field seed integer
 ---@field gameOverConditions table Array of enumerated values signifying ways of going game over
 ---@field gameWinConditions table Array of enumerated values signifying ways of ending the game without going game over
@@ -97,8 +102,6 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 --- for different game modes or need to change it based on board width.
 ---@field currentGarbageDropColumnIndexes integer[] The current index of the above table we are currently using for the drop column. \n
 --- This increases by 1 wrapping every time garbage drops.
----@field panel_buffer string alphanumeric string containing a buffer of panels to rise from below; string characters indicate possible metal positions \n
---- will get periodically extended as it gets consumed
 ---@field gpanel_buffer string numeric string containing a buffer of panels for garbage to turn into upon matching \n
 --- will get periodically extended as it gets consumed
 ---@field inputMethod string "controller" or "touch", determines how inputs are interpreted internally
@@ -110,7 +113,7 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field highestGarbageIdMatched integer tracks the highest id of garbage matched so far; used for resolving edge cases when matching offscreen garbage
 ---@field package panelsCreatedCount integer The number of individual panels created on this stack; used for giving new panels their own unique identifier
 ---@field panels Panel[][] 2 dimensional table for containing all panels \n
---- panel[i] gets the row where i is the index of the row with 1 being the most bottom row that is in play (not dimmed) \n
+--- panel[i] gets the row where i is the index of the row with 1 being the bottommost row in play (not dimmed) \n
 --- panel[i][j] gets the panel at row i where j is the column index counting from left to right starting from 1 \n
 --- the update order for panels is bottom to top and left to right as well
 ---@field game_stopwatch_running boolean set to false if countdown starts
@@ -152,7 +155,6 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field shake_time_on_frame integer The shake time that would have been earned by falling panels this frame. Overwrites shake_time if greater.
 ---@field peak_shake_time integer Records the maximum shake time obtained for the current stretch of uninterrupted shake time. \n
 --- Any additional shake time gained before shake depletes to 0 will reset shake_time back to this value. Set to 0 when shake_time reaches 0.
----@field panelGenCount integer How many times the panel_buffer was extended; relevant to keep PRNG deterministic for replays
 ---@field garbageGenCount integer How many times the gpanel_buffer was extended; relevant to keep PRNG deterministic for replays
 ---@field warningsTriggered table ancient ancient, probably remove
 ---@field puzzle table? Optional puzzle
@@ -175,10 +177,9 @@ local Stack = class(
 
     s.gameOverConditions = arguments.gameOverConditions or {GameModes.GameOverConditions.NEGATIVE_HEALTH}
     s.gameWinConditions = arguments.gameWinConditions or {}
-    s.engineVersion = arguments.engineVersion
     s.levelData = arguments.levelData
     s.behaviours = arguments.behaviours
-    s.panelSource = arguments.panelSource or PanelGenerator
+    s.panelSource = arguments.panelSource or GeneratorSource(arguments.seed)
 
     s.seed = arguments.seed
 
@@ -213,7 +214,6 @@ local Stack = class(
 
     s.inputMethod = arguments.inputMethod
 
-    s.panel_buffer = ""
     s.gpanel_buffer = ""
     s.confirmedInput = {}
     s.garbageCreatedCount = 0
@@ -340,7 +340,6 @@ function Stack.divergenceString(stackToTest)
   result = result .. "Shake " .. stackToTest.shake_time .. "\n"
   result = result .. "Displacement " .. stackToTest.displacement .. "\n"
   result = result .. "Clock " .. stackToTest.clock .. "\n"
-  result = result .. "Panel Buffer " .. stackToTest.panel_buffer .. "\n"
 
   return result
 end
@@ -423,9 +422,9 @@ function Stack:rollbackCopy()
   copy.shake_time = self.shake_time
   copy.peak_shake_time = self.peak_shake_time
   copy.do_countdown = self.do_countdown
-  copy.panel_buffer = self.panel_buffer
+  copy.panelBuffer = self.panelSource.panelBuffer
+  copy.panelGenCount = self.panelSource.panelGenCount
   copy.gpanel_buffer = self.gpanel_buffer
-  copy.panelGenCount = self.panelGenCount
   copy.garbageGenCount = self.garbageGenCount
   copy.panels_in_top_row = self.panels_in_top_row
   copy.has_risen = self.has_risen
@@ -482,9 +481,9 @@ local function internalRollbackToFrame(stack, frame)
   stack.shake_time = copy.shake_time
   stack.peak_shake_time = copy.peak_shake_time
   stack.do_countdown = copy.do_countdown
-  stack.panel_buffer = copy.panel_buffer
+  stack.panelSource.panelBuffer = copy.panelBuffer
+  stack.panelSource.panelGenCount = copy.panelGenCount
   stack.gpanel_buffer = copy.gpanel_buffer
-  stack.panelGenCount = copy.panelGenCount
   stack.garbageGenCount = copy.garbageGenCount
   stack.panels_in_top_row = copy.panels_in_top_row
   stack.has_risen = copy.has_risen
@@ -653,7 +652,7 @@ function Stack:setPuzzleState(puzzle)
 
   -- transform any cleared garbage into colorless garbage panels
   self.gpanel_buffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
-  self.panel_buffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
+  self.panelSource.panelBuffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
 end
 
 ---@param puzzleString string
@@ -1787,49 +1786,6 @@ function Stack:getInfo()
   info.rollbackCopyCount = self.rollbackBuffer:getStoredCopyCount()
 
   return info
-end
-
----@return string panelBuffer
-function Stack:makePanels()
-  local ret
-  if self.panel_buffer == "" then
-    ret = self.panelSource:generateStartingBoard(self)
-  else
-    ret = self.panelSource:generatePanels(self, 100)
-  end
-
-  self.panelGenCount = self.panelGenCount + 1
-
-  return ret
-end
-
-function Stack:makeStartingBoardPanels()
-  local allowAdjacentColors = self.allowAdjacentColorsOnStartingBoard
-
-  local ret = PanelGenerator.privateGeneratePanels(7, self.width, self.levelData.colors, self.panel_buffer, not allowAdjacentColors)
-  -- technically there can never be metal on the starting board but we need to call it to advance the RNG (compatibility)
-  ret = PanelGenerator.assignMetalLocations(ret, self.width)
-
-  -- legacy crutch, the arcane magic for the non-uniform starting board assumes this is there and it really doesn't work without it
-  ret = string.rep("0", self.width) .. ret
-  -- arcane magic to get a non-uniform starting board
-  ret = procat(ret)
-  local maxStartingHeight = 7
-  local height = tableUtils.map(procat(string.rep(maxStartingHeight, self.width)), function(s) return tonumber(s) end)
-  local to_remove = 2 * self.width
-  while to_remove > 0 do
-    local idx = PanelGenerator:random(1, self.width) -- pick a random column
-    if height[idx] > 0 then
-      ret[idx + self.width * (-height[idx] + 8)] = "0" -- delete the topmost panel in this column
-      height[idx] = height[idx] - 1
-      to_remove = to_remove - 1
-    end
-  end
-
-  ret = table.concat(ret)
-  ret = string.sub(ret, self.width + 1)
-
-  return ret
 end
 
 local function isCompletedChain(garbage)

@@ -3,6 +3,7 @@ local Signal = require("common.lib.signal")
 local GarbageQueue = require("common.engine.GarbageQueue")
 
 ---@class BaseStack
+---@field engineVersion string
 ---@field which integer identifier of the Stack within the Match
 ---@field is_local boolean effectively if the Stack is receiving its inputs via local input
 ---@field framesBehindArray integer[] Records how far behind the stack was at each match clock time
@@ -21,12 +22,14 @@ local GarbageQueue = require("common.engine.GarbageQueue")
 --- -1 if it has not been rolled back yet (or should not run back to its pre-rollback frame)
 ---@field play_to_end boolean?
 ---@field max_runs_per_frame integer How many times run() may be called within a single Match:run; used to keep stacks synchronous in various scenarios
+---@field TYPE string?
 
 ---@class BaseStack : Signal
 local BaseStack = class(
 ---@param self BaseStack
 function(self, args)
   assert(args.is_local ~= nil)
+  self.engineVersion = args.engineVersion
   self.which = args.which or 1
   self.is_local = args.is_local
 

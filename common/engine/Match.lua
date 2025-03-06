@@ -5,19 +5,22 @@ local GameModes = require("common.engine.GameModes")
 local Replay = require("common.data.Replay")
 local SimulatedStack = require("common.engine.SimulatedStack")
 local Stack = require("common.engine.Stack")
+local StackBehaviours = require("common.data.StackBehaviours")
 require("common.engine.checkMatches")
 local consts = require("common.engine.consts")
 
 ---@class Match
----@field stacks table<integer, Stack> The stacks to run as part of the match
+---@field stacks BaseStack[] The stacks to run as part of the match
 ---@field garbageTargets table<integer, table<integer, Stack>> assignments by index where each stack's garbage is directed
 ---@field garbageSources table<Stack, table<integer, Stack>> assignments by index where each stack's incoming garbage comes from
 ---@field engineVersion string
 ---@field doCountdown boolean if a countdown is performed at the start of the match
 ---@field stackInteraction integer how the stacks in the match interact with each other
----@field winConditions integer[] enumerated conditions to determine a winner between multiple stacks
+---@field matchWinConditions integer[] enumerated conditions to determine a winner between multiple stacks
 ---@field gameOverConditions integer[] enumerated conditions for Stacks to go game over
+---@field gameWinConditions integer[] enumerated conditions for Stacks to stop in a winning state
 ---@field timeLimit integer? if the game automatically ends after a certain time
+---@field panelSource PanelSource
 ---@field puzzle table
 ---@field seed integer The seed to be used for PRNG
 ---@field startTimestamp integer
@@ -29,22 +32,23 @@ local consts = require("common.engine.consts")
 
 -- A match is a particular instance of the game, for example 1 time attack round, or 1 vs match
 ---@class Match
----@overload fun(stacks: Stack[], doCountdown: boolean, stackInteraction: StackInteractions, winConditions: MatchWinConditions[], gameOverCondition: GameOverConditions[], optionalArgs: table?): Match
+---@overload fun(doCountdown: boolean, stackInteraction: StackInteractions, matchWinConditions: MatchWinConditions[], gameOverCondition: GameOverConditions[], gameWinConditions: GameWinConditions[], panelSource: PanelSource, optionalArgs: table?): Match
 local Match = class(
-function(self, stacks, doCountdown, stackInteraction, winConditions, gameOverConditions, optionalArgs)
-  self.stacks = stacks
+function(self, doCountdown, stackInteraction, matchWinConditions, gameOverConditions, gameWinConditions, panelSource, optionalArgs)
   self.garbageTargets = {}
   self.garbageSources = {}
   self.engineVersion = consts.ENGINE_VERSION
 
   assert(doCountdown ~= nil)
   assert(stackInteraction)
-  assert(winConditions)
+  assert(matchWinConditions)
   assert(gameOverConditions)
   self.doCountdown = doCountdown
   self.stackInteraction = stackInteraction
-  self.winConditions = winConditions
+  self.matchWinConditions = matchWinConditions
   self.gameOverConditions = gameOverConditions
+  self.gameWinConditions = gameWinConditions
+  self.panelSource = panelSource
   if tableUtils.contains(gameOverConditions, GameModes.GameOverConditions.TIME_OUT) then
     assert(optionalArgs.timeLimit)
     self.timeLimit = optionalArgs.timeLimit
@@ -88,9 +92,9 @@ function Match:getWinners()
     -- for each win condition in sequence, all stacks not meeting that win condition are purged from potentialWinners
     -- this happens until there is only 1 winner left or until there are no win conditions left to check which may result in a tie
     local potentialWinners = shallowcpy(self.stacks)
-    for i = 1, #self.winConditions do
+    for i = 1, #self.matchWinConditions do
       local metCondition = {}
-      local winCon = self.winConditions[i]
+      local winCon = self.matchWinConditions[i]
       for j = 1, #potentialWinners do
         local potentialWinner = potentialWinners[j]
         -- now we check for this stack whether they meet the current winCondition
@@ -143,10 +147,6 @@ function Match:getWinners()
           if hasLowestTime then
             table.insert(metCondition, potentialWinner)
           end
-        elseif winCon == GameModes.WinConditions.NO_MATCHABLE_PANELS then
-        elseif winCon == GameModes.WinConditions.NO_MATCHABLE_GARBAGE then
-          -- both of these are positive game-ending conditions on the stack level
-          -- should rethink these when looking at puzzle vs (if ever)
         end
       end
 
@@ -378,9 +378,9 @@ function Match:start()
   for i, stack in ipairs(self.stacks) do
     stack:setCountdown(self.doCountdown)
     if stack.TYPE == "Stack" then
+      ---@cast stack Stack
       stack:setAllowAdjacentColorsOnStartingBoard(allowAdjacentColorsOnStartingBoard)
       stack:enableShockPanels(shockEnabled)
-      stack.seed = self.seed
     end
     self.garbageTargets[i] = {}
     self.garbageSources[stack] = {}
@@ -512,7 +512,7 @@ function Match:hasEnded()
     end
   end
 
-  if tableUtils.contains(self.winConditions, GameModes.WinConditions.LAST_ALIVE) then
+  if tableUtils.contains(self.matchWinConditions, GameModes.WinConditions.LAST_ALIVE) then
     if aliveCount == 1 then
       local gameOverClock = 0
       for i = 1, #self.stacks do
@@ -592,7 +592,7 @@ function Match:checkAborted()
       -- someone got a desync error, this definitely died
       self.aborted = true
       self.winners = {}
-    elseif tableUtils.contains(self.winConditions, GameModes.WinConditions.LAST_ALIVE) then
+    elseif tableUtils.contains(self.matchWinConditions, GameModes.WinConditions.LAST_ALIVE) then
       local alive = 0
       for i = 1, #self.stacks do
         if not self.stacks[i]:game_ended() then
@@ -676,6 +676,47 @@ function Match:setEngineVersion(engineVersion)
   for i, stack in ipairs(self.stacks) do
     stack.engineVersion = engineVersion
   end
+end
+
+
+---@param levelData LevelData
+---@param isLocal boolean
+---@return Stack
+function Match:createStackWithSettings(levelData, isLocal, inputMethod)
+  local args = {
+    which = #self.stacks + 1,
+    levelData = levelData,
+    is_local = isLocal,
+    behaviours = StackBehaviours.getDefault(),
+    gameOverConditions = self.gameOverConditions,
+    gameWinConditions = self.gameWinConditions,
+    panelSource = self.panelSource:clone(),
+    inputMethod = inputMethod,
+  }
+
+  
+
+  local stack = Stack(args)
+  self.stacks[#self.stacks+1] = stack
+
+  return stack
+end
+
+---@param attackEngineSettings table
+---@param healthSettings table
+---@return SimulatedStack
+function Match:createSimulatedStackWithSettings(attackEngineSettings, healthSettings)
+  local args = {
+    which = #self.stacks + 1,
+    is_local = true,
+    attackSettings = attackEngineSettings,
+    healthSettings = healthSettings,
+  }
+
+  local stack = SimulatedStack(args)
+  self.stacks[#self.stacks+1] = stack
+
+  return stack
 end
 
 return Match

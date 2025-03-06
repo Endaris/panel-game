@@ -2,15 +2,18 @@ local class = require("common.lib.class")
 
 ---@class PuzzleSource : PanelSource
 ---@field puzzleString string
----@field panelBuffer string
----@field garbageBuffer string
 ---@field panels Panel[]
 ---@overload fun(puzzleString: string, panelBuffer: string?, garbageBuffer: string?): PuzzleSource
 local PuzzleSource = class(
+---@param self PuzzleSource
+---@param puzzleString string
+---@param panelBuffer string?
+---@param garbageBuffer string?
 function(self, puzzleString, panelBuffer, garbageBuffer)
   self.puzzleString = puzzleString
   self.panelBuffer = panelBuffer or ""
   self.garbageBuffer = garbageBuffer or ""
+  self.panelGenCount = 0
 
   self.panels = {}
 end)
@@ -28,10 +31,12 @@ function PuzzleSource:getStartingBoardHeight(stack)
 end
 
 function PuzzleSource:generateStartingBoard(stack)
+  self.panelGenCount = self.panelGenCount + 1
   return self.puzzleString
 end
 
 function PuzzleSource:generatePanels(stack, rowCount)
+  self.panelGenCount = self.panelGenCount + 1
   local panels = ""
   local desiredCount = stack.width * rowCount
   if self.panelBuffer:len() > desiredCount then
@@ -64,8 +69,12 @@ end
 ---@param stack Stack
 ---@param row integer
 function PuzzleSource:createNewRow(stack, row)
-  if string.len(stack.panel_buffer) <= 10 * stack.width then
-    stack.panel_buffer = stack:makePanels()
+  if self.panelGenCount == 0 then
+    self.panelBuffer = self:generateStartingBoard(stack)
+  else
+    if self.panelBuffer == "" then
+      self.panelBuffer = self:generatePanels(stack, 20)
+    end
   end
 
   if #self.panels < stack.width then
@@ -83,7 +92,7 @@ end
 function PuzzleSource:createPanelBuffer(stack)
   local panels = {}
 
-  local puzzleString = stack.panel_buffer
+  local puzzleString = self.panelBuffer
   local garbageStartRow = nil
   local garbageStartColumn = nil
   local isMetal = false
@@ -157,7 +166,7 @@ function PuzzleSource:createPanelBuffer(stack)
     end
   end
 
-  stack.panel_buffer = ""
+  self.panelBuffer = ""
 
   -- finally unroll the panels for consumption
   for row = #panels, 1, -1 do
@@ -165,6 +174,13 @@ function PuzzleSource:createPanelBuffer(stack)
       self.panels[#self.panels+1] = panels[row][col]
     end
   end
+end
+
+function PuzzleSource:clone()
+  local source = PuzzleSource(self.puzzleString, self.panelBuffer, self.garbageBuffer)
+  source.panelGenCount = self.panelGenCount
+  source.panels = deepcpy(self.panels)
+  return source
 end
 
 return PuzzleSource

@@ -58,6 +58,7 @@ function(self, players, doCountdown, stackInteraction, winConditions, gameOverCo
   self.supportsPause = supportsPause
   self.isPaused = false
   self.renderDuringPause = false
+  self.seed = math.random(1, 9999999)
 
   if optionalArgs then
     -- debatable if these couldn't be player settings instead
