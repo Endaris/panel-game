@@ -7,9 +7,8 @@ local AttackEngine = require("common.engine.AttackEngine")
 local ReplayPlayer = require("common.data.ReplayPlayer")
 
 ---@class SimulatedStack : BaseStack
----@field attackEngine table
----@field healthEngine table
-
+---@field attackEngine AttackEngine
+---@field healthEngine HealthEngine
 -- A simulated stack sends attacks and takes damage from a player, it "loses" if it takes too many attacks.
 local SimulatedStack = class(
 function(self, args)
@@ -210,8 +209,8 @@ end
 function SimulatedStack:toReplayPlayer()
   local replayPlayer = ReplayPlayer("Player " .. self.which, - self.which)
 
-  replayPlayer:setAttackEngineSettings(self.attackEngineSettings)
-  replayPlayer:setHealthSettings(self.healthSettings)
+  replayPlayer:setAttackEngineSettings(self.attackEngine.attackSettings)
+  replayPlayer:setHealthSettings(self.healthEngine:getSettings())
 
   return replayPlayer
 end

@@ -1,4 +1,4 @@
-require("common.engine.Health")
+local Health = require("common.engine.Health")
 
 local function testHealthDamageBaseCase()
   local secondsToppedOutToLose = 10

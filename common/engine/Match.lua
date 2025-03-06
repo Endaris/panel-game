@@ -73,6 +73,7 @@ end
 -- returns multiple winners if there was a tie (or the game mode had no win conditions)
 -- returns an empty table if there was no winner due to the game not finishing / getting aborted
 -- the function caches the result of the first call so it should only be called when the match has ended
+---@return BaseStack[]
 function Match:getWinners()
   -- return a cached result if the function was already called before
   if self.winners then
@@ -225,6 +226,7 @@ function Match:debugCheckDivergence()
   self.savedStackP2 = nil
 end
 
+---@return integer[] runsPerStack
 function Match:run()
   local startTime = love.timer.getTime()
 
@@ -277,6 +279,7 @@ function Match:run()
   return runs
 end
 
+---@param stack BaseStack
 function Match:pushGarbageTo(stack)
   -- check if anyone wants to push garbage into the stack's queue
   for _, st in ipairs(self.garbageSources[stack]) do
@@ -301,6 +304,8 @@ function Match:pushGarbageTo(stack)
   end
 end
 
+---@param stack BaseStack
+---@return boolean
 function Match:shouldSaveRollback(stack)
   if self.alwaysSaveRollbacks then
     return true
@@ -321,8 +326,9 @@ function Match:shouldSaveRollback(stack)
 end
 
 -- attempt to rollback the specified stack to the specified frame
--- return true if successful
--- return false if not
+---@param stack BaseStack
+---@param frame integer
+---@return boolean success
 function Match:rollbackToFrame(stack, frame)
   if stack:rollbackToFrame(frame) then
     return true
@@ -333,6 +339,7 @@ end
 
 -- rewind is ONLY to be used for replay playback as it relies on all stacks being at the same clock time
 -- and also uses slightly different data required only in a both-sides rollback scenario that would never occur for online rollback
+---@param frame integer
 function Match:rewindToFrame(frame)
   local failed = false
   for i, stack in ipairs(self.stacks) do
@@ -441,9 +448,11 @@ function Match:createNewReplay()
     if self.stackInteraction == GameModes.StackInteractions.ATTACK_ENGINE then
       -- only add the non-attack engines as the settings remain on the player
       if stack.TYPE == "Stack" then
+        ---@cast stack Stack
         replay:updatePlayer(i, stack:toReplayPlayer())
       end
     else
+      ---@cast stack +Stack,SimulatedStack
       replay:updatePlayer(i, stack:toReplayPlayer())
     end
   end
@@ -491,6 +500,7 @@ function Match:abort()
   self:handleMatchEnd()
 end
 
+---@return boolean
 function Match:hasEnded()
   if self.ended then
     return true
@@ -565,6 +575,7 @@ function Match:handleMatchEnd()
   end
 end
 
+---@return boolean
 function Match:isIrrecoverablyDesynced()
   for target, sourceArray in pairs(self.garbageSources) do
     for i, source in ipairs(sourceArray) do
@@ -584,6 +595,7 @@ end
 
 local TOTAL_COUNTDOWN_LENGTH = consts.COUNTDOWN_LENGTH + consts.COUNTDOWN_START
 
+---@return boolean hasAborted
 function Match:checkAborted()
   -- the aborted flag may get set if the game is aborted through outside causes (usually network)
   -- this function checks if the match got aborted through inside causes (local player abort or local desync)
@@ -632,6 +644,9 @@ end
 
 -- returns true if the stack should run once more during the current match:run
 -- returns false otherwise
+---@param stack BaseStack
+---@param runsSoFar integer
+---@return boolean
 function Match:shouldRun(stack, runsSoFar)
   -- check the match specific conditions in match
   if not stack:game_ended() then
