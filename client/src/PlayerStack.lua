@@ -26,6 +26,7 @@ local floor, min, max = math.floor, math.min, math.max
 ---@field danger_timer integer Decides the bounce frame while the column is in danger, increments and stops according to certain rules
 ---@field danger_col boolean[] Tracks for each column if it is considered in danger for the danger animation. Danger means high rows being filled in that column. \n
 ---@field analytic table
+---@field player Player
 
 -- A client side stack that wraps an engine Stack
 -- engine functionality is masked by wrapping the relevant functions and fields Match interfaces with
@@ -36,10 +37,11 @@ local PlayerStack = class(
 function(self, args)
   ---@class PlayerStack
   self = self
+  assert(args.player)
   self.player = args.player
   self.stackInteraction = args.stackInteraction
 
-  self.engine = EngineStack(args)
+  assert(self.engine.TYPE == "Stack")
   self.engine:connectSignal("panelLanded", self, self.onPanelLand)
   self.engine:connectSignal("panelPop", self, self.onPanelPop)
   self.engine:connectSignal("matched", self, self.onEngineMatched)
@@ -136,8 +138,6 @@ function PlayerStack:onGameOver(engine)
       end
     end
   end
-
-  self.game_over_clock = self.engine.game_over_clock
 end
 
 ---@param panel Panel

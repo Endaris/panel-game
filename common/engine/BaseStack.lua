@@ -1,6 +1,7 @@
 local class = require("common.lib.class")
 local Signal = require("common.lib.signal")
 local GarbageQueue = require("common.engine.GarbageQueue")
+local GameModes = require("common.engine.GameModes")
 
 ---@class BaseStack
 ---@field engineVersion string
@@ -22,16 +23,37 @@ local GarbageQueue = require("common.engine.GarbageQueue")
 --- -1 if it has not been rolled back yet (or should not run back to its pre-rollback frame)
 ---@field play_to_end boolean?
 ---@field max_runs_per_frame integer How many times run() may be called within a single Match:run; used to keep stacks synchronous in various scenarios
----@field TYPE string?
+---@field TYPE string
+---@field supportedGameOverConditions GameOverConditions[]
+---@field supportedGameWinConditions GameWinConditions[]
+---@field gameOverConditions GameOverConditions[] Array of enumerated values signifying ways of going game over
+---@field gameWinConditions GameWinConditions[] Array of enumerated values signifying ways of ending the game without going game over
 
 ---@class BaseStack : Signal
 local BaseStack = class(
 ---@param self BaseStack
 function(self, args)
   assert(args.is_local ~= nil)
+  assert(args.gameWinConditions)
+  assert(args.gameOverConditions)
   self.engineVersion = args.engineVersion
   self.which = args.which or 1
   self.is_local = args.is_local
+
+  for _, gameOverCondition in ipairs(args.gameOverConditions) do
+    if not self:supportsGameOverCondition(gameOverCondition) then
+      error(self.TYPE .. " does not support game over condition " .. gameOverCondition)
+    end
+  end
+
+  for _, gameWinCondition in ipairs(args.gameWinConditions) do
+    if not self:supportsGameWinCondition(gameWinCondition) then
+      error(self.TYPE .. " does not support game win condition " .. gameWinCondition)
+    end
+  end
+
+  self.gameOverConditions = args.gameOverConditions
+  self.gameWinConditions = args.gameWinConditions
 
   -- basics
   self.framesBehindArray = {}
@@ -57,10 +79,16 @@ function(self, args)
   self.lastRollbackFrame = -1 -- the last frame we had to rollback from
 end)
 
+BaseStack.TYPE = "BaseStack"
+BaseStack.supportedGameOverConditions = { GameModes.GameOverConditions.NEGATIVE_HEALTH, GameModes.GameOverConditions.TIME_OUT }
+BaseStack.supportedGameWinConditions = {}
+
+---@param enable boolean
 function BaseStack:enableCatchup(enable)
   self.play_to_end = enable
 end
 
+---@param matchClock integer
 function BaseStack:updateFramesBehind(matchClock)
   local framesBehind = matchClock - self.clock
   self.framesBehindArray[matchClock] = framesBehind
@@ -81,6 +109,7 @@ function BaseStack:receiveGarbage(garbageDelivery)
   self.incomingGarbage:pushTable(garbageDelivery)
 end
 
+---@param doCountdown boolean
 function BaseStack:setCountdown(doCountdown)
   self.do_countdown = doCountdown
 end
@@ -90,9 +119,34 @@ function BaseStack:setMaxRunsPerFrame(maxRunsPerFrame)
   self.max_runs_per_frame = maxRunsPerFrame
 end
 
-function BaseStack.behindRollback(self)
+---@return boolean
+function BaseStack:behindRollback()
   if self.lastRollbackFrame > self.clock then
     return true
+  end
+
+  return false
+end
+
+---@param gameOverCondition GameOverConditions
+---@return boolean
+function BaseStack:supportsGameOverCondition(gameOverCondition)
+  for _, enum in ipairs(self.supportedGameOverConditions) do
+    if gameOverCondition == enum then
+      return true
+    end
+  end
+
+  return false
+end
+
+---@param gameWinCondition GameWinConditions
+---@return boolean
+function BaseStack:supportsGameWinCondition(gameWinCondition)
+  for _, enum in ipairs(self.supportedGameWinConditions) do
+    if gameWinCondition == enum then
+      return true
+    end
   end
 
   return false
@@ -123,8 +177,9 @@ function BaseStack:game_ended()
   error("did not implement game_ended")
 end
 
+---@param runsSoFar integer how many runs the Stack already did this frame
 ---@return boolean
-function BaseStack:shouldRun()
+function BaseStack:shouldRun(runsSoFar)
   error("did not implement shouldRun")
 end
 

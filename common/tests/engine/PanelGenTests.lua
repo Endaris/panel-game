@@ -3,6 +3,7 @@ local GameModes = require("common.engine.GameModes")
 local Stack = require("common.engine.Stack")
 local LevelPresets = require("common.data.LevelPresets")
 local StackBehaviours = require("common.data.StackBehaviours")
+local GeneratorSource = require("common.engine.GeneratorSource")
 
 local function checkPanels(panels, rowWidth)
   assert(string.len(panels) % rowWidth == 0)
@@ -86,8 +87,9 @@ local function createStack(gameMode, difficulty, level, colorCount, seed)
     is_local = false,
     stackInteraction = gameMode.stackInteraction,
     gameOverConditions = gameMode.gameOverConditions,
+    gameWinConditions = gameMode.gameWinConditions,
     inputMethod = "controller",
-    seed = seed
+    panelSource = GeneratorSource(seed)
   }
   if gameMode.stackInteraction == GameModes.StackInteractions.NONE or not level then
     args.behaviours = StackBehaviours.getDefault()

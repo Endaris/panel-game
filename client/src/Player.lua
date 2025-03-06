@@ -11,38 +11,56 @@ local logger = require("common.lib.logger")
 local StackBehaviours = require("common.data.StackBehaviours")
 ---@module "common.data.LevelData"
 
+
+---@class PlayerSettings : ParticipantSettings
+---@field puzzleSet PuzzleSet
+---@field puzzleIndex integer?
+---@field level integer
+---@field difficulty integer
+---@field speed integer
+---@field levelData LevelData
+---@field style Styles
+---@field wantsRanked boolean
+---@field inputMethod InputMethod
+
+
 -- A player is mostly a data representation of a Panel Attack player
 -- It holds data pertaining to their online status (like name, public id)
 -- It holds data pertaining to their client status (like character, stage, panels, level etc)
 -- Player implements a lot of setters that emit signals on changes, allowing other components to be notified about the changes by connecting a function to it
 -- Due to this, unless for a good reason, all properties on Player should be set using the setters
----@class Player : MatchParticipant, Signal
+---@class Player : MatchParticipant
+---@field settings PlayerSettings
 ---@overload fun(name: string, publicId: integer, isLocal: boolean?)
 local Player = class(
+---@param self Player
+---@param name string
+---@param publicId integer?
+---@param isLocal boolean?
 function(self, name, publicId, isLocal)
   ---@class Player
   self = self
   self.name = name
-  self.settings = {
-    -- these need to all be initialized so subscription works
-    -- the gist is that all settings inside here are modifiable clientside for local players as part of match setup
-    -- while everything outside settings is static or dictated server side
-    level = 1,
-    difficulty = 1,
-    speed = 1,
-    ---@type LevelData
-    levelData = LevelPresets.getModern(1),
-    style = GameModes.Styles.MODERN,
-    characterId = "",
-    stageId = "",
-    panelId = "",
-    wantsReady = false,
-    wantsRanked = true,
-    inputMethod = "controller",
-    attackEngineSettings = nil,
-    puzzleSet = nil,
-    puzzleIndex = nil
-  }
+  local settings = self.settings
+  -- these need to all be initialized so subscription works
+  -- the gist is that all settings inside here are modifiable clientside for local players as part of match setup
+  -- while everything outside settings is static or dictated server side
+  settings.level = 1
+  settings.difficulty = 1
+  settings.speed = 1
+  ---@type LevelData
+  settings.levelData = LevelPresets.getModern(1)
+  settings.style = GameModes.Styles.MODERN
+  settings.characterId = ""
+  settings.stageId = ""
+  settings.panelId = ""
+  settings.wantsReady = false
+  settings.wantsRanked = true
+  settings.inputMethod = "controller"
+  settings.attackEngineSettings = nil
+  settings.puzzleSet = nil
+  settings.puzzleIndex = nil
+
   -- planned for the future, players don't have public ids yet
   self.publicId = publicId or -1
   self.league = nil
@@ -113,6 +131,30 @@ function Player:createStackFromSettings(match, which)
   return self.stack
 end
 
+---@param engineStack Stack
+---@param engineMatch Match
+---@return PlayerStack
+function Player:createClientStack(engineStack, engineMatch)
+  local args = {
+    engine = engineStack,
+    player_number = self.playerNumber,
+    panels_dir = self.settings.panelId,
+    characterId = self.settings.characterId,
+    player = self,
+    match = engineMatch,
+  }
+
+  if self.settings.style == GameModes.Styles.MODERN then
+    args.level = self.settings.level
+  else
+    args.difficulty = self.settings.difficulty
+  end
+
+  self.stack = PlayerStack(args)
+
+  return self.stack
+end
+
 function Player:getRatingDiff()
   if self.rating and tonumber(self.rating) and #self.ratingHistory > 0 then
     return self.rating - self.ratingHistory[#self.ratingHistory]
@@ -155,7 +197,6 @@ end
 ---@param levelData LevelData
 function Player:setLevelData(levelData)
   self.settings.levelData = levelData
-  self:setColorCount(levelData.colors)
   self:setSpeed(levelData.startingSpeed)
   self:emitSignal("levelDataChanged", levelData)
 end
@@ -165,14 +206,6 @@ function Player:setSpeed(speed)
     self.settings.levelData.startingSpeed = speed
     self.settings.speed = speed
     self:emitSignal("startingSpeedChanged", speed)
-  end
-end
-
-function Player:setColorCount(colorCount)
-  if colorCount ~= self.settings.colorCount or colorCount ~= self.settings.levelData.colors  then
-    self.settings.levelData.colors = colorCount
-    self.settings.colorCount = colorCount
-    self:emitSignal("colorCountChanged", colorCount)
   end
 end
 
@@ -205,11 +238,9 @@ function Player:setStyle(style)
     if style == GameModes.Styles.MODERN then
       self:setLevelData(LevelPresets.getModern(self.settings.level or config.level))
     else
-      self:setLevelData(LevelPresets.getClassic(self.settings.difficulty or config.difficulty))
+      self:setLevelData(LevelPresets.getClassic(self.settings.difficulty or config.endless_difficulty))
       self:setSpeed(self.settings.speed)
     end
-    -- reset color count while we don't have an established caching mechanism for it
-    self:setColorCount(self.settings.levelData.colors)
     self:emitSignal("styleChanged", style)
   end
 end

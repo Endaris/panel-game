@@ -7,6 +7,7 @@ local LevelPresets = require("common.data.LevelPresets")
 local Stack = require("common.engine.Stack")
 require("common.engine.checkMatches")
 local StackBehaviours = require("common.data.StackBehaviours")
+local GeneratorSource = require("common.engine.GeneratorSource")
 
 local StackReplayTestingUtils = {}
 
@@ -20,27 +21,20 @@ function StackReplayTestingUtils.createEndlessMatch(speed, difficulty, level, pl
   if playerCount == nil then
     playerCount = 1
   end
-  local stacks = {}
-  for i = 1, playerCount do
-    local args = {
-      which = i,
-      stackInteraction = endless.stackInteraction,
-      gameOverConditions = endless.gameOverConditions,
-      is_local = false,
-      behaviours = StackBehaviours.getDefault()
-    }
 
-    if level then
-      args.levelData = LevelPresets.getModern(level)
-    else
-      args.levelData = LevelPresets.getClassic(difficulty)
-      args.levelData.startingSpeed = speed
-    end
-    stacks[i] = Stack(args)
+  local match = Match(endless.stackInteraction, endless.winConditions, endless.gameOverConditions, endless.gameWinConditions, GeneratorSource(1), endless.doCountdown)
+
+  local levelData
+  if level then
+    levelData = LevelPresets.getModern(level)
+  else
+    levelData = LevelPresets.getClassic(difficulty)
+    levelData.startingSpeed = speed
+  end
+  for i = 1, playerCount do
+    match:createStackWithSettings(levelData, false, "controller", StackBehaviours.getDefault())
   end
 
-  local match = Match(stacks, endless.doCountdown, endless.stackInteraction, endless.winConditions, endless.gameOverConditions)
-  match:setSeed(1)
   match:start()
 
   for i = 1, #match.stacks do
@@ -51,19 +45,9 @@ function StackReplayTestingUtils.createEndlessMatch(speed, difficulty, level, pl
 end
 
 function StackReplayTestingUtils.createSinglePlayerMatch(gameMode, inputMethod, levelData)
-  local args = {
-    which = 1,
-    stackInteraction = gameMode.stackInteraction,
-    gameOverConditions = gameMode.gameOverConditions,
-    is_local = false,
-    levelData = levelData or LevelPresets.getModern(5),
-    behaviours = StackBehaviours.getDefault(5),
-    inputMethod = inputMethod or "controller",
-  }
-  local stacks = { Stack(args) }
+  local match = Match(gameMode.stackInteraction, gameMode.winConditions, gameMode.gameOverConditions, gameMode.gameWinConditions, GeneratorSource(1), gameMode.doCountdown)
+  match:createStackWithSettings(levelData or LevelPresets.getModern(5), false, inputMethod or "controller", StackBehaviours.getDefault(5))
 
-  local match = Match(stacks, gameMode.doCountdown, gameMode.stackInteraction, gameMode.winConditions, gameMode.gameOverConditions)
-  match:setSeed(1)
   match:start()
 
   for i = 1, #match.stacks do

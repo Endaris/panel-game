@@ -68,6 +68,26 @@ function ChallengeModePlayer:createStackFromSettings(match, which)
   return stack
 end
 
+---@param engineStack SimulatedStack
+---@param engineMatch Match
+---@return ChallengeModePlayerStack
+function ChallengeModePlayer:createClientStack(engineStack, engineMatch)
+  local args = {
+    engine = engineStack,
+    player_number = self.playerNumber,
+    panels_dir = self.settings.panelId,
+    characterId = self.settings.characterId,
+    player = self,
+    attackSettings = self.settings.attackEngineSettings,
+    healthSettings = self.settings.healthSettings,
+    match = engineMatch,
+  }
+
+  self.stack = ChallengeModePlayerStack(args)
+
+  return self.stack
+end
+
 function ChallengeModePlayer:setCharacterForStage(stageNumber)
   self:setCharacter(characterForStageNumber(stageNumber))
 end

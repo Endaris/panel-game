@@ -16,16 +16,20 @@ local Telegraph = require("client.src.graphics.Telegraph")
 local MatchParticipant = require("client.src.MatchParticipant")
 local ChallengeModePlayerStack = require("client.src.ChallengeModePlayerStack")
 local NetworkProtocol = require("common.network.NetworkProtocol")
+local GeneratorSource = require("common.engine.GeneratorSource")
+local StackBehaviours = require("common.data.StackBehaviours")
+---@module "client.src.ChallengeModePlayerStack"
 
 ---@class ClientMatch
----@field players table[]
+---@field players MatchParticipant[]
 ---@field stacks (PlayerStack|ChallengeModePlayerStack)[]
 ---@field engine Match
 ---@field replay Replay
 ---@field doCountdown boolean if a countdown is performed at the start of the match
----@field stackInteraction integer how the stacks in the match interact with each other
----@field winConditions integer[] enumerated conditions to determine a winner between multiple stacks
----@field gameOverConditions integer[] enumerated conditions for Stacks to go game over
+---@field stackInteraction StackInteractions how the stacks in the match interact with each other
+---@field winConditions MatchWinConditions[] enumerated conditions to determine a winner between multiple stacks
+---@field gameOverConditions GameOverConditions[] enumerated conditions for Stacks to go game over
+---@field gameWinConditions GameWinConditions[] enumerated conditions for Stacks to stop in a winning state
 ---@field timeLimit integer? if the game automatically ends after a certain time
 ---@field supportsPause boolean if the game can be paused
 ---@field isPaused boolean if the game is currently paused
@@ -36,21 +40,25 @@ local NetworkProtocol = require("common.network.NetworkProtocol")
 ---@field spectators string[] list of spectators in an online game
 ---@field spectatorString string newLine concatenated version of spectators for display
 ---@field winners MatchParticipant[]
+---@field panelSource PanelSource
 
 --- The ClientMatch is a way to create a match that will run with graphics and sounds on a client.
 ---@class ClientMatch : Signal
----@overload fun(players: MatchParticipant[], doCountdown: boolean, stackInteraction: integer, winConditions: integer[], gameOverConditions: integer[], supportsPause: boolean, optionalArgs: table?): ClientMatch
+---@overload fun(players: MatchParticipant[], stackInteraction: StackInteractions, winConditions: MatchWinConditions[], gameOverConditions: GameOverConditions[], gameWinConditions: GameWinConditions[], panelSource: PanelSource, supportsPause: boolean, doCountdown: boolean, optionalArgs: table?): ClientMatch
 local ClientMatch = class(
-function(self, players, doCountdown, stackInteraction, winConditions, gameOverConditions, supportsPause, optionalArgs)
-  assert(doCountdown ~= nil)
+function(self, players, stackInteraction, winConditions, gameOverConditions, gameWinConditions, panelSource, supportsPause, doCountdown, optionalArgs)
   assert(stackInteraction)
   assert(winConditions)
   assert(gameOverConditions)
+  assert(panelSource)
   assert(supportsPause ~= nil)
+  assert(doCountdown ~= nil)
   self.doCountdown = doCountdown
   self.stackInteraction = stackInteraction
   self.winConditions = winConditions
+  self.panelSource = panelSource
   self.gameOverConditions = gameOverConditions
+  self.gameWinConditions = gameWinConditions
   if tableUtils.contains(gameOverConditions, GameModes.GameOverConditions.TIME_OUT) then
     assert(optionalArgs.timeLimit)
     self.timeLimit = optionalArgs.timeLimit
@@ -58,7 +66,6 @@ function(self, players, doCountdown, stackInteraction, winConditions, gameOverCo
   self.supportsPause = supportsPause
   self.isPaused = false
   self.renderDuringPause = false
-  self.seed = math.random(1, 9999999)
 
   if optionalArgs then
     -- debatable if these couldn't be player settings instead
@@ -134,28 +141,69 @@ function ClientMatch:runGameOver()
 end
 
 function ClientMatch:start()
+  self.engine = Match(self.stackInteraction, self.winConditions, self.gameOverConditions, self.gameWinConditions, self.panelSource, self.doCountdown, {timeLimit = self.timeLimit})
+
   self.stacks = {}
   local engineStacks = {}
-  for i, player in ipairs(self.players) do
-    local stack = player:createStackFromSettings(self, i)
-    stack:connectSignal("dangerMusicChanged", self, self.updateDangerMusic)
-    self.stacks[i] = stack
-    engineStacks[#engineStacks+1] = stack.engine
 
+  for i, player in ipairs(self.players) do
+    local engineStack
+    local clientStack
+    if player.human then
+      ---@cast player Player
+      local behaviours
+      if player.settings.style == GameModes.Styles.MODERN then
+        behaviours = StackBehaviours.getDefault(player.settings.level)
+      else
+        behaviours = StackBehaviours.getDefault()
+      end
+
+      engineStack = self.engine:createStackWithSettings(player.settings.levelData, player.isLocal, player.settings.inputMethod, behaviours)
+    else
+      ---@cast player ChallengeModePlayer
+      engineStack = self.engine:createSimulatedStackWithSettings(player.settings.attackEngineSettings, player.settings.healthSettings)
+    end
+
+    engineStacks[#engineStacks+1] = engineStack
+    clientStack = player:createClientStack(engineStack, self.engine)
+    self.stacks[i] = clientStack
     if self.replay then
       if self.replay.completed then
         -- watching a finished replay
         if player.human then
-          stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
+          ---@cast clientStack PlayerStack
+          clientStack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
         end
-        stack:setMaxRunsPerFrame(1)
+        clientStack:setMaxRunsPerFrame(1)
       elseif not self:hasLocalPlayer() and self.replay.players[i].settings.inputs then
+        ---@cast clientStack PlayerStack
         -- catching up to a match in progress
-        stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
-        stack:enableCatchup(true)
+        clientStack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
+        clientStack:enableCatchup(true)
       end
     end
   end
+
+  -- for i, player in ipairs(self.players) do
+  --   local stack = player:createStackFromSettings(self, i)
+  --   stack:connectSignal("dangerMusicChanged", self, self.updateDangerMusic)
+  --   self.stacks[i] = stack
+  --   engineStacks[#engineStacks+1] = stack.engine
+
+  --   if self.replay then
+  --     if self.replay.completed then
+  --       -- watching a finished replay
+  --       if player.human then
+  --         stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
+  --       end
+  --       stack:setMaxRunsPerFrame(1)
+  --     elseif not self:hasLocalPlayer() and self.replay.players[i].settings.inputs then
+  --       -- catching up to a match in progress
+  --       stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
+  --       stack:enableCatchup(true)
+  --     end
+  --   end
+  -- end
 
   if self.stackInteraction == GameModes.StackInteractions.ATTACK_ENGINE then
     for i, player in ipairs(self.players) do
@@ -173,9 +221,6 @@ function ClientMatch:start()
     end
   end
 
-  self.engine = Match(engineStacks, self.doCountdown, self.stackInteraction, self.winConditions, self.gameOverConditions,
-                     {timeLimit = self.timeLimit, puzzle = self.puzzle})
-  self.engine:setSeed(self.seed)
   self.engine:start()
 
   -- outgoing garbage is already correctly directed by Match
@@ -320,9 +365,12 @@ function ClientMatch:finalizeReplay()
       local player
       if replayPlayer.human then
         for _, p in ipairs(self.players) do
-          if p.publicId == replayPlayer.publicId then
-            player = p
-            break
+          if p.human then
+            ---@cast p Player
+            if p.publicId == replayPlayer.publicId then
+              player = p
+              break
+            end
           end
         end
         assert(player, "Didn't find player with publicId " .. tostring(replayPlayer.publicId))
@@ -346,12 +394,14 @@ function ClientMatch:finalizeReplay()
         replayPlayer:setAttackEngineSettings(player.settings.attackEngineSettings)
         -- these are display-only props, the true info is stored in levelData for either of them
         if player.TYPE == "Player" then
+          ---@cast player Player
           if player.settings.style == GameModes.Styles.MODERN then
             replayPlayer:setLevel(player.settings.level)
           else
             replayPlayer:setDifficulty(player.settings.difficulty)
           end
         else
+          ---@cast player ChallengeModePlayer
           -- this is a challengeModePlayer, difficulty and level may encode challenge mode difficulty and stage respectively
           replayPlayer:setDifficulty(player.settings.difficulty)
           replayPlayer:setLevel(player.settings.level)
@@ -414,15 +464,16 @@ function ClientMatch.createFromReplay(replay, supportsPause)
 
   local clientMatch = ClientMatch(
     players,
-    replay.gameMode.doCountdown,
     replay.gameMode.stackInteraction,
     replay.gameMode.winConditions,
     replay.gameMode.gameOverConditions,
+    replay.gameMode.gameWinConditions or {},
+    GeneratorSource(replay.seed),
     supportsPause,
+    replay.gameMode.doCountdown,
     optionalArgs
   )
 
-  clientMatch:setSeed(replay.seed)
   clientMatch:setStage(replay.stageId)
   clientMatch.replay = replay
 
@@ -634,9 +685,6 @@ function ClientMatch:render()
     drawY = drawY + padding
     local maxTime = math.round(self.engine.maxTimeSpentRunning, 5)
     GraphicsUtil.printf("Max Stack Update: " .. maxTime, drawX, drawY)
-
-    drawY = drawY + padding
-    GraphicsUtil.printf("Seed " .. self.engine.seed, drawX, drawY)
 
     if self.engine.gameOverClock and self.engine.gameOverClock > 0 then
       drawY = drawY + padding

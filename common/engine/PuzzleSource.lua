@@ -12,7 +12,7 @@ local PuzzleSource = class(
 function(self, puzzleString, panelBuffer, garbageBuffer)
   self.puzzleString = puzzleString
   self.panelBuffer = panelBuffer or ""
-  self.garbageBuffer = garbageBuffer or ""
+  self.garbagePanelBuffer = garbageBuffer or ""
   self.panelGenCount = 0
 
   self.panels = {}
@@ -35,10 +35,10 @@ function PuzzleSource:generateStartingBoard(stack)
   return self.puzzleString
 end
 
-function PuzzleSource:generatePanels(stack, rowCount)
+function PuzzleSource:generatePanels(stack)
   self.panelGenCount = self.panelGenCount + 1
   local panels = ""
-  local desiredCount = stack.width * rowCount
+  local desiredCount = stack.width * 100
   if self.panelBuffer:len() > desiredCount then
     panels = self.panelBuffer:sub(1, desiredCount)
     self.panelBuffer = self.panelBuffer:sub(desiredCount + 1)
@@ -51,19 +51,9 @@ function PuzzleSource:generatePanels(stack, rowCount)
   return panels
 end
 
-function PuzzleSource:generateGarbagePanels(stack, rowCount)
-  local panels = ""
-  local desiredCount = stack.width * rowCount
-  if self.garbageBuffer:len() > desiredCount then
-    panels = self.garbageBuffer:sub(1, desiredCount)
-    self.garbageBuffer = self.garbageBuffer:sub(desiredCount + 1)
-  else
-    panels = self.garbageBuffer
-    self.garbageBuffer = ""
-    panels = panels .. string.rep(9, desiredCount - panels:len())
-  end
-
-  return panels
+function PuzzleSource:generateGarbagePanels(stack)
+  self.garbageGenCount = self.garbageGenCount + 1
+  return string.rep(9, stack.width * 20)
 end
 
 ---@param stack Stack
@@ -176,8 +166,18 @@ function PuzzleSource:createPanelBuffer(stack)
   end
 end
 
+function PuzzleSource:getGarbagePanelRowString(stack)
+  if self.garbagePanelBuffer:len() < stack.width then
+    self.garbagePanelBuffer = self.garbagePanelBuffer .. self:generateGarbagePanels(stack)
+  end
+
+  local garbagePanelRow = string.sub(self.garbagePanelBuffer, 1, stack.width)
+  self.garbagePanelBuffer = string.sub(self.garbagePanelBuffer, stack.width + 1)
+  return garbagePanelRow
+end
+
 function PuzzleSource:clone()
-  local source = PuzzleSource(self.puzzleString, self.panelBuffer, self.garbageBuffer)
+  local source = PuzzleSource(self.puzzleString, self.panelBuffer, self.garbagePanelBuffer)
   source.panelGenCount = self.panelGenCount
   source.panels = deepcpy(self.panels)
   return source

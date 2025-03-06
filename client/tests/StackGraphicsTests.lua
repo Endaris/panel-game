@@ -2,6 +2,7 @@ local ClientMatch = require("client.src.ClientMatch")
 local GameModes = require("common.engine.GameModes")
 local Player = require("client.src.Player")
 local consts = require("common.engine.consts")
+local GeneratorSource = require("common.engine.GeneratorSource")
 local logger = require("common.lib.logger")
 
 local Theme = require("client.src.mods.Theme")
@@ -33,7 +34,7 @@ local function createEndlessClientMatch(playerCount, theme)
     players[#players+1] = player
   end
 
-  local clientMatch = ClientMatch(players, true, endless.stackInteraction, endless.winConditions, endless.gameOverConditions, false)
+  local clientMatch = ClientMatch(players, endless.stackInteraction, endless.winConditions, endless.gameOverConditions, endless.gameWinConditions, GeneratorSource(math.random(1, 999999)), false, true)
   clientMatch:start()
 
   if theme then

@@ -52,8 +52,8 @@ local function simpleTouchTest()
   assert(match.engineVersion == consts.ENGINE_VERSIONS.TOUCH_COMPATIBLE)
   assert(match.stackInteraction == GameModes.StackInteractions.NONE)
   assert(match.timeLimit == nil)
-  assert(tableUtils.length(match.winConditions) == 0)
-  assert(match.seed == 2521746)
+  assert(tableUtils.length(match.matchWinConditions) == 0)
+  assert(match.panelSource.seed == 2521746)
   assert(match.stacks[1].game_over_clock == 4347)
   -- previously this was comparing difficulty == 1
   -- difficulty was converted to levelData[1] but it turned out endless/time attack used different color counts on 1

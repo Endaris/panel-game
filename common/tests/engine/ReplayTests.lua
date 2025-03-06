@@ -18,7 +18,7 @@ local function endlessSaveTest()
   assert(match.stackInteraction == GameModes.StackInteractions.NONE)
   assert(match.timeLimit == nil)
   assert(tableUtils.length(match.matchWinConditions) == 0)
-  assert(match.seed == 1)
+  assert(match.panelSource.seed == 1)
   assert(match.stacks[1].game_over_clock == 908)
 
   Replay.finalizeReplay(match, replay)

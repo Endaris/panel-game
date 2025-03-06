@@ -4,6 +4,7 @@ local GameModes = {}
 
 ---@class GameMode
 ---@field stackInteraction StackInteractions
+---@field gameWinConditions GameWinConditions[]
 ---@field gameOverConditions GameOverConditions[]
 ---@field winConditions MatchWinConditions[]
 ---@field doCountdown boolean
@@ -44,6 +45,7 @@ local OnePlayerVsSelf = {
   stackInteraction = StackInteractions.SELF,
   winConditions = { },
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH },
+  gameWinConditions = {},
   doCountdown = true,
 }
 
@@ -57,6 +59,7 @@ local OnePlayerTimeAttack = {
   stackInteraction = StackInteractions.NONE,
   winConditions = { },
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH, GameOverConditions.TIME_OUT },
+  gameWinConditions = {},
   doCountdown = true,
   timeLimit = TIME_ATTACK_TIME,
 }
@@ -71,6 +74,7 @@ local OnePlayerEndless = {
   stackInteraction = StackInteractions.NONE,
   winConditions = { },
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH },
+  gameWinConditions = {},
   doCountdown = true,
 }
 
@@ -84,6 +88,7 @@ local OnePlayerTraining = {
   stackInteraction = StackInteractions.ATTACK_ENGINE,
   winConditions = { MatchWinConditions.LAST_ALIVE },
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH },
+  gameWinConditions = {},
   doCountdown = true,
 }
 
@@ -96,10 +101,11 @@ local OnePlayerPuzzle = {
   -- already known match properties
   playerCount = 1,
   stackInteraction = StackInteractions.NONE,
-  -- these are extended based on the loaded puzzle
   winConditions = { },
   -- these are extended based on the loaded puzzle
   gameOverConditions = {  },
+  -- these are extended based on the loaded puzzle
+  gameWinConditions = {},
   doCountdown = false,
 }
 
@@ -113,6 +119,7 @@ local OnePlayerChallenge = {
   stackInteraction = StackInteractions.VERSUS,
   winConditions = { MatchWinConditions.LAST_ALIVE },
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH },
+  gameWinConditions = {},
   doCountdown = true,
 }
 
@@ -126,6 +133,7 @@ local TwoPlayerVersus = {
   stackInteraction = StackInteractions.VERSUS,
   winConditions = { MatchWinConditions.LAST_ALIVE},
   gameOverConditions = { GameOverConditions.NEGATIVE_HEALTH },
+  gameWinConditions = {},
   doCountdown = true,
 }
 

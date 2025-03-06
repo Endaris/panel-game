@@ -13,6 +13,8 @@ local BlackFadeTransition = require("client.src.scenes.Transitions.BlackFadeTran
 local Easings = require("client.src.Easings")
 local consts = require("common.engine.consts")
 local system = require("client.src.system")
+local PuzzleSource = require("common.engine.PuzzleSource")
+local GeneratorSource = require("common.engine.GeneratorSource")
 
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
 ---@class BattleRoom : Signal
@@ -257,18 +259,34 @@ function BattleRoom:winningPlayer()
   end
 end
 
+---@return PanelSource
+function BattleRoom:createPanelSource(seed)
+  local player = self.players[1]
+  if player.settings.puzzleSet and player.settings.puzzleIndex and player.settings.puzzleSet[player.settings.puzzleIndex] then
+    local puzzle = player.settings.puzzleSet.puzzles[player.settings.puzzleIndex]
+    local puzzleString = Puzzle.fillMissingPanelsInPuzzleString(puzzle, 6, 12)
+    return PuzzleSource(puzzleString)
+  else
+    return GeneratorSource(seed)
+  end
+end
+
 -- creates a match with the players in the BattleRoom
-function BattleRoom:createMatch()
+---@param panelSource PanelSource
+---@return ClientMatch
+function BattleRoom:createMatch(panelSource)
   local supportsPause = not self.online or (#self.players == 1 and self.players[1].isLocal)
   local optionalArgs = { timeLimit = self.mode.timeLimit , ranked = self.ranked}
 
   self.match = ClientMatch(
     self.players,
-    self.mode.doCountdown,
     self.mode.stackInteraction,
     shallowcpy(self.mode.winConditions),
     shallowcpy(self.mode.gameOverConditions),
+    shallowcpy(self.mode.gameWinConditions),
+    panelSource,
     supportsPause,
+    self.mode.doCountdown,
     optionalArgs
   )
 
@@ -360,11 +378,11 @@ end
 
 -- creates a match based on the room and player settings, starts it up and switches to the Game scene
 function BattleRoom:startMatch(stageId, seed, replayOfMatch)
-  local match = self:createMatch()
+  local panelSource = self:createPanelSource(seed)
+  local match = self:createMatch(panelSource)
 
   match.replay = replayOfMatch
   match:setStage(stageId)
-  match:setSeed(seed)
 
   if (#match.players > 1 or match.stackInteraction == GameModes.StackInteractions.VERSUS) then
     GAME.rich_presence:setPresence((match:hasLocalPlayer() and "Playing" or "Spectating") .. " a " .. (self.mode.richPresenceLabel or self.mode.gameScene) ..

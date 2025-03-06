@@ -68,6 +68,7 @@ local PANELS_TO_NEXT_SPEED =
 ---@field generateGarbagePanels fun(self: PanelSource, stack:Stack): string
 ---@field getStartingBoardHeight fun(self: PanelSource, stack: Stack): integer
 ---@field createNewRow fun(self: PanelSource, stack: Stack, row: integer)
+---@field getGarbagePanelRowString fun(self: PanelSource, stack: Stack): string
 ---@field clone fun(self: PanelSource): PanelSource
 ---@field panelBuffer string alphanumeric string containing a buffer of panels to rise from below; string characters indicate possible metal positions
 ---@field panelGenCount integer How many times the panelBuffer was extended; relevant to keep PRNG deterministic for replays
@@ -84,14 +85,10 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@class Stack : BaseStack
 ---@field width integer How many columns of panels the stack has
 ---@field height integer How many rows of panels the stack has
----@field seed integer
----@field gameOverConditions table Array of enumerated values signifying ways of going game over
----@field gameWinConditions table Array of enumerated values signifying ways of ending the game without going game over
 ---@field levelData LevelData
 ---@field allowAdjacentColorsOnStartingBoard boolean if the panel generator is allowed to put panels of the same color next to each other on the starting board
 ---@field shockEnabled boolean whether shock panels may be queued
 ---@field behaviours StackBehaviours a table of flags and settings to modify the stack behaviour in chunks of functionality
----@field do_first_row boolean? if the stack still needs to initiate its starting board
 ---@field speed integer Index for accessing the table for the rise_timer, thus indirectly determining how quickly the stack rises
 ---@field nextSpeedIncreaseClock integer? at which clock time the speed is going to increase the next time; only relevant if the levelData's speedIncreaseMode is 1
 ---@field panels_to_speedup integer? how many more panels have to be cleared for speed to increase on the next frame; only relevant if the levelData's speedIncreaseMode is 2
@@ -174,22 +171,15 @@ local Stack = class(
   function(s, arguments)
     assert(arguments.levelData ~= nil)
     assert(arguments.behaviours ~= nil)
+    assert(arguments.panelSource)
 
-    s.gameOverConditions = arguments.gameOverConditions or {GameModes.GameOverConditions.NEGATIVE_HEALTH}
-    s.gameWinConditions = arguments.gameWinConditions or {}
     s.levelData = arguments.levelData
     s.behaviours = arguments.behaviours
-    s.panelSource = arguments.panelSource or GeneratorSource(arguments.seed)
-
-    s.seed = arguments.seed
+    s.panelSource = arguments.panelSource
 
     -- the behaviour table contains a bunch of flags to modify the stack behaviour for custom game modes in broader chunks of functionality
 
     s.swapStallingBackLog = {}
-
-    if not s.puzzle then
-      s.do_first_row = true
-    end
 
     s.speed = s.levelData.startingSpeed
     if s.levelData.speedIncreaseMode == LevelData.SPEED_INCREASE_MODES.TIME_INTERVAL then
@@ -277,7 +267,6 @@ local Stack = class(
     s.shake_time_on_frame = 0
     s.peak_shake_time = 0
 
-    s.panelGenCount = 0
     s.garbageGenCount = 0
 
     s.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
@@ -297,6 +286,8 @@ local Stack = class(
 )
 
 Stack.TYPE = "Stack"
+Stack.supportedGameOverConditions = { GameModes.GameOverConditions.NEGATIVE_HEALTH, GameModes.GameOverConditions.TIME_OUT, GameModes.GameOverConditions.NO_MOVES_LEFT, GameModes.GameOverConditions.CHAIN_DROPPED }
+Stack.supportedGameWinConditions = { GameModes.GameWinConditions.NO_MATCHABLE_PANELS, GameModes.GameWinConditions.NO_MATCHABLE_GARBAGE }
 
 ---@return (Panel | fun(row: integer, column: integer): Panel)
 function Stack:createPanelTemplate()
@@ -627,7 +618,6 @@ function Stack:setPuzzleState(puzzle)
   self.puzzle.remaining_moves = puzzle.moves
   self.behaviours.allowManualRaise = false
   self.behaviours.passiveRaise = false
-  self.do_first_row = false
 
   if puzzle.moves > 0 then
     tableUtils.appendIfNotExists(self.gameOverConditions, GameModes.GameOverConditions.NO_MOVES_LEFT)
