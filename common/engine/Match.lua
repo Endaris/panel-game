@@ -24,7 +24,6 @@ local PuzzleSource    = require("common.engine.PuzzleSource")
 ---@field panelSource PanelSource
 ---@field timeLimit integer? if the game automatically ends after a certain time
 ---@field puzzle table
----@field seed integer The seed to be used for PRNG
 ---@field startTimestamp integer
 ---@field createTime number
 ---@field timeSpentRunning number
@@ -76,7 +75,6 @@ function(self, stackInteraction, matchWinConditions, gameOverConditions, gameWin
   self.timeSpentRunning = 0
   self.maxTimeSpentRunning = 0
   self.createTime = love.timer.getTime()
-  self.seed = math.random(1,9999999)
   self.startTimestamp = os.time(os.date("*t"))
   self.clock = 0
   self.ended = false
@@ -445,13 +443,6 @@ function Match:start()
       -- always need clock 0 as a base for rollback
       stack:saveForRollback()
     end
-  end
-end
-
----@param seed integer?
-function Match:setSeed(seed)
-  if seed then
-    self.seed = seed
   end
 end
 

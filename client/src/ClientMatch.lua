@@ -184,27 +184,6 @@ function ClientMatch:start()
     end
   end
 
-  -- for i, player in ipairs(self.players) do
-  --   local stack = player:createStackFromSettings(self, i)
-  --   stack:connectSignal("dangerMusicChanged", self, self.updateDangerMusic)
-  --   self.stacks[i] = stack
-  --   engineStacks[#engineStacks+1] = stack.engine
-
-  --   if self.replay then
-  --     if self.replay.completed then
-  --       -- watching a finished replay
-  --       if player.human then
-  --         stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
-  --       end
-  --       stack:setMaxRunsPerFrame(1)
-  --     elseif not self:hasLocalPlayer() and self.replay.players[i].settings.inputs then
-  --       -- catching up to a match in progress
-  --       stack:receiveConfirmedInput(self.replay.players[i].settings.inputs)
-  --       stack:enableCatchup(true)
-  --     end
-  --   end
-  -- end
-
   if self.stackInteraction == GameModes.StackInteractions.ATTACK_ENGINE then
     for i, player in ipairs(self.players) do
       local attackEngineHost = ChallengeModePlayerStack({
@@ -527,27 +506,6 @@ function ClientMatch:updateDangerMusic()
     self.currentMusicIsDanger = dangerMusic
   end
 end
-
-function ClientMatch:generateSeed()
-  local seed = 17
-  seed = seed * 37 + self.players[1].rating.new
-  seed = seed * 37 + self.players[2].rating.new
-  seed = seed * 37 + self.players[1].wins
-  seed = seed * 37 + self.players[2].wins
-
-  return seed
-end
-
-function ClientMatch:setSeed(seed)
-  if seed then
-    self.seed = seed
-  elseif self.online and #self.players > 1 then
-    self.seed = self:generateSeed()
-  else
-    -- Use the default random seed set up on match creation
-  end
-end
-
 
 ----------------
 --- Graphics ---

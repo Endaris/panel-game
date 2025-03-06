@@ -51,23 +51,6 @@ local function characterForStageNumber(stageNumber)
   return character
 end
 
-function ChallengeModePlayer:createStackFromSettings(match, which)
-  assert(self.settings.healthSettings or self.settings.attackEngineSettings)
-  local stack = ChallengeModePlayerStack({
-    which = which,
-    character = self.settings.characterId,
-    is_local = not (match.replay and match.replay.completed),
-    attackSettings = self.settings.attackEngineSettings,
-    healthSettings = self.settings.healthSettings,
-    match = match,
-  })
-
-  self.stack = stack
-  stack.player = self
-
-  return stack
-end
-
 ---@param engineStack SimulatedStack
 ---@param engineMatch Match
 ---@return ChallengeModePlayerStack

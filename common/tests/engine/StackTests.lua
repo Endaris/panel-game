@@ -86,9 +86,9 @@ moveAfterCountdownV46Test()
 
 local function testShakeFrames()
   local match = StackReplayTestingUtils.createEndlessMatch(nil, nil, 10)
-  match.seed = 1 -- so we consistently have a panel to swap
   match.engineVersion = consts.ENGINE_VERSIONS.TELEGRAPH_COMPATIBLE
   local stack = match.stacks[1]
+  ---@cast stack Stack
 
   -- imaginary garbage should crash
   assert(pcall(stack.shakeFrameForGarbageSize, 6, 0) == false)
@@ -134,6 +134,7 @@ local function swapStalling1Test1()
   local match = StackReplayTestingUtils.createSinglePlayerMatch(GameModes.getPreset("ONE_PLAYER_PUZZLE"), "controller", LevelPresets.getModern(10))
   local puzzle = Puzzle("clear", false, 0, "[======================][====]246260[====]600016514213461336451511124242", 0, 0)
   local stack = match.stacks[1]
+  ---@cast stack Stack
   stack.behaviours.swapStallingMode = 1
   stack:setPuzzleState(puzzle)
 

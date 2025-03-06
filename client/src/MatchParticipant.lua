@@ -88,11 +88,6 @@ function MatchParticipant:setExpectedWinrate(expectedWinrate)
   self:emitSignal("expectedWinrateChanged", expectedWinrate)
 end
 
--- returns a table with some key properties on functions to be run as part of a match
-function MatchParticipant:createStackFromSettings(match, which)
-  error("MatchParticipant needs to implement function createStackFromSettings")
-end
-
 function MatchParticipant:setStage(stageId)
   if stageId ~= self.settings.selectedStageId then
     self.settings.selectedStageId = StageLoader.resolveStageSelection(stageId)
