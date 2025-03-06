@@ -61,6 +61,13 @@ local PANELS_TO_NEXT_SPEED =
   45, 45, 45, 45, 45, 45, 45, 45, 45, 45,
   45, 45, 45, 45, 45, 45, 45, 45, math.huge}
 
+---@class PanelSource
+---@field generateStartingBoard fun(self: PanelSource, stack: Stack): string
+---@field generatePanels fun(self: PanelSource, stack:Stack, rowCount: integer): string
+---@field generateGarbagePanels fun(self: PanelSource, stack:Stack, rowCount: integer): string
+---@field getStartingBoardHeight fun(self: PanelSource, stack: Stack): integer
+---@field createNewRow fun(self: PanelSource, stack: Stack, row: integer)
+
 ---@alias CursorDirection ("up" | "down" | "left" | "right")
 
 ---@type table<CursorDirection, integer>

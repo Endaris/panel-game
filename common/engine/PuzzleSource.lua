@@ -1,20 +1,19 @@
 local class = require("common.lib.class")
-local PanelSource = require("common.engine.PanelSource")
 
 ---@class PuzzleSource : PanelSource
 ---@field puzzleString string
 ---@field panelBuffer string
 ---@field garbageBuffer string
 ---@field panels Panel[]
+---@overload fun(puzzleString: string, panelBuffer: string?, garbageBuffer: string?): PuzzleSource
 local PuzzleSource = class(
 function(self, puzzleString, panelBuffer, garbageBuffer)
   self.puzzleString = puzzleString
-  self.panelBuffer = panelBuffer
-  self.garbageBuffer = garbageBuffer
+  self.panelBuffer = panelBuffer or ""
+  self.garbageBuffer = garbageBuffer or ""
 
   self.panels = {}
-end,
-PanelSource)
+end)
 
 ---@param stack Stack
 ---@param column integer

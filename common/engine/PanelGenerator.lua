@@ -11,6 +11,14 @@ local PanelSource = require("common.engine.PanelSource")
 local PanelGenerator = {rng = love.math.newRandomGenerator(), generatedCount = 0}
 setmetatable(PanelGenerator, PanelSource)
 
+PanelGenerator.PANEL_COLOR_NUMBER_TO_UPPER = {"A", "B", "C", "D", "E", "F", "G", "H", "I", [0] = "0"}
+PanelGenerator.PANEL_COLOR_NUMBER_TO_LOWER = {"a", "b", "c", "d", "e", "f", "g", "h", "i", [0] = "0" }
+PanelGenerator.PANEL_COLOR_TO_NUMBER = {
+  ["A"] = 1, ["B"] = 2, ["C"] = 3, ["D"] = 4, ["E"] = 5, ["F"] = 6, ["G"] = 7, ["H"] = 8, ["I"] = 9, ["J"] = 0,
+  ["a"] = 1, ["b"] = 2, ["c"] = 3, ["d"] = 4, ["e"] = 5, ["f"] = 6, ["g"] = 7, ["h"] = 8, ["i"] = 9, ["j"] = 0,
+  ["1"] = 1, ["2"] = 2, ["3"] = 3, ["4"] = 4, ["5"] = 5, ["6"] = 6, ["7"] = 7, ["8"] = 8, ["9"] = 9, ["0"] = 0
+}
+
 -- sets the seed for the PanelGenerators own random number generator
 -- seed has to be a number
 function PanelGenerator:setSeed(seed)
