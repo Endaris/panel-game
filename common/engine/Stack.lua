@@ -99,8 +99,6 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 --- for different game modes or need to change it based on board width.
 ---@field currentGarbageDropColumnIndexes integer[] The current index of the above table we are currently using for the drop column. \n
 --- This increases by 1 wrapping every time garbage drops.
----@field gpanel_buffer string numeric string containing a buffer of panels for garbage to turn into upon matching \n
---- will get periodically extended as it gets consumed
 ---@field inputMethod string "controller" or "touch", determines how inputs are interpreted internally
 ---@field confirmedInput string[] All inputs the player has input so far (or ever)
 ---@field input_state string The input for the current frame
@@ -152,7 +150,6 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field shake_time_on_frame integer The shake time that would have been earned by falling panels this frame. Overwrites shake_time if greater.
 ---@field peak_shake_time integer Records the maximum shake time obtained for the current stretch of uninterrupted shake time. \n
 --- Any additional shake time gained before shake depletes to 0 will reset shake_time back to this value. Set to 0 when shake_time reaches 0.
----@field garbageGenCount integer How many times the gpanel_buffer was extended; relevant to keep PRNG deterministic for replays
 ---@field warningsTriggered table ancient ancient, probably remove
 ---@field puzzle table? Optional puzzle
 ---@field game_stopwatch integer? Clock time minus time that swaps were blocked
@@ -204,7 +201,6 @@ local Stack = class(
 
     s.inputMethod = arguments.inputMethod
 
-    s.gpanel_buffer = ""
     s.confirmedInput = {}
     s.garbageCreatedCount = 0
     s.garbageLandedThisFrame = {}
@@ -415,8 +411,8 @@ function Stack:rollbackCopy()
   copy.do_countdown = self.do_countdown
   copy.panelBuffer = self.panelSource.panelBuffer
   copy.panelGenCount = self.panelSource.panelGenCount
-  copy.gpanel_buffer = self.gpanel_buffer
-  copy.garbageGenCount = self.garbageGenCount
+  copy.garbagePanelBuffer = self.panelSource.garbagePanelBuffer
+  copy.garbageGenCount = self.panelSource.garbageGenCount
   copy.panels_in_top_row = self.panels_in_top_row
   copy.has_risen = self.has_risen
   copy.metal_panels_queued = self.metal_panels_queued
@@ -474,8 +470,8 @@ local function internalRollbackToFrame(stack, frame)
   stack.do_countdown = copy.do_countdown
   stack.panelSource.panelBuffer = copy.panelBuffer
   stack.panelSource.panelGenCount = copy.panelGenCount
-  stack.gpanel_buffer = copy.gpanel_buffer
-  stack.garbageGenCount = copy.garbageGenCount
+  stack.panelSource.garbagePanelBuffer = copy.garbagePanelBuffer
+  stack.panelSource.garbageGenCount = copy.garbageGenCount
   stack.panels_in_top_row = copy.panels_in_top_row
   stack.has_risen = copy.has_risen
   stack.metal_panels_queued = copy.metal_panels_queued
@@ -641,7 +637,7 @@ function Stack:setPuzzleState(puzzle)
   end
 
   -- transform any cleared garbage into colorless garbage panels
-  self.gpanel_buffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
+  self.panelSource.garbagePanelBuffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
   self.panelSource.panelBuffer = "9999999999999999999999999999999999999999999999999999999999999999999999999"
 end
 
