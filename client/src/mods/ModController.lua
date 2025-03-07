@@ -93,16 +93,11 @@ function ModController:loadModFor(mod, user, instantly)
       logger.debug("Adding mod " .. mod.id .. " to unload list")
       self.toUnload[#self.toUnload+1] = mod
     end
+  end
 
-    ModLoader.load(mod)
-    if instantly then
-      ModLoader.wait()
-    end
-  else
-    if instantly then
-      ModLoader.load(mod)
-      ModLoader.wait()
-    end
+  ModLoader.load(mod)
+  if instantly then
+    ModLoader.wait()
   end
 end
 

@@ -76,7 +76,7 @@ function RunTimeGraph:draw()
 
   -- in order to not sully the draw data of the actual game, the RunTimeGraph is drawn separately
   -- these transformations assure it uses the same game coordinates as love.draw
-  love.graphics.translate(GAME.canvasX, GAME.canvasY)
+  love.graphics.translate(GAME.canvasX - GAME.globalCanvas:getWidth() / 2 * GAME.canvasXScale, GAME.canvasY - GAME.globalCanvas:getHeight() / 2 * GAME.canvasYScale)
   love.graphics.scale(GAME.canvasXScale, GAME.canvasYScale)
 
   BarGraph.drawGraphs(self.graphs)

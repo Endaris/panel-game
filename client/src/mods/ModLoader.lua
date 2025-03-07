@@ -10,6 +10,7 @@ ModLoader.cancellationList = {}
 ModLoader.loading_mod = nil -- currently loading mod
 
 -- loads the mod of the specified id
+---@param mod Mod
 function ModLoader.load(mod)
   logger.debug("Queueing mod " .. mod.id .. ", fullyLoaded: " .. tostring(mod.fullyLoaded))
   if not mod.fullyLoaded then
@@ -17,7 +18,7 @@ function ModLoader.load(mod)
   end
 end
 
--- return true if there is still data to load
+---@return boolean # if there is still data to load
 function ModLoader.update()
   if not ModLoader.loading_mod and ModLoader.loading_queue:len() > 0 then
     local mod = ModLoader.loading_queue:pop()
@@ -26,6 +27,10 @@ function ModLoader.update()
     if ModLoader.cancellationList[mod] then
       logger.debug("Mod " .. mod.id .. " was in the cancellation list and has been cancelled")
       ModLoader.cancellationList[mod] = nil
+      return true
+    end
+    if mod.fullyLoaded then
+      -- we don't need to load an already loaded mod again
       return true
     end
     logger.debug("Loading mod " .. mod.id)
@@ -61,7 +66,12 @@ function ModLoader.wait()
 end
 
 -- cancels loading the mod if it is currently being loaded or queued for it
+---@param mod Mod
 function ModLoader.cancelLoad(mod)
+  if not mod.fullyLoaded and tableUtils.length(mod.users) > 0 then
+    logger.debug("tried to cancel load of mod that is registered with a user; not acceptable")
+    return
+  end
   if ModLoader.loading_mod and not ModLoader.cancellationList[mod] then
     logger.debug("cancelling load for mod " .. mod.id)
     if ModLoader.loading_mod[1] == mod then

@@ -33,7 +33,6 @@ require("client.src.globals")
 ---@field debugProfile boolean
 ---@field debugProfileThreshold integer
 ---@field show_fps boolean
----@field activeGarbageCollectionPercent number
 ---@field show_ingame_infos boolean
 ---@field danger_music_changeback_delay boolean
 ---@field enable_analytics boolean
@@ -103,8 +102,6 @@ config = {
 
     -- Show FPS in the top-left corner of the screen
     show_fps                      = false,
-    -- controls how much of the remaining time after a frame is run is used for active garbage collection
-    activeGarbageCollectionPercent = 0.2,
     -- Show ingame infos while playing the game
     show_ingame_infos             = true,
     -- Change danger music back later flag
@@ -312,9 +309,6 @@ config = {
           end
           if type(read_data.display) == "number" then
             configTable.display = read_data.display
-          end
-          if type(read_data.activeGarbageCollectionPercent) == "number" then
-            config.activeGarbageCollectionPercent = util.bound(0.1, read_data.activeGarbageCollectionPercent, 0.8)
           end
           if type(read_data.enableMenuMusic) == "boolean" then
             configTable.enableMenuMusic = read_data.enableMenuMusic

@@ -3,10 +3,11 @@ local system = require("client.src.system")
 
 -- Put any local development changes you need in here that you don't want commited.
 
-local function enableProfiler()
+---@param threshold integer? the discard threshold in seconds
+local function enableProfiler(threshold)
   local prof = require("common.lib.zoneProfiler")
   prof.enable(true)
-  prof.setDurationFilter(config.debugProfileThreshold)
+  prof.setDurationFilter((threshold or config.debugProfileThreshold) / 1000)
 end
 
 local developerTools = {}
@@ -22,7 +23,7 @@ function developerTools.processArgs(args)
         collectgarbage("restart")
       end
     elseif value == "profileMemory" then
-      enableProfiler()
+      enableProfiler(0)
       -- the garbage collector is a primary source of frame spikes
       -- thus one goal of profiling is to identify where memory is allocated
       -- because the less memory is allocated, the less the garbage collector runs 

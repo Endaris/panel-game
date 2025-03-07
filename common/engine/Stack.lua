@@ -206,7 +206,8 @@ local Stack = class(
 
     s.panel_buffer = ""
     s.gpanel_buffer = ""
-    s.confirmedInput = {}
+    -- 43200 inputs last for about two hours
+    s.confirmedInput = table.new(43200, 0)
     s.garbageCreatedCount = 0
     s.garbageLandedThisFrame = {}
     s.highestGarbageIdMatched = 0
