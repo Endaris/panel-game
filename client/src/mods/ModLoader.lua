@@ -62,6 +62,10 @@ end
 
 -- cancels loading the mod if it is currently being loaded or queued for it
 function ModLoader.cancelLoad(mod)
+  if not mod.fullyLoaded and tableUtils.length(mod.users) > 0 then
+    logger.debug("tried to cancel load of mod that is registered with a user; not acceptable")
+    return
+  end
   if ModLoader.loading_mod and not ModLoader.cancellationList[mod] then
     logger.debug("cancelling load for mod " .. mod.id)
     if ModLoader.loading_mod[1] == mod then
