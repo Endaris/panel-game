@@ -201,7 +201,7 @@ local Stack = class(
 
     s.inputMethod = arguments.inputMethod
 
-    s.confirmedInput = {}
+    s.confirmedInput = table.new(43200, 0)
     s.garbageCreatedCount = 0
     s.garbageLandedThisFrame = {}
     s.highestGarbageIdMatched = 0

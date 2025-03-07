@@ -57,8 +57,10 @@ function love.load(args, rawArgs)
   GAME:updateCanvasPositionAndScale(newPixelWidth, newPixelHeight)
 
   GAME:load()
-  prof.enable(config.debugProfile)
-  prof.setDurationFilter(config.debugProfileThreshold)
+  if not PROFILE_MEMORY then
+    prof.enable(config.debugProfile)
+    prof.setDurationFilter(config.debugProfileThreshold / 1000)
+  end
 end
 
 function love.focus(f)

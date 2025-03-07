@@ -105,6 +105,10 @@ function Player:createClientStack(engineStack, engineMatch)
     match = engineMatch,
   }
 
+  function Player:reset()
+    MatchParticipant.reset(self)
+    self:unrestrictInputs()
+  end
   if self.settings.style == GameModes.Styles.MODERN then
     args.level = self.settings.level
   else
