@@ -4,6 +4,10 @@ local GameModes = require("common.data.GameModes")
 local PuzzleSource = require("common.engine.PuzzleSource")
 local MatchRules = require("common.data.MatchRules")
 
+---@class GridCoordinate
+---@field row integer
+---@field column integer
+
 -- A puzzle is a particular instance of the game, where there is a specific goal for clearing the panels
 ---@class Puzzle
 ---@field puzzleType ("moves" | "chain" | "clear")
@@ -13,9 +17,10 @@ local MatchRules = require("common.data.MatchRules")
 ---@field randomizeColors boolean
 ---@field stopTime integer?
 ---@field shakeTime integer?
----@overload fun(puzzleType: string, doCountdown: boolean, moves: integer?, stack: string, stopTime: integer?, shakeTime: integer?): Puzzle
+---@field cursorStartLeft GridCoordinate?
+---@overload fun(puzzleType: string, doCountdown: boolean, moves: integer?, stack: string, stopTime: integer?, shakeTime: integer?, cursorStartLeft: GridCoordinate?): Puzzle
 Puzzle = class(
-  function(self, puzzleType, doCountdown, moves, stack, stopTime, shakeTime)
+  function(self, puzzleType, doCountdown, moves, stack, stopTime, shakeTime, cursorStartLeft)
     self.puzzleType = puzzleType or "moves"
     self.doCountdown = doCountdown
     self.moves = moves or 0
@@ -23,6 +28,7 @@ Puzzle = class(
     self.randomizeColors = false
     self.stopTime = stopTime
     self.shakeTime = shakeTime
+    self.cursorStartLeft = cursorStartLeft
     self.UUID = Puzzle.getV1UUID(self)
   end
 )
@@ -179,6 +185,13 @@ function Puzzle:validate()
     "\nInvalid number of moves detected, expecting a number greater than zero but instead got " .. self.moves
   end
 
+  if self.cursorStartLeft then
+    if not (self.cursorStartLeft.row >= 1 and self.cursorStartLeft.row <= 12) or not (self.cursorStartLeft.column >= 1 and self.cursorStartLeft.column <= 5) then
+      errMessage = errMessage ..
+      "\nInvalid cursor start position, expected row to be between 1 and 12 and column to be between 1 and 5"
+    end
+  end
+
   return errMessage == "", errMessage
 end
 
@@ -259,6 +272,11 @@ function Puzzle:toGameMode()
     elseif self.puzzleType == "moves" then
       mode.matchRules.stackWinConditions[MatchRules.StackWinConditions.MATCHABLE_PANELS] = 0
     end
+  end
+
+  if self.cursorStartLeft then
+    mode.matchRules.stackSetupModifications.startingRow = self.cursorStartLeft.row
+    mode.matchRules.stackSetupModifications.startingCol = self.cursorStartLeft.column
   end
 
   mode.matchRules.doCountdown = self.doCountdown
