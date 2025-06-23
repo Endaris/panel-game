@@ -199,7 +199,7 @@ end
 
 function PuzzleSource:getGarbagePanelRowString(stack)
   if self.garbagePanelBuffer:len() < stack.width then
-    self.garbagePanelBuffer = self.garbagePanelBuffer .. self:generateGarbagePanels(stack)
+    self.garbagePanelBuffer = self:generateGarbagePanels(stack)
   end
 
   local garbagePanelRow = string.sub(self.garbagePanelBuffer, 1, stack.width)

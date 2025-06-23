@@ -11,27 +11,46 @@ local MatchRules = require("common.data.MatchRules")
 -- A puzzle is a particular instance of the game, where there is a specific goal for clearing the panels
 ---@class Puzzle
 ---@field puzzleType ("moves" | "chain" | "clear")
----@field doCountdown boolean
 ---@field moves integer
 ---@field stack string string representation of the panel colors
 ---@field randomizeColors boolean
+---@field startTiming PuzzleStartTiming
 ---@field stopTime integer?
 ---@field shakeTime integer?
 ---@field cursorStartLeft GridCoordinate?
----@overload fun(puzzleType: string, doCountdown: boolean, moves: integer?, stack: string, stopTime: integer?, shakeTime: integer?, cursorStartLeft: GridCoordinate?): Puzzle
+---@field panelBuffer string?
+---@field garbagePanelBuffer string?
+---@overload fun(puzzleType: string, moves: integer?, stack: string, startTiming: PuzzleStartTiming?, stopTime: integer?, shakeTime: integer?, cursorStartLeft: GridCoordinate?, panelBuffer: string?, garbagePanelBuffer: string?): Puzzle
 Puzzle = class(
-  function(self, puzzleType, doCountdown, moves, stack, stopTime, shakeTime, cursorStartLeft)
+  function(self, puzzleType, moves, stack, startTiming, stopTime, shakeTime, cursorStartLeft, panelBuffer, garbagePanelBuffer)
     self.puzzleType = puzzleType or "moves"
-    self.doCountdown = doCountdown
     self.moves = moves or 0
     self.stack = string.gsub(stack, "%s+", "") -- Remove whitespace so files can be easier to read
     self.randomizeColors = false
     self.stopTime = stopTime
     self.shakeTime = shakeTime
     self.cursorStartLeft = cursorStartLeft
+    if startTiming then
+      self.startTiming = startTiming
+    else
+      if self.puzzleType == "clear" or self.puzzleType == "chain" then
+        if self.cursorStartLeft then
+          self.startTiming = Puzzle.PuzzleStartTimings.firstInput
+        else
+          self.startTiming = Puzzle.PuzzleStartTimings.firstSwap
+        end
+      else
+        self.startTiming = Puzzle.PuzzleStartTimings.immediately
+      end
+    end
+    self.panelBuffer = panelBuffer
+    self.garbagePanelBuffer = garbagePanelBuffer
     self.UUID = Puzzle.getV1UUID(self)
   end
 )
+
+---@enum PuzzleStartTiming
+Puzzle.PuzzleStartTimings = { countdown = "countdown", immediately = "immediately", firstInput = "firstInput", firstSwap = "firstSwap" }
 
 function Puzzle.getV1UUID(puzzle)
   local hashString = puzzle.stack .. puzzle.puzzleType .. tostring(puzzle.doCountdown) .. tostring(puzzle.moves) .. tostring(puzzle.stop_time) .. tostring(puzzle.shake_time)
@@ -260,7 +279,6 @@ function Puzzle:toGameMode()
     mode.matchRules.stackWinConditions[MatchRules.StackWinConditions.MATCHABLE_GARBAGE_PANELS] = 0
     mode.matchRules.stackSetupModifications.stopTime = self.stopTime
     mode.matchRules.stackSetupModifications.shakeTime = self.shakeTime
-    mode.matchRules.stackSetupModifications.behaviours.startTimersWithSwapCount = 1
   else
     mode.matchRules.stackSetupModifications.behaviours = {
       allowManualRaise = false,
@@ -279,7 +297,14 @@ function Puzzle:toGameMode()
     mode.matchRules.stackSetupModifications.startingCol = self.cursorStartLeft.column
   end
 
-  mode.matchRules.doCountdown = self.doCountdown
+  if self.startTiming == Puzzle.PuzzleStartTimings.countdown then
+    mode.matchRules.doCountdown = true
+  elseif self.startTiming == Puzzle.PuzzleStartTimings.firstInput then
+    mode.matchRules.stackSetupModifications.behaviours.delaySimulationUntilFirstNonIdleInput = true
+  elseif self.startTiming == Puzzle.PuzzleStartTimings.firstSwap then
+    mode.matchRules.stackSetupModifications.behaviours.startTimersWithSwapCount = 1
+  end
+
 
   return mode
 end
@@ -300,7 +325,7 @@ function Puzzle:toPanelSource(randomize, flip)
     end
   end
 
-  return PuzzleSource(puzzleString)
+  return PuzzleSource(puzzleString, self.panelBuffer, self.garbagePanelBuffer)
 end
 
 return Puzzle

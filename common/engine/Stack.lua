@@ -157,6 +157,7 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field swappingPanelCount integer how many panels are swapping on this frame
 ---@field panelSource PanelSource where the Stack gets its panels from 
 ---@field swapCount integer
+---@field isSimulating boolean if calls to `run` will advance the simulation
 
 
 -- Represents the full panel stack for one player
@@ -181,6 +182,8 @@ local Stack = class(
     end
     s.panelSource = args.panelSource:clone(s)
     s.inputMethod = args.inputMethod
+
+    s.isSimulating = not s.behaviours.delaySimulationUntilFirstNonIdleInput
 
     -- the behaviour table contains a bunch of flags to modify the stack behaviour for custom game modes in broader chunks of functionality
 
@@ -762,7 +765,15 @@ function Stack.run(self)
   self:setupInput()
   --prof.pop("Stack:setupInput")
   --prof.push("Stack:simulate")
-  self:simulate()
+  if self.isSimulating then
+    self:simulate()
+  elseif self.behaviours.delaySimulationUntilFirstNonIdleInput then
+    if self.input_state ~= self:idleInput() then
+      self.isSimulating = true
+      self:simulate()
+    end
+  end
+  self:incrementClock()
   --prof.pop("Stack:simulate")
   prof.pop("Stack:run")
   self:emitSignal("finishedRun")
@@ -1047,7 +1058,9 @@ function Stack:simulate()
     self:tryDropGarbage()
   end
   prof.pop("pop from incoming garbage q")
+end
 
+function Stack:incrementClock()
   self.clock = self.clock + 1
 
   if self.game_stopwatch_running then

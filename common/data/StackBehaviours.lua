@@ -4,6 +4,7 @@
 ---@field swapStallingMode integer? how swaps are treated with respect to stalling passive raise
 ---@field swapStallingPunish integer? how much health is deducted for stalling swaps
 ---@field startTimersWithSwapCount integer?
+---@field delaySimulationUntilFirstNonIdleInput boolean?
 
 local StackBehaviour = {}
 
@@ -14,6 +15,7 @@ function StackBehaviour.getV048Default()
     swapStallingMode = 0,
     swapStallingPunish = 0,
     startTimersWithSwapCount = 0,
+    delaySimulationUntilFirstNonIdleInput = false
   }
 end
 
@@ -24,6 +26,7 @@ function StackBehaviour.getV049Default()
     swapStallingMode = 1,
     swapStallingPunish = 4,
     startTimersWithSwapCount = 0,
+    delaySimulationUntilFirstNonIdleInput = false
   }
 end
 
