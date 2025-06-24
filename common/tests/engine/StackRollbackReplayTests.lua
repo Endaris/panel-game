@@ -11,8 +11,6 @@ local function rollbackPastAttackTest()
   local match = StackReplayTestingUtils:setupReplayWithPath(testReplayFolder .. "v046-2023-01-28-02-39-32-JamBox-L10-vs-Galadic97-L10-Casual-P1wins.txt")
   local startClock = 462
   local aheadTime = 500
-  local garbageTelegraphPopTime = 463
-  local rollbackTime = garbageTelegraphPopTime
   StackReplayTestingUtils:simulateMatchUntil(match, startClock)
   local stack1 = match.stacks[1]
   local stack2 = match.stacks[2]
@@ -24,7 +22,7 @@ local function rollbackPastAttackTest()
   assert(#stack1.outgoingGarbage.garbageInTransit[523] == 1)
 
   -- Rollback P1 past the time the attack popped off the garbage queue
-  match:debugRollbackAndCaptureState(rollbackTime)
+  match:debugRollbackAndCaptureState(startClock)
 
   -- This should cause the attack to be undone
   assert(stack1.outgoingGarbage.garbageInTransit[523] == nil)
@@ -57,8 +55,6 @@ local function rollbackNotPastAttackTest()
   local match = StackReplayTestingUtils:setupReplayWithPath(testReplayFolder .. "v046-2023-01-28-02-39-32-JamBox-L10-vs-Galadic97-L10-Casual-P1wins.txt")
   local startClock = 462
   local aheadTime = 500
-  local garbageTelegraphPopTime = 463
-  local rollbackTime = garbageTelegraphPopTime + 1
   StackReplayTestingUtils:simulateMatchUntil(match, startClock)
   local stack1 = match.stacks[1]
   local stack2 = match.stacks[2]
@@ -70,7 +66,7 @@ local function rollbackNotPastAttackTest()
   assert(#stack1.outgoingGarbage.garbageInTransit[523] == 1)
 
   -- Rollback P1 but not past the time the attack popped off the garbage queue
-  match:debugRollbackAndCaptureState(rollbackTime)
+  match:debugRollbackAndCaptureState(startClock + 1)
   assert(stack1.outgoingGarbage.garbageInTransit[523] ~= nil and #stack1.outgoingGarbage.garbageInTransit[523] == 1)
 
   -- Simulate again, attack shouldn't pop off again
@@ -106,7 +102,7 @@ local function rollbackFullyPastAttack()
   StackReplayTestingUtils:simulateMatchUntil(match, 360)
   -- combo got queued
   assert(not outgoingGarbage.stagedGarbage[1].isChain and outgoingGarbage.stagedGarbage[1].width == 3
-      and outgoingGarbage.stagedGarbage[1].frameEarned == 344)
+      and outgoingGarbage.stagedGarbage[1].frameEarned == 345)
 
   match:debugRollbackAndCaptureState(344)
   -- combo disappeared after rollback (344 means frame 343 has just completed and 344 has yet to run; combo is earned on 344 so shouldn't be in yet)
@@ -116,25 +112,25 @@ local function rollbackFullyPastAttack()
 
   -- first chain link is queued
   assert(outgoingGarbage.stagedGarbage[2] ~= nil and outgoingGarbage.stagedGarbage[2].isChain
-     and outgoingGarbage.stagedGarbage[2].frameEarned == 428 and outgoingGarbage.stagedGarbage[2].height == 1)
+     and outgoingGarbage.stagedGarbage[2].frameEarned == 429 and outgoingGarbage.stagedGarbage[2].height == 1)
   -- combo is queued
   assert(not outgoingGarbage.stagedGarbage[1].isChain and outgoingGarbage.stagedGarbage[1].width == 3
-      and outgoingGarbage.stagedGarbage[1].frameEarned == 344)
+      and outgoingGarbage.stagedGarbage[1].frameEarned == 345)
 
   match:debugRollbackAndCaptureState(420)
   -- first chain link got removed by rollback (only earned 8 frames later)
   assert(outgoingGarbage.stagedGarbage[2] == nil)
   -- combo is still queued
   assert(not outgoingGarbage.stagedGarbage[1].isChain and outgoingGarbage.stagedGarbage[1].width == 3
-      and outgoingGarbage.stagedGarbage[1].frameEarned == 344)
+      and outgoingGarbage.stagedGarbage[1].frameEarned == 345)
 
   StackReplayTestingUtils:simulateMatchUntil(match, 480)
   -- first chain link is queued
   assert(outgoingGarbage.stagedGarbage[2] ~= nil and outgoingGarbage.stagedGarbage[2].isChain
-     and outgoingGarbage.stagedGarbage[2].frameEarned == 428 and outgoingGarbage.stagedGarbage[2].height == 1)
+     and outgoingGarbage.stagedGarbage[2].frameEarned == 429 and outgoingGarbage.stagedGarbage[2].height == 1)
   -- combo is queued
   assert(not outgoingGarbage.stagedGarbage[1].isChain and outgoingGarbage.stagedGarbage[1].width == 3
-      and outgoingGarbage.stagedGarbage[1].frameEarned == 344)
+      and outgoingGarbage.stagedGarbage[1].frameEarned == 345)
       -- no other garbage in here either
   assert(#outgoingGarbage.stagedGarbage == 2)
 
@@ -142,17 +138,17 @@ local function rollbackFullyPastAttack()
   local chainGarbage = outgoingGarbage.stagedGarbage[2]
   assert(chainGarbage ~= nil)
   assert(chainGarbage.height == 3)
-  assert(chainGarbage.linkTimes[1] == 428)
-  assert(chainGarbage.linkTimes[2] == 499)
-  assert(chainGarbage.linkTimes[3] == 571)
-  assert(chainGarbage.finalizedClock == 636)
+  assert(chainGarbage.linkTimes[1] == 429)
+  assert(chainGarbage.linkTimes[2] == 500)
+  assert(chainGarbage.linkTimes[3] == 572)
+  assert(chainGarbage.finalizedClock == 637)
 
   match:debugRollbackAndCaptureState(570)
   chainGarbage = outgoingGarbage.stagedGarbage[2]
   assert(chainGarbage ~= nil)
   assert(chainGarbage.height == 2)
-  assert(chainGarbage.linkTimes[1] == 428)
-  assert(chainGarbage.linkTimes[2] == 499)
+  assert(chainGarbage.linkTimes[1] == 429)
+  assert(chainGarbage.linkTimes[2] == 500)
   assert(chainGarbage.linkTimes[3] == nil)
   assert(chainGarbage.finalizedClock == nil)
 
@@ -161,11 +157,11 @@ local function rollbackFullyPastAttack()
   assert(t[1] ~= nil)
   assert(t[1].isChain)
   assert(t[1].height == 3)
-  assert(t[1].linkTimes[1] == 428)
-  assert(t[1].linkTimes[2] == 499)
-  assert(t[1].linkTimes[3] == 571)
-  assert(t[1].finalizedClock == 636)
-  assert(not t[2].isChain and t[2].width == 3 and t[2].frameEarned == 344)
+  assert(t[1].linkTimes[1] == 429)
+  assert(t[1].linkTimes[2] == 500)
+  assert(t[1].linkTimes[3] == 572)
+  assert(t[1].finalizedClock == 637)
+  assert(not t[2].isChain and t[2].width == 3 and t[2].frameEarned == 345)
   assert(match ~= nil)
   assert(match.garbageTargets[1][1] == match.stacks[1])
   assert(match.panelSource.seed == 3917661)
@@ -188,7 +184,7 @@ local function rollbackFromDeath()
   assert(stack.game_over_clock == 652)
 
   match:rewindToFrame(481)
-  assert(stack.outgoingGarbage.stagedGarbage[1].frameEarned == 480, "expected +4 queued")
+  assert(stack.outgoingGarbage.stagedGarbage[1].frameEarned == 481, "expected +4 queued")
   StackReplayTestingUtils:fullySimulateMatch(match)
   assert(stack.game_over_clock == 652)
 end

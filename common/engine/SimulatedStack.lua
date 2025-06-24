@@ -38,6 +38,8 @@ function SimulatedStack:addHealth(healthSettings)
 end
 
 function SimulatedStack:run()
+  self.clock = self.clock + 1
+
   if self.attackEngine then
     self.attackEngine:run()
   end
@@ -66,13 +68,11 @@ function SimulatedStack:run()
     end
   end
 
-  self.clock = self.clock + 1
-
   self:emitSignal("finishedRun")
 end
 
 function SimulatedStack:setGameOver()
-  self.game_over_clock = self.clock
+  self.game_over_clock = self.clock - 1
 
   self:emitSignal("gameOver")
 end

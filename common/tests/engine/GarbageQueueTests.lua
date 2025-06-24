@@ -6,7 +6,7 @@ require("client.src.globals")
 -- 150 frames
 -- (+1 because in the past the frame garbage was considered earned on had a +1 on it and the 150 was from there
 -- that is now gone so the transit time effectively got extended by +1
-local minTransferTime = GARBAGE_TRANSIT_TIME + GARBAGE_TELEGRAPH_TIME + GARBAGE_DELAY_LAND_TIME + 1
+local minTransferTime = GARBAGE_TRANSIT_TIME + GARBAGE_TELEGRAPH_TIME + GARBAGE_DELAY_LAND_TIME
 
 local function testComboQueueing1()
   local match = GarbageQueueTestingUtils.createMatch()

@@ -10,7 +10,7 @@ local MatchRules = require("common.data.MatchRules")
 ---@field framesBehindArray integer[] Records how far behind the stack was at each match clock time
 ---@field framesBehind integer How far behind the stack is at the current Match clock time
 ---@field clock integer how many times run has been called
----@field game_over_clock integer What the clock time was when the Stack went game over
+---@field game_over_clock integer The last clock time before the frame the Stack went game over
 ---@field do_countdown boolean if the stack is performing a countdown at the start of the match
 ---@field countdown_timer boolean? ephemeral timer used for tracking countdown progress at the start of the game
 ---@field outgoingGarbage GarbageQueue

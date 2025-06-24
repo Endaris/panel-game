@@ -98,6 +98,8 @@ end
 
 local garbageList = {}
 function AttackEngine.run(self)
+  self.clock = self.clock + 1
+
   table.clear(garbageList)
 
   local highestStartTime = self.attackPatterns[#self.attackPatterns].startTime
@@ -142,8 +144,6 @@ function AttackEngine.run(self)
       end
     end
   end
-
-  self.clock = self.clock + 1
 end
 
 function AttackEngine:saveForRollback(frame)

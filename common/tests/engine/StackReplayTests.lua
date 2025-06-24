@@ -60,7 +60,7 @@ local function testFirstHoverFrameMatch()
   assert(match.stacks[1].panels[4][4].state == "matched")
   assert(match.stacks[1].panels[4][4].chaining ~= true)
   -- for this specific replay, the match combines with another one to form a +6
-  assert(tableUtils.trueForAny(match.stacks[1].outgoingGarbage.history, function(g) return g.frameEarned == 4269 and g.width == 5 end))
+  assert(tableUtils.trueForAny(match.stacks[1].outgoingGarbage.history, function(g) return g.frameEarned == 4270 and g.width == 5 end))
   StackReplayTestingUtils:cleanup(match)
 end
 
@@ -86,8 +86,8 @@ local function testHoverChainOverGarbageClear()
   assert(stack.panels[8][4].matchAnyway == false, "Panels starting to hover above fully cleared garbage don't match on their first hoverframe")
   StackReplayTestingUtils:simulateMatchUntil(match, 3081)
   local stagedGarbage = stack.outgoingGarbage.stagedGarbage
-  assert(stagedGarbage[#stagedGarbage].height == 2 and stagedGarbage[#stagedGarbage].frameEarned == 3080, "We should've gotten a +4 x3 on this frame")
-  assert(stagedGarbage[#stagedGarbage - 1].isChain == false and stagedGarbage[#stagedGarbage - 1].frameEarned == 3080 and stagedGarbage[#stagedGarbage - 1].width == 3, "We should've gotten a +4 x3 on this frame")
+  assert(stagedGarbage[#stagedGarbage].height == 2 and stagedGarbage[#stagedGarbage].frameEarned == 3081, "We should've gotten a +4 x3 on this frame")
+  assert(stagedGarbage[#stagedGarbage - 1].isChain == false and stagedGarbage[#stagedGarbage - 1].frameEarned == 3081 and stagedGarbage[#stagedGarbage - 1].width == 3, "We should've gotten a +4 x3 on this frame")
   StackReplayTestingUtils:simulateMatchUntil(match, 3272)
   assert(match.stacks[2]:game_ended() == true, "P2 should have died here")
   StackReplayTestingUtils:cleanup(match)

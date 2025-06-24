@@ -192,7 +192,8 @@ local Stack = class(
     s.speed = s.levelData.startingSpeed
     if s.levelData.speedIncreaseMode == LevelData.SPEED_INCREASE_MODES.TIME_INTERVAL then
       -- mode 1: increase speed based on fixed intervals
-      s.nextSpeedIncreaseClock = DT_SPEED_INCREASE
+      -- the first clock time needs + 1 because this update happens after the clock increment
+      s.nextSpeedIncreaseClock = DT_SPEED_INCREASE + 1
     else
       s.panels_to_speedup = PANELS_TO_NEXT_SPEED[s.speed]
     end
@@ -773,7 +774,6 @@ function Stack.run(self)
       self:simulate()
     end
   end
-  self:incrementClock()
   --prof.pop("Stack:simulate")
   prof.pop("Stack:run")
   self:emitSignal("finishedRun")
@@ -872,6 +872,7 @@ function Stack:simulate()
   local swapped_this_frame = nil
   table.clear(self.garbageLandedThisFrame)
   self:runCountDownIfNeeded()
+  self:incrementClock()
 
   --prof.push("simulate danger updates")
   self.panels_in_top_row = self:hasPanelsInTopRow()
@@ -1201,11 +1202,11 @@ function Stack.setGameOver(self)
     -- it is possible that game over is set twice on the same frame
     -- this happens if someone died to passive raise while holding manual raise
     -- we shouldn't try to set game over again under any other circumstances however
-    assert(self.clock == self.game_over_clock, "game over was already set to a different clock time")
+    assert(self.clock - 1 == self.game_over_clock, "game over was already set to a different clock time")
     return
   end
 
-  self.game_over_clock = self.clock
+  self.game_over_clock = self.clock - 1
 
   self:emitSignal("gameOver", self)
 end
@@ -1237,8 +1238,8 @@ function Stack:canSwap(panel1, panel2)
   if math.abs(panel1.column - panel2.column) ~= 1 or panel1.row ~= panel2.row then
     -- panels are not horizontally adjacent, can't swap
     return false
-  elseif self.do_countdown or self.clock <= 1 then
-    -- swapping is not possible during countdown and on the first frame
+  elseif self.do_countdown or self.clock <= 2 then
+    -- swapping is not possible during countdown and on the first two frames
     return false
   elseif self.stackOverConditions[MatchRules.StackOverConditions.SWAPS] and self.stackOverConditions[MatchRules.StackOverConditions.SWAPS] <= self.swapCount then
     -- used all available moves in a move puzzle

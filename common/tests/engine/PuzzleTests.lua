@@ -8,7 +8,7 @@ function PuzzleTests.validationCountdown()
   local isValid, validationMessage = puzzle:validate()
 
   assert(not isValid)
-  assert(string.match(validationMessage, "doCountdown"))
+  assert(string.match(validationMessage, "startTiming"))
 end
 
 function PuzzleTests.validationPuzzleType()
