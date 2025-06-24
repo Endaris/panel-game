@@ -6,7 +6,7 @@ local KeyDataEncoding = require("common.data.KeyDataEncoding")
 
 local function puzzleTest()
   -- to stop rising
-  local puzzle = Puzzle("moves", false, 1, "011010")
+  local puzzle = Puzzle("moves", 1, "011010")
   local match = StackReplayTestingUtils.createSinglePlayerMatch(puzzle:toGameMode(), puzzle:toPanelSource())
   local stack = match.stacks[1]
   ---@cast stack Stack
@@ -14,11 +14,14 @@ local function puzzleTest()
   assert(stack.panels[1][1].color == 0, "wrong color")
   assert(stack.panels[1][2].color == 1, "wrong color")
 
-  stack:receiveConfirmedInput("AA") -- can't swap on first two frames ?!
+  stack:receiveConfirmedInput("AAA") -- can't swap on first two frames ?!
+  match:run()
   match:run()
   match:run()
   local leftPanel = stack.panels[1][4]
   local rightPanel = stack.panels[1][5]
+  -- this is not a realistic test because `canSwap` is normally called in `run`
+  -- you cannot swap on the first two frames but due to clock increment being before the mid-run call of canSwap, we need 3 inputs
   assert(stack:canSwap(leftPanel, rightPanel), "should be able to swap")
   StackReplayTestingUtils:cleanup(match)
 end
@@ -26,7 +29,7 @@ end
 puzzleTest()
 
 local function clearPuzzleTest()
-  local puzzle = Puzzle("clear", false, 0, "[============================][====]246260[====]600016514213466313451511124242", 60, 0)
+  local puzzle = Puzzle("clear", 0, "[============================][====]246260[====]600016514213466313451511124242", nil, 60, 0)
   local match = StackReplayTestingUtils.createSinglePlayerMatch(puzzle:toGameMode(), puzzle:toPanelSource())
   local stack = match.stacks[1]
   ---@cast stack Stack
@@ -34,11 +37,14 @@ local function clearPuzzleTest()
   assert(stack.panels[1][1].color == 1, "wrong color")
   assert(stack.panels[1][2].color == 2, "wrong color")
 
-  stack:receiveConfirmedInput("AA") -- can't swap on first two frames ?!
+  stack:receiveConfirmedInput("AAA")
+  match:run()
   match:run()
   match:run()
   local leftPanel = stack.panels[1][4]
   local rightPanel = stack.panels[1][5]
+  -- this is not a realistic test because `canSwap` is normally called in `run`
+  -- you cannot swap on the first two frames but due to clock increment being before the mid-run call of canSwap, we need 3 inputs
   assert(stack:canSwap(leftPanel, rightPanel), "should be able to swap")
   StackReplayTestingUtils:cleanup(match)
 end
@@ -52,11 +58,13 @@ local function basicSwapTest()
 
   stack.do_countdown = false
 
-  stack:receiveConfirmedInput("AA") -- can't swap on first two frames
-  StackReplayTestingUtils:simulateMatchUntil(match, 2)
+  stack:receiveConfirmedInput("AAA")
+  StackReplayTestingUtils:simulateMatchUntil(match, 3)
 
   local leftPanel = stack.panels[1][1]
   local rightPanel = stack.panels[1][2]
+  -- this is not a realistic test because `tryQueueSwap` is normally called in `run`
+  -- you cannot swap on the first two frames but due to clock increment being before the mid-run call of tryQueueSwap, we need 3 inputs
   assert(stack:tryQueueSwap(leftPanel, rightPanel), "should be able to swap")
   assert(stack.queuedSwapRow == 1)
   stack:new_row()
@@ -133,7 +141,7 @@ testShakeFrames()
 
 
 local function swapStalling1Test1()
-  local puzzle = Puzzle("clear", false, 0, "[======================][====]246260[====]600016514213461336451511124242", 0, 0)
+  local puzzle = Puzzle("clear", 0, "[======================][====]246260[====]600016514213461336451511124242")
   local match = StackReplayTestingUtils.createSinglePlayerMatch(puzzle:toGameMode(), puzzle:toPanelSource(), "controller", LevelPresets.getModern(10))
   local stack = match.stacks[1]
   ---@cast stack Stack

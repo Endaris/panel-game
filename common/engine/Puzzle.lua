@@ -131,8 +131,8 @@ end
 function Puzzle:validate()
   local errMessage = ""
 
-  if type(self.doCountdown) ~= "boolean" then
-    errMessage = "\nInvalid value for property 'doCountdown'"
+  if type(self.startTiming) ~= "string" or not tableUtils.contains(Puzzle.PuzzleStartTimings, self.startTiming) then
+    errMessage = "\nInvalid value for property 'startTiming'"
   end
 
   local stackLength = string.len(self.stack)
