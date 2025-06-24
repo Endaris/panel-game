@@ -69,7 +69,7 @@ function GameCatchUp:update(dt)
 
   self.timePassed = self.timePassed + dt
 
-  if not self.match.stacks[1].engine.play_to_end then
+  if not self.match.stacks[1]:isCatchingUp() then
     modLoadValidation(self.match)
     self.progress = 1
     SoundController:applyConfigVolumes()
@@ -77,13 +77,14 @@ function GameCatchUp:update(dt)
   else
     self.progress = self.match.stacks[1].engine.clock / #self.match.stacks[1].engine.confirmedInput
   end
+
   local t = love.timer.getTime()
   -- convert the nil check into a bool
   local shouldCatchUp = not not ModLoader.loading_mod
   for _, stack in ipairs(self.match.stacks) do
     if shouldCatchUp then
       break
-    elseif stack.engine.play_to_end then
+    elseif stack:isCatchingUp() then
       shouldCatchUp = true
     end
   end

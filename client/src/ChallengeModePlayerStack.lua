@@ -116,7 +116,7 @@ function ChallengeModePlayerStack:canPlaySfx()
   end
 
   -- this is catchup mode, don't play sfx during this
-  if self.engine.play_to_end then
+  if self:isCatchingUp() then
     return false
   end
 

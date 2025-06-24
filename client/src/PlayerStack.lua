@@ -439,7 +439,7 @@ end
 
 -- Enqueue a card animation
 function PlayerStack.enqueue_card(self, chain, x, y, n)
-  if self.canvas == nil or self.engine.play_to_end then
+  if self.canvas == nil or self:isCatchingUp() then
     return
   end
 
@@ -532,7 +532,7 @@ end
 
 -- Enqueue a pop animation
 function PlayerStack.enqueue_popfx(self, x, y, popsize)
-  if self.canvas == nil or self.engine.play_to_end then
+  if self.canvas == nil or self:isCatchingUp() then
     return
   end
 
@@ -1504,7 +1504,7 @@ function PlayerStack:canPlaySfx()
   end
 
   -- this is catchup mode, don't play sfx during this
-  if self.engine.play_to_end then
+  if self:isCatchingUp() then
     return false
   end
 

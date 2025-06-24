@@ -130,7 +130,7 @@ function ClientMatch.createFromReplay(replay, players)
 
   -- and assign their stacks from the engine
   for i, player in ipairs(clientMatch.players) do
-    local clientStack = player:createClientStack(clientMatch.engine.stacks[i], clientMatch)
+    local clientStack = player:createClientStack(clientMatch.engine.stacks[i])
     if replay.metadata.completed then
       -- watching a finished replay
       clientStack:setMaxRunsPerFrame(1)

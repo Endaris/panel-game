@@ -434,6 +434,7 @@ function ClientStack:setCountdown(doCountdown)
   self.engine:setCountdown(doCountdown)
 end
 
+---@return boolean?
 function ClientStack:isCatchingUp()
   return self.engine.play_to_end
 end
