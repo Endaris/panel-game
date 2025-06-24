@@ -1,11 +1,12 @@
 local WigglePay = {}
 
+---@param stack Stack
 function WigglePay.isActive(stack)
   if stack.behaviours.swapStallingMode == 0 then
     return false
   elseif stack.behaviours.swapStallingPunish == 0 then
     return false
-  elseif not stack.panels_in_top_row then
+  elseif not stack:isToppedOut() then
     return false
   elseif stack.pre_stop_time ~= 0 then
     return false

@@ -202,6 +202,7 @@ function GarbageQueue:rollbackToFrame(frame)
   end
 end
 
+---@param frame integer
 function GarbageQueue:rewindToFrame(frame)
   assert(self.rollbackBuffer, "Attempted to rewind garbage queue to frame " .. frame .. " but no rollback buffer has been kept")
 
@@ -299,6 +300,7 @@ end
 -- traverses the garbage queue back to front (which is order of priority, high to low)
 -- returning all sequential garbage that has not been changed within the staging duration
 -- stops the traversal at the first piece of garbage that has not yet stayed the full staging duration
+---@param clock integer
 function GarbageQueue:processStagedGarbageForClock(clock)
   -- we don't want to create a table until it is confirmed that garbage is being popped
   -- otherwise we get a lot of unnecessary table garbage
@@ -350,6 +352,9 @@ end
 
 -- This is used by the telegraph to increase the size of the chain garbage being built
 -- or add a 6-wide if there is not chain garbage yet in the queue
+---@param frameEarned integer
+---@param row integer
+---@param column integer
 function GarbageQueue:addChainLink(frameEarned, row, column)
   if self.currentChain == nil then
     self.currentChain = {
@@ -398,6 +403,7 @@ function GarbageQueue:getGarbageIndex(garbage)
   error("commence explosion")
 end
 
+---@param clock integer
 function GarbageQueue:finalizeCurrentChain(clock)
   --logger.debug("Finalizing chain at " .. clock)
   self.currentChain.finalized = true

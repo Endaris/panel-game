@@ -37,15 +37,17 @@ local function clearPuzzleTest()
   assert(stack.panels[1][1].color == 1, "wrong color")
   assert(stack.panels[1][2].color == 2, "wrong color")
 
-  stack:receiveConfirmedInput("AAA")
-  match:run()
-  match:run()
-  match:run()
-  local leftPanel = stack.panels[1][4]
-  local rightPanel = stack.panels[1][5]
-  -- this is not a realistic test because `canSwap` is normally called in `run`
-  -- you cannot swap on the first two frames but due to clock increment being before the mid-run call of canSwap, we need 3 inputs
-  assert(stack:canSwap(leftPanel, rightPanel), "should be able to swap")
+  -- commented out this section due to rework of how clear puzzles stall game start
+  -- this should be sufficiently tested in the moves puzzleTest above
+  -- stack:receiveConfirmedInput("AAA")
+  -- match:run()
+  -- match:run()
+  -- match:run()
+  -- local leftPanel = stack.panels[1][4]
+  -- local rightPanel = stack.panels[1][5]
+  -- -- this is not a realistic test because `canSwap` is normally called in `run`
+  -- -- you cannot swap on the first two frames but due to clock increment being before the mid-run call of canSwap, we need 3 inputs
+  -- assert(stack:canSwap(leftPanel, rightPanel), "should be able to swap")
   StackReplayTestingUtils:cleanup(match)
 end
 
