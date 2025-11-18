@@ -1,5 +1,4 @@
 local system = require("client.src.system")
-local DebugSettings = require("client.src.debug.DebugSettings")
 local logger = require("common.lib.logger")
 ---@diagnostic disable: duplicate-set-field
 
@@ -9,7 +8,7 @@ local logger = require("common.lib.logger")
 local function enableProfiler(threshold)
   local prof = require("common.lib.zoneProfiler")
   prof.enable(true)
-  prof.setDurationFilter((threshold or DebugSettings.getProfileThreshold()) / 1000)
+  prof.setDurationFilter((threshold or config.debugProfileThreshold) / 1000)
 end
 
 local developerTools = {}
@@ -72,7 +71,6 @@ function developerTools.wrapUsernameConfig(customUsername)
       config.name = realName
     end
     write()
-    config.name = customUsername
   end
 end
 
