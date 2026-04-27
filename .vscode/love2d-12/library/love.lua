@@ -10536,9 +10536,9 @@ end
 ---
 ---[Open in Browser](https://love2d.org/wiki/Joystick:isGamepadDown)
 ---
----@param buttonN love.joystick.GamepadButton The gamepad button to check.
+---@vararg love.joystick.GamepadButton The gamepad buttons to check.
 ---@return boolean anyDown True if any supplied button is down, false if not.
-function Joystick:isGamepadDown(buttonN)
+function Joystick:isGamepadDown(...)
 end
 
 ---Gets whether the specified sensor is currently enabled on this Joystick.

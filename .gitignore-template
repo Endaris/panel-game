@@ -14,6 +14,7 @@ players.txt
 leaderboard.csv
 ftp
 reports
+ScoreVerifier
 # for developing and debugging updater related features you may want to drop these in
 updater
 releaseStreams.json

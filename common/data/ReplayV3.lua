@@ -40,12 +40,15 @@ local REPLAY_VERSION = 3
 ---@field characterId string?
 ---@field wins integer?
 
+---@class ReplayAnalytics : AnalyticsData
+---@field score integer?
+
 ---@class StackMetadata : BaseStackMetadata
 ---@field publicId integer?
 ---@field name string?
 ---@field level integer?
 ---@field difficulty integer?
----@field analytics AnalyticsData?
+---@field analytics ReplayAnalytics?
 
 ---@class SimulatedStackMetadata : BaseStackMetadata
 ---@field challengeModeDifficulty integer?

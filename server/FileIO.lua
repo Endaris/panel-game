@@ -6,6 +6,21 @@ local sep = package.config:sub(1, 1) --determines os directory separator (i.e. "
 
 local FileIO = {}
 
+function FileIO.trimSeparators(str)
+  return str:gsub("^" .. sep .. "*(.-)" .. sep .. "*$", "%1")
+end
+
+---@vararg string
+---@return string path
+function FileIO.combinePath(...)
+  local items = {...}
+  for i, item in ipairs(items) do
+    items[i] = FileIO.trimSeparators(item)
+  end
+  local result = table.concat(items, sep)
+  return result
+end
+
 function FileIO.makeDirectory(path)
   local status, error = pcall(
     function()
@@ -15,6 +30,13 @@ function FileIO.makeDirectory(path)
   if not status then
     logger.error("Failed to make directory: " .. path .. " error: " .. error)
   end
+end
+
+-- creates a directory of the given name at the current path if it doesn't already exist
+---@param directoryName string
+function FileIO.makeLocalDirectory(directoryName)
+  local path = FileIO.combinePath(".", directoryName)
+  FileIO.makeDirectory(path)
 end
 
 function FileIO.makeDirectoryRecursive(path)
@@ -86,12 +108,11 @@ function FileIO.write_error_report(error_report_json)
   if json_string:len() >= 5000 --[[5kB]] then
     return false
   end
-  local sep = package.config:sub(1, 1)
   local now = os.date("*t", to_UTC(os.time()))
   local filename = "v" .. (error_report_json.engine_version or "000") .. "-" .. string.format("%04d-%02d-%02d-%02d-%02d-%02d", now.year, now.month, now.day, now.hour, now.min, now.sec) .. "_" .. (error_report_json.name or "Unknown") .. "-ErrorReport.json"
   return pcall(
     function()
-      FileIO.makeDirectoryRecursive("." .. sep .. "reports")
+      FileIO.makeDirectoryRecursive(FileIO.combinePath(".", "reports"))
       local f = assert(io.open("reports" .. sep .. filename, "w"))
       io.output(f)
       io.write(json_string)
@@ -106,9 +127,9 @@ function FileIO.write_leaderboard_file(leaderboard, path)
 
   local status, error = pcall(
     function()
-      csvfile.write("." .. sep .. path, leaderboard_table)
-      FileIO.makeDirectoryRecursive("." .. sep .. "ftp")
-      csvfile.write("." .. sep .. "ftp" .. sep .. "PA_public_" .. path, public_leaderboard_table)
+      csvfile.write(FileIO.combinePath(".", path), leaderboard_table)
+      FileIO.makeDirectoryRecursive(FileIO.combinePath(".", "ftp"))
+      csvfile.write(FileIO.combinePath(".", "ftp", "PA_public_" .. path), public_leaderboard_table)
     end
   )
   if not status then
@@ -123,7 +144,7 @@ function FileIO.readCsvFile(filePath)
   local csv_table = {}
   local status, error = pcall(
     function()
-      csv_table = csvfile.read("." .. sep .. filePath)
+      csv_table = csvfile.read(FileIO.combinePath(".", filePath))
     end
   )
 
@@ -138,8 +159,7 @@ end
 function FileIO.read_user_placement_match_file(user_id)
   return pcall(
     function()
-      local sep = package.config:sub(1, 1)
-      local csv_table = csvfile.read("./placement_matches/incomplete/" .. user_id .. ".csv")
+      local csv_table = csvfile.read(FileIO.combinePath(".", "placement_matches", "incomplete", user_id .. ".csv"))
       if not csv_table or #csv_table < 2 then
         logger.debug("csv_table from read_user_placement_match_file was nil or <2 length")
         return nil
@@ -182,9 +202,9 @@ end
 function FileIO.move_user_placement_file_to_complete(user_id)
   local status, error = pcall(
     function()
-      local sep = package.config:sub(1, 1)
-      FileIO.makeDirectoryRecursive("./placement_matches/complete")
-      local moved, err = os.rename("./placement_matches/incomplete/" .. user_id .. ".csv", "./placement_matches/complete/" .. user_id .. ".csv")
+      local path = FileIO.combinePath(".", "placement_matches", "complete")
+      FileIO.makeDirectoryRecursive(path)
+      local moved, err = os.rename(FileIO.combinePath(".", "placement_matches", "incomplete", user_id .. ".csv"), FileIO.combinePath(path, user_id .. ".csv"))
     end
   )
   if not status then
@@ -199,7 +219,7 @@ function FileIO.write_user_placement_match_file(user_id, placement_matches)
   for k, v in ipairs(placement_matches) do
     pm_table[#pm_table + 1] = {v.op_user_id, v.op_name, v.op_rating, v.outcome}
   end
-  FileIO.makeDirectoryRecursive("placement_matches" .. sep .. "incomplete")
+  FileIO.makeDirectoryRecursive(FileIO.combinePath("placement_matches", "incomplete"))
   local fullFileName = "placement_matches" .. sep .. "incomplete" .. sep .. user_id .. ".csv"
   local status, error = pcall(
     function()
@@ -211,19 +231,22 @@ function FileIO.write_user_placement_match_file(user_id, placement_matches)
   end
 end
 
-function FileIO.write_replay_file(replay, path, filename)
-  local sep = package.config:sub(1, 1)
+---@param replay ReplayV3
+---@param filePath string
+---@return string? # the filepath the replay was written to, nil if the write failed
+function FileIO.write_replay_file(replay, filePath)
   local status, error = pcall(
     function()
-      FileIO.makeDirectoryRecursive(path)
-      local f = assert(io.open(path .. sep .. filename, "w"))
+      local f = assert(io.open(filePath, "w"))
       io.output(f)
       io.write(json.encode(replay))
       io.close(f)
     end
   )
   if not status then
-    logger.error("Failed to write replay file: " .. path .. sep .. filename .. " with error: " .. error)
+    logger.error("Failed to write replay file: " .. filePath .. " with error: " .. error)
+  else
+    return filePath
   end
 end
 
@@ -264,11 +287,73 @@ function FileIO.saveReplay(game)
     end
   end
 
-  local path = "ftp" .. sep .. game.replay:generatePath(sep)
+  local path = FileIO.combinePath("ftp", game.replay:generatePath(sep))
+  FileIO.makeDirectoryRecursive(path)
   local filename = game.replay:generateFileName() .. ".json"
 
   logger.debug("saving replay as " .. path .. sep .. filename)
-  FileIO.write_replay_file(game.replay, path, filename)
+  FileIO.write_replay_file(game.replay, FileIO.combinePath(path, filename))
+end
+
+---@param replay ReplayV3
+---@param publicId PublicPlayerID
+---@return string? # filePath if written, nil otherwise
+function FileIO.saveReplayForVerification(replay, publicId)
+  local directory = FileIO.combinePath(".", "ScoreVerifier")
+  FileIO.makeDirectoryRecursive(directory)
+  local filePath = FileIO.combinePath(directory, replay:generateFileName() .. "_" .. tostring(publicId) .. ".json")
+  logger.debug("saving replay for verification at " .. filePath)
+  return FileIO.write_replay_file(replay, filePath)
+end
+
+---@param path string
+---@return string[] directoryItems
+function FileIO.getDirectoryItems(path)
+  local items = {}
+
+  iterator, directoryObject = lfs.dir(path)
+
+  local item
+
+  repeat
+    item = iterator(directoryObject)
+    if item ~= "." and item ~= ".." then
+      items[#items+1] = item
+    end
+  until item == nil
+
+  return items
+end
+
+---@param source string
+---@param destination string
+---@return boolean success, string? err
+function FileIO.copyItem(source, destination)
+  local success, err = pcall(
+    function()
+      local data
+      local f = io.open(source, "r")
+      if f then
+        io.input(f)
+        data = io.read("*all")
+        io.close(f)
+      else
+        return false, "Could not read file at location " .. source
+      end
+
+      if data then
+        f = io.open(destination, "w")
+        if f then
+          io.output(f)
+          io.write(data)
+          io.close(f)
+        else
+          return false, "Could not write data at location " .. destination
+        end
+      end
+    end)
+
+  return success, err
 end
 
 return FileIO
