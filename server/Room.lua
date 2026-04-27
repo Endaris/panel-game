@@ -323,7 +323,7 @@ end
 ---@param sender ServerPlayer
 function Room:handleGameOverOutcome(message, sender)
   logger.debug(self.roomNumber .. ": Received game result from " .. sender.name .. ": " .. message.outcome)
-  self.game:receiveOutcomeReport(sender, message.outcome)
+  self.game:receiveGameResult(sender, message.outcome, message.score)
 
   if self.game.complete then
     self:updateWinCounts(self.game)

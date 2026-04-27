@@ -163,7 +163,8 @@ function ClientMessages.sanitizeGameResult(gameResult)
   local sanitized =
   {
     game_over = gameResult.game_over,
-    outcome = gameResult.outcome
+    outcome = gameResult.outcome,
+    score = gameResult.score,
   }
 
   return sanitized

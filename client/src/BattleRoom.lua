@@ -13,6 +13,7 @@ local Easings = require("client.src.Easings")
 local system = require("client.src.system")
 local GeneratorSource = require("common.engine.GeneratorSource")
 local DebugSettings = require("client.src.debug.DebugSettings")
+local MatchRules = require("common.data.MatchRules")
 
 -- A Battle Room is a session of matches, keeping track of the room number, player settings, wins / losses etc
 ---@class BattleRoom : Signal
@@ -537,7 +538,11 @@ function BattleRoom:onMatchEnded(match)
       end
     end
     if self.online and match:hasLocalPlayer() then
-      GAME.netClient:reportLocalGameResult(winners)
+      local score
+      if self.mode.matchRules.matchWinRuleset[MatchRules.StackWinConditions.SCORE] then
+        score = GAME.localPlayer.stack.engine.score
+      end
+      GAME.netClient:reportLocalGameResult(winners, score)
     end
   else
     -- in the case of a network based abort (== opponent left / disconnected in some way),

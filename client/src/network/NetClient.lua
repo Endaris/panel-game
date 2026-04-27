@@ -438,13 +438,15 @@ function NetClient:leaveRoom()
   end
 end
 
-function NetClient:reportLocalGameResult(winners)
+---@param winners integer[] the player number(s) of the winner(s)
+---@param localScore integer? the score achieved by the local player
+function NetClient:reportLocalGameResult(winners, localScore)
   if #winners == 2 then
     -- we need to translate the result for the server to understand it
     -- two winners means a draw which the server thinks of as 0
-    self.tcpClient:sendRequest(ClientMessages.reportLocalGameResult(0))
+    self.tcpClient:sendRequest(ClientMessages.reportLocalGameResult(0, localScore))
   elseif #winners == 1 then
-    self.tcpClient:sendRequest(ClientMessages.reportLocalGameResult(winners[1].playerNumber))
+    self.tcpClient:sendRequest(ClientMessages.reportLocalGameResult(winners[1].playerNumber, localScore))
   end
 end
 

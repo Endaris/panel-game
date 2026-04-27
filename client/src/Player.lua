@@ -63,7 +63,7 @@ function(self, name, publicId, isLocal)
   settings.inputMethod = "controller"
   settings.attackEngineSettings = nil
 
-  -- planned for the future, players don't have public ids yet
+  -- players may not have a publicId in offline play or if the server doesn't assign one
   self.publicId = publicId or -1
   self.league = nil
   self.rating = nil

@@ -6,6 +6,8 @@ local InputCompression = require("common.data.InputCompression")
 local ReplayV3 = require("common.data.ReplayV3")
 local LevelPresets    = require("common.data.LevelPresets")
 
+---@alias GameOutcome integer the player index of the winning player within the room, 0 if tied
+
 ---@class ServerGame
 ---@field id integer?
 ---@field seed integer
@@ -144,8 +146,18 @@ function Game:getPartialReplay(compressInputs)
   end
 end
 
-function Game:receiveOutcomeReport(player, outcome)
+---@param player ServerPlayer
+---@param outcome GameOutcome
+---@param score integer?
+function Game:receiveGameResult(player, outcome, score)
   self.outcomeReports[player.player_number] = outcome
+
+  if score then
+    local playerMetadata = self.replay.metadata.stacks[player.player_number]
+    ---@cast playerMetadata StackMetadata
+    playerMetadata.analytics = playerMetadata.analytics or {}
+    playerMetadata.analytics.score = score
+  end
 
   -- cannot compare #self.outcomeReports == #self.players because # is undefined regarding gaps near 0
   -- so if we have the report for player 2 but not player 1, #self.outcomeReports may return 2 instead of 0

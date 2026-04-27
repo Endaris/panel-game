@@ -117,8 +117,14 @@ function ClientProtocol.leaveRoom()
   }
 end
 
-function ClientProtocol.reportLocalGameResult(outcome)
-  local gameResultMessage = {game_over = true, outcome = outcome}
+---@param outcome GameOutcome player number of the winning player
+---@param score integer? score of the local client, may be nil if score is irrelevant to the game mode
+function ClientProtocol.reportLocalGameResult(outcome, score)
+  local gameResultMessage = {
+    game_over = true,
+    outcome = outcome,
+    score = score
+  }
   return {
     messageType = msgTypes.jsonMessage,
     messageText = gameResultMessage,
