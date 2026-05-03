@@ -4,6 +4,7 @@ local tableUtils = require("common.lib.tableUtils")
 local Queue = require("common.lib.Queue")
 require("table.clear")
 require("table.new")
+local consts = require("common.engine.consts")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
 local Signal = require("common.lib.signal")
 
@@ -30,7 +31,7 @@ local Signal = require("common.lib.signal")
 -- the original thought was probably that the attack animation should only start on the frame AFTER the garbage gets queued
 -- so all garbage got queued for a clock time 1 frame later than  the actual frame it was earned
 -- now we don't do this anymore and the draw code has to be wary of that on his own so that the engine numbers are consistent at least
-local STAGING_DURATION = GARBAGE_TRANSIT_TIME + GARBAGE_TELEGRAPH_TIME + 1
+local STAGING_DURATION = consts.GARBAGE_STAGING_DURATION + 1
 
 ---@param a ChainGarbage
 ---@param b ChainGarbage
@@ -131,7 +132,7 @@ function(self, allowIllegalStuff, treatMetalAsCombo)
 
   -- seems like the rollback method of Stack counts differently
   -- so keep one extra copy to not run out of copies when rewinding stacks in replays
-  self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+  self.rollbackBuffer = RollbackBuffer()
 
   Signal.turnIntoEmitter(self)
   self:createSignal("garbagePushed")
@@ -220,7 +221,7 @@ function GarbageQueue:rollbackToFrame(stopWatch)
   -- this may not universally work for multiplayer with more than 2 players
   for i = self.transitTimers.last, self.transitTimers.first, -1 do
     local transitFrame = self.transitTimers[i]
-    if transitFrame >= stopWatch + GARBAGE_DELAY_LAND_TIME then
+    if transitFrame >= stopWatch + consts.GARBAGE_DELAY_LAND_TIME then
       self.garbageInTransit[transitFrame] = nil
       self.transitTimers.last = self.transitTimers.last - 1
     end
@@ -349,7 +350,7 @@ function GarbageQueue:processStagedGarbageForClock(clock)
   end
 
   if poppedGarbage then
-    local deliveryTime = clock + GARBAGE_DELAY_LAND_TIME
+    local deliveryTime = clock + consts.GARBAGE_DELAY_LAND_TIME
     self.garbageInTransit[deliveryTime] = poppedGarbage
     Queue.push(self.transitTimers, deliveryTime)
   end

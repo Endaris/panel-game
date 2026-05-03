@@ -23,7 +23,7 @@ function(self, puzzleString, panelBuffer, garbageBuffer)
   end
 
   self.panels = {}
-  self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+  self.rollbackBuffer = RollbackBuffer()
 end)
 
 PuzzleSource.TYPE = "PuzzleSource"

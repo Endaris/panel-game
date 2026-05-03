@@ -114,7 +114,7 @@ function Health:saveRollbackCopy()
 
   self.rollbackCopies[self.clock] = copy
 
-  local deleteFrame = self.clock - MAX_LAG - 1
+  local deleteFrame = self.clock - consts.MAX_LAG - 1
   if self.rollbackCopies[deleteFrame] then
     self.rollbackCopyPool:push(self.rollbackCopies[deleteFrame])
     self.rollbackCopies[deleteFrame] = nil

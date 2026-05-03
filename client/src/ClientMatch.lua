@@ -578,7 +578,7 @@ function ClientMatch:drawCommunityMessage()
 end
 
 local function isRollbackActive(stack)
-  return stack.engine.framesBehind > GARBAGE_DELAY_LAND_TIME
+  return stack.engine.framesBehind > consts.GARBAGE_DELAY_LAND_TIME
 end
 
 function ClientMatch:render()
@@ -600,7 +600,7 @@ function ClientMatch:render()
         GraphicsUtil.draw(themes[config.theme].images.IMG_bug, x, y, 0, iconSize / icon_width, iconSize / icon_height)
       end
     else
-      if tableUtils.trueForAny(self.stacks, function(stack) return stack.engine.framesBehind > MAX_LAG * 0.75 end) then
+      if tableUtils.trueForAny(self.stacks, function(stack) return stack.engine.framesBehind > consts.MAX_LAG * 0.75 end) then
         -- let the spectator know the game is about to die
         local iconSize = 60
         local icon_width, icon_height = themes[config.theme].images.IMG_bug:getDimensions()

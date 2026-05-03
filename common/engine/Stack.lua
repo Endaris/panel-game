@@ -24,7 +24,7 @@ local rollbackPanelBuffer = {}
 -- that creates a situation where more memory is allocated, the GC starts running faster and the odds of having to run double updates for the opponent is high
 -- by preallocating memory for the panels (which is responsible for 90% of rollback memory), the load is less concentrated and stacks are generally more "rollback ready"
 -- as each table gets cleared before reuse it can be shared by all stacks
-for i = 1, (15 * 6) * MAX_LAG * 2 do
+for i = 1, (15 * 6) * consts.MAX_LAG * 2 do
   rollbackPanelBuffer[#rollbackPanelBuffer+1] = table.new(0, 24)
 end
 
@@ -273,7 +273,7 @@ local Stack = class(
     s.shake_time_on_frame = 0
     s.peak_shake_time = 0
 
-    s.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+    s.rollbackBuffer = RollbackBuffer()
 
     s.warningsTriggered = {}
 

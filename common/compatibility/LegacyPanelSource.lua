@@ -1,5 +1,6 @@
 local class = require("common.lib.class")
 local tableUtils = require("common.lib.tableUtils")
+local consts = require("common.engine.consts")
 local LegacyPanelGenerator = require("common.compatibility.LegacyPanelGenerator")
 require("common.lib.util")
 local RollbackBuffer       = require("common.engine.RollbackBuffer")
@@ -26,7 +27,7 @@ function(self, seed, shockEnabled)
   self.allowAdjacentColors = false
   self.allowAdjacentColorsOnStartingBoard = false
   self.shockEnabled = shockEnabled
-  self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+  self.rollbackBuffer = RollbackBuffer()
 end)
 
 LegacyPanelSource.TYPE = "LegacyPanelSource"

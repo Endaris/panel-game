@@ -21,7 +21,7 @@ function(self, seed, shockEnabled)
   self.shockEnabled = shockEnabled
   self.panelBuffer = ""
   self.garbagePanelBuffer = ""
-  self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+  self.rollbackBuffer = RollbackBuffer()
 end)
 
 GeneratorSource.TYPE = "GeneratorSource"

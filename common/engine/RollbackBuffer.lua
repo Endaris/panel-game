@@ -1,5 +1,6 @@
 local class = require("common.lib.class")
 require("table.new")
+local consts = require("common.engine.consts")
 
 -- A specialized class that implements something like a ring buffer to facilitate the (memory) management of rollback copies
 -- Precisely the goal is that components using rollback don't have to worry about pool management and deletion of stale copies
@@ -9,9 +10,9 @@ require("table.new")
 ---@field frames integer[] tracks which frame number each buffer index refers to
 ---@field currentIndex integer The index of the next buffer entry to save to
 local RollbackBuffer = class(function(ring, size)
-  ring.size = size
-  ring.buffer = table.new(size, 0)
-  ring.frames = table.new(size, 0)
+  ring.size = size or (consts.MAX_LAG + 1)
+  ring.buffer = table.new(ring.size, 0)
+  ring.frames = table.new(ring.size, 0)
   ring.currentIndex = 1
 end)
 

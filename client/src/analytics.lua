@@ -1,6 +1,7 @@
 local fileUtils = require("client.src.FileUtils")
 local class = require("common.lib.class")
 local RollbackBuffer = require("common.engine.RollbackBuffer")
+local consts = require("common.engine.consts")
 local analytics = {}
 
 local ANALYTICS_VERSION = 3
@@ -50,7 +51,7 @@ AnalyticsInstance =
     self.lastGPM = 0
     self.lastAPM = 0
 
-    self.rollbackBuffer = RollbackBuffer(MAX_LAG + 1)
+    self.rollbackBuffer = RollbackBuffer()
   end
 )
 

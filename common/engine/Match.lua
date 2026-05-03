@@ -327,7 +327,7 @@ function Match:shouldSaveRollback(stack)
     for senderIndex, targetList in ipairs(self.garbageTargets) do
       for _, target in ipairs(targetList) do
         if target == stack then
-          if self.stacks[senderIndex].stopWatch + GARBAGE_DELAY_LAND_TIME <= stack.stopWatch then
+          if self.stacks[senderIndex].stopWatch + consts.GARBAGE_DELAY_LAND_TIME <= stack.stopWatch then
             return true
           end
         end
@@ -594,7 +594,7 @@ end
 function Match:isIrrecoverablyDesynced()
   for target, sourceArray in pairs(self.garbageSources) do
     for i, source in ipairs(sourceArray) do
-      if source.clock + MAX_LAG < target.clock then
+      if source.clock + consts.MAX_LAG < target.clock then
         return true
       end
     end

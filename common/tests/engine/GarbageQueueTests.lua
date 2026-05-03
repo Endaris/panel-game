@@ -1,12 +1,12 @@
 local GarbageQueueTestingUtils = require("common.tests.engine.GarbageQueueTestingUtils")
 local StackReplayTestingUtils = require("common.tests.engine.StackReplayTestingUtils")
 local tableUtils = require("common.lib.tableUtils")
-require("client.src.globals")
+local consts = require("common.engine.consts")
 
 -- 150 frames
 -- (+1 because in the past the frame garbage was considered earned on had a +1 on it and the 150 was from there
 -- that is now gone so the transit time effectively got extended by +1
-local minTransferTime = GARBAGE_TRANSIT_TIME + GARBAGE_TELEGRAPH_TIME + GARBAGE_DELAY_LAND_TIME + 1
+local minTransferTime = consts.GARBAGE_TRANSIT_TIME + consts.GARBAGE_TELEGRAPH_TIME + consts.GARBAGE_DELAY_LAND_TIME + 1
 
 local function testComboQueueing1()
   local match = GarbageQueueTestingUtils.createMatch()

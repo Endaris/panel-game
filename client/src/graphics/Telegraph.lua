@@ -1,6 +1,7 @@
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local GraphicsUtil = require("client.src.graphics.graphics_util")
+local consts = require("common.engine.consts")
 
 local TELEGRAPH_HEIGHT = 16
 local TELEGRAPH_PADDING = 2 --vertical space between telegraph and stack
@@ -83,7 +84,7 @@ function Telegraph:attackAnimationStartFrame()
 end
 
 function Telegraph:attackAnimationEndFrame()
-  return GARBAGE_TRANSIT_TIME + 1
+  return consts.GARBAGE_TRANSIT_TIME + 1
 end
 
 Telegraph.totalTimeAfterLoopToDestination = (Telegraph:attackAnimationEndFrame() - (Telegraph:attackAnimationStartFrame() + #telegraph_attack_animation_speed))
