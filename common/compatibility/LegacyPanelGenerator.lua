@@ -1,12 +1,13 @@
 local util = require("common.lib.util")
 local logger = require("common.lib.logger")
+local RandomGenerator = require("common.lib.RandomGenerator")
 
 -- table of static functions used for generating panels
 ---@class LegacyPanelGenerator
----@field rng love.RandomGenerator
+---@field rng RandomGenerator
 ---@field generatedCount integer
 ---@field seed integer
-local LegacyPanelGenerator = {rng = love.math.newRandomGenerator(), generatedCount = 0}
+local LegacyPanelGenerator = {rng = RandomGenerator(), generatedCount = 0}
 
 LegacyPanelGenerator.PANEL_COLOR_NUMBER_TO_UPPER = {"A", "B", "C", "D", "E", "F", "G", "H", "I", [0] = "0"}
 LegacyPanelGenerator.PANEL_COLOR_NUMBER_TO_LOWER = {"a", "b", "c", "d", "e", "f", "g", "h", "i", [0] = "0" }

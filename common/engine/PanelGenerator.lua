@@ -1,10 +1,11 @@
 local util = require("common.lib.util")
 local logger = require("common.lib.logger")
 local class = require("common.lib.class")
+local RandomGenerator = require("common.lib.RandomGenerator")
 
 -- table of static functions used for generating panels
 ---@class PanelGenerator
----@field rng love.RandomGenerator
+---@field rng RandomGenerator
 ---@field generatedCount integer debug property to see how often random was actually called since last setting the seed
 ---@field seed integer
 ---@field adjacentDenialFrequency number in percent
@@ -21,7 +22,7 @@ function(self, seed, adjacentDenialFrequency)
   self.adjacentDenialFrequency = adjacentDenialFrequency
   self.adjacentAccepted = 0
   self.adjacentDenied = 0
-  self.rng = love.math.newRandomGenerator()
+  self.rng = RandomGenerator()
   self.rng:setSeed(seed)
 end)
 
