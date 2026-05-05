@@ -1,7 +1,11 @@
--- this is a reimplementation of love's RandomGenerator
+-- this is an incomplete reimplementation of love's RandomGenerator
+-- missing features:
+--  - cannot call functions on the class itself, you NEED to create an object
+--  - randomNormal is not implemented
+--  - does not account for potential big endianness
 
 -- not sure if these ffi type shenanigans are properly representable via annotations
----@diagnostic disable: param-type-mismatch, inject-field, return-type-mismatch
+---@diagnostic disable: param-type-mismatch, inject-field, return-type-mismatch, assign-type-mismatch
 
 
 local class = require("common.lib.class")
@@ -37,6 +41,7 @@ ffi.cdef[[
 
 -- A RandomGenerator that seeks to replicate the functionality of love's RandomGenerator for use in the server side
 ---@class RandomGenerator
+---@operator call():RandomGenerator
 ---@field seed ffi.cdata*
 ---@field rngState ffi.cdata*
 local RandomGenerator = class(
@@ -116,7 +121,7 @@ function RandomGenerator:__random()
 end
 
 function RandomGenerator:randomNormal()
-
+  error("Not implemented")
 end
 
 ---@param seed integer
@@ -128,14 +133,25 @@ end
 
 ---@param seed ffi.cdata*
 function RandomGenerator:__setSeed(seed)
+  self.seed = seed
+
+  local rngState = ffi.new("Seed")
+
   repeat
-    seed.b64 = wangHash64(seed.b64)
+    rngState.b64 = wangHash64(seed.b64)
   until seed ~= 0
 
-  self.rngState = seed
+  self.rngState = rngState
 end
 
-function RandomGenerator:setState()
+---@param state string
+function RandomGenerator:setState(state)
+  local high = state:sub(1, 10)
+  local low = "0x" .. state:sub(11)
+  local boxed = ffi.new("Seed")
+  boxed.b32.low = bit.tobit(low)
+  boxed.b32.high = bit.tobit(high)
+  self.rngState = boxed
 end
 
 

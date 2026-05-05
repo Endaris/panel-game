@@ -48,5 +48,27 @@ local function testRange()
   end
 end
 
+local function testGetSeed()
+  local seed = 1
+  local rng = RandomGenerator.newFromSeed(seed)
+  local s = rng:getSeed()
+  assert(s == seed)
+  rng:random(1, 6)
+  s = rng:getSeed()
+  assert(s == seed)
+end
+
+local function testSetState()
+  local rng = RandomGenerator.newFromSeed(1)
+  local state = rng:getState()
+  local r1 = rng:random(1, 10000)
+  rng:setState(state)
+  assert(state == rng:getState())
+  local r2 = rng:random(1, 10000)
+  assert(r1 == r2)
+end
+
 testState()
 testRange()
+testGetSeed()
+testSetState()
