@@ -38,6 +38,7 @@ local DebugSettings = require("client.src.debug.DebugSettings")
 ---@field winners MatchParticipant[]
 ---@field panelSource PanelSource
 ---@field gameMode GameMode
+---@field createTime number
 
 --- The ClientMatch is a way to create a match that will run with graphics and sounds on a client.
 ---@class ClientMatch : Signal
@@ -47,6 +48,7 @@ function(self, players, ranked)
   assert(players)
   self.players = players
   self.ranked = ranked
+  self.createTime = love.timer.getTime()
 
   self.supportsPause = false
   self.isPaused = false
@@ -617,14 +619,13 @@ function ClientMatch:render()
     local drawY = -4
 
     -- drawY = drawY + padding
-    -- GraphicsUtil.printf("Time Spent Running " .. self.timeSpentRunning * 1000, drawX, drawY)
+    -- GraphicsUtil.printf("Time Spent Running " .. self.engine.timeSpentRunning * 1000, drawX, drawY)
 
     -- drawY = drawY + padding
-    -- local totalTime = love.timer.getTime() - self.createTime
+    local totalTime = love.timer.getTime() - self.createTime
     -- GraphicsUtil.printf("Total Time " .. totalTime * 1000, drawX, drawY)
 
     drawY = drawY + padding
-    local totalTime = love.timer.getTime() - self.engine.createTime
     local timePercent = math.round(self.engine.timeSpentRunning / totalTime, 5)
     GraphicsUtil.printf("Time Percent Running Match: " .. timePercent, drawX, drawY)
 

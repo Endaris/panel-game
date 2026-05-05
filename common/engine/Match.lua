@@ -12,6 +12,16 @@ local LegacyPanelSource = require("common.compatibility.LegacyPanelSource")
 local InputCompression = require("common.data.InputCompression")
 local ReplayV3 = require("common.data.ReplayV3")
 local MatchRules = require("common.data.MatchRules")
+local socket
+if love then
+  -- love comes with luasocket
+---@diagnostic disable-next-line: different-requires
+  socket = require("socket")
+else
+---@diagnostic disable-next-line: different-requires
+  socket = require("common.lib.socket")
+end
+
 
 ---@class Match
 ---@field stacks (Stack | SimulatedStack)[] The stacks to run as part of the match
@@ -24,7 +34,6 @@ local MatchRules = require("common.data.MatchRules")
 ---@field timeLimit integer? if the game automatically ends after a certain time
 ---@field puzzle table
 ---@field startTimestamp integer
----@field createTime number
 ---@field timeSpentRunning number
 ---@field maxTimeSpentRunning number
 ---@field clock integer
@@ -62,7 +71,6 @@ function(self, panelSource, matchRules)
 
   self.timeSpentRunning = 0
   self.maxTimeSpentRunning = 0
-  self.createTime = love.timer.getTime()
   ---@diagnostic disable-next-line: param-type-mismatch
   self.startTimestamp = os.time(os.date("*t"))
   self.clock = 0
@@ -238,7 +246,7 @@ end
 
 ---@return integer[] runsPerStack
 function Match:run()
-  local startTime = love.timer.getTime()
+  local startTime = socket.gettime()
 
   self:padRewindDataIfNeeded()
 
@@ -283,7 +291,7 @@ function Match:run()
   --   end
   -- end
 
-  local endTime = love.timer.getTime()
+  local endTime = socket.gettime()
   local timeDifference = endTime - startTime
   self.timeSpentRunning = self.timeSpentRunning + timeDifference
   self.maxTimeSpentRunning = math.max(self.maxTimeSpentRunning, timeDifference)
