@@ -4,6 +4,8 @@ local input = require("client.src.inputManager")
 local utf8 = require("common.lib.utf8Additions")
 local class = require("common.lib.class")
 
+local NAME_LENGTH_LIMIT = 16
+
 -- Scene for setting the username
 local SetNameMenu = class(
   function (self, sceneParams)

@@ -76,6 +76,7 @@ local OnePlayerTimeAttack = GameMode({
   matchRules = {
     matchEndConditions = { [MatchRules.MatchEndConditions.STACKS_ACTIVE] = 0, [MatchRules.MatchEndConditions.TIME_LIMIT] = TIME_ATTACK_TIME * 60 },
     matchWinRuleset = { { [MatchRules.MatchWinCriterias.SCORE] = MatchRules.orders.HIGHEST} },
+    scoringStyle = MatchRules.ScoringStyles.TA,
     stackOverConditions = { [MatchRules.StackOverConditions.HEALTH] = 0 },
     stackWinConditions = {},
     stackSetupModifications = {},
@@ -96,6 +97,7 @@ local OnePlayerEndless = GameMode({
   matchRules = {
     matchEndConditions = { [MatchRules.MatchEndConditions.STACKS_ACTIVE] = 0 },
     matchWinRuleset = { {[MatchRules.MatchWinCriterias.SCORE] = MatchRules.orders.HIGHEST}, { [MatchRules.MatchWinCriterias.GAME_OVER_CLOCK] = MatchRules.orders.HIGHEST} },
+    scoringStyle = MatchRules.ScoringStyles.TA,
     stackOverConditions = { [MatchRules.StackOverConditions.HEALTH] = 0 },
     stackWinConditions = {},
     stackSetupModifications = {},
@@ -198,6 +200,7 @@ local TwoPlayerTimeAttack = GameMode({
   matchRules = {
     matchEndConditions = { [MatchRules.MatchEndConditions.STACKS_ACTIVE] = 1, [MatchRules.MatchEndConditions.TIME_LIMIT] = TIME_ATTACK_TIME * 60},
     matchWinRuleset = { { [MatchRules.MatchWinCriterias.GAME_OVER_CLOCK] = MatchRules.orders.HIGHEST }, { [MatchRules.MatchWinCriterias.SCORE] = MatchRules.orders.HIGHEST }},
+    scoringStyle = MatchRules.ScoringStyles.TA,
     stackOverConditions = { [MatchRules.StackOverConditions.HEALTH] = 0 },
     stackWinConditions = {},
     stackSetupModifications = {},

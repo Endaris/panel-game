@@ -1,6 +1,7 @@
 local logger = require("common.lib.logger")
 local tableUtils = require("common.lib.tableUtils")
 local consts = require("common.engine.consts")
+local MatchRules = require("common.data.MatchRules")
 local LevelData = require("common.data.LevelData")
 local prof = require("common.lib.zoneProfiler")
 ---@class Stack
@@ -848,9 +849,9 @@ end
 
 function Stack:updateScoreWithCombo(comboSize)
   if comboSize > 3 then
-    if (score_mode == consts.SCOREMODE_TA) then
+    if (self.scoringStyle == MatchRules.ScoringStyles.TA) then
       self:addScore(SCORE_COMBO_TA[math.min(30, comboSize)])
-    elseif (score_mode == consts.SCOREMODE_PDP64) then
+    elseif (self.scoringStyle == MatchRules.ScoringStyles.PDP64) then
       if (comboSize < 41) then
         self:addScore(SCORE_COMBO_PdP64[comboSize])
       else
@@ -862,7 +863,7 @@ end
 
 function Stack:updateScoreWithChain()
   local chain_bonus = self.chain_counter
-  if (score_mode == consts.SCOREMODE_TA) then
+  if (self.scoringStyle == MatchRules.ScoringStyles.TA) then
     if (chain_bonus > 13) then
       chain_bonus = 0
     end

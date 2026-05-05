@@ -11,6 +11,7 @@
 ---@field matchWinRuleset table<MatchWinCriteria, PlacementOrder>[]
 ---@field stackOverConditions table<StackOverCondition, any>
 ---@field stackWinConditions table<StackWinCondition, integer>
+---@field scoringStyle ScoringStyle
 ---@field stackSetupModifications StackSetupModifications
 
 local MatchRules = {}
@@ -29,5 +30,8 @@ MatchRules.StackOverConditions = { HEALTH = "HEALTH", SWAPS = "SWAPS", CHAIN = "
 
 ---@enum StackWinCondition
 MatchRules.StackWinConditions = { MATCHABLE_PANELS = "MATCHABLE_PANELS", MATCHABLE_GARBAGE_PANELS = "MATCHABLE_GARBAGE_PANELS", SCORE = "SCORE" }
+
+---@enum ScoringStyle
+MatchRules.ScoringStyles = { TA = "TA", PDP64 = "PDP64" }
 
 return MatchRules

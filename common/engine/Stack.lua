@@ -155,14 +155,15 @@ local DIRECTION_ROW = {up = 1, down = -1, left = 0, right = 0}
 ---@field panelSource PanelSource where the Stack gets its panels from 
 ---@field swapCount integer
 ---@field wasToppedOut boolean if the stack was topped out at the start of the frame
+---@field scoringStyle ScoringStyle
 
 
 -- Represents the full panel stack for one player
 ---@class Stack
----@overload fun(args: {levelData: LevelData, stackSetupModifications: StackSetupModifications, panelSource: PanelSource, inputMethod: InputMethod, is_local: boolean, stackWinConditions: table<StackWinCondition, any>, stackOverCondition: table<StackOverCondition, any>}): Stack
+---@overload fun(args: {levelData: LevelData, stackSetupModifications: StackSetupModifications, panelSource: PanelSource, inputMethod: InputMethod, is_local: boolean, stackWinConditions: table<StackWinCondition, any>, stackOverCondition: table<StackOverCondition, any>, scoringStyle: ScoringStyle}): Stack
 local Stack = class(
 ---@param s Stack
----@param args {levelData: LevelData, stackSetupModifications: StackSetupModifications, panelSource: PanelSource, inputMethod: InputMethod, is_local: boolean, stackWinConditions: table<StackWinCondition, any>, stackOverCondition: table<StackOverCondition, any>}
+---@param args {levelData: LevelData, stackSetupModifications: StackSetupModifications, panelSource: PanelSource, inputMethod: InputMethod, is_local: boolean, stackWinConditions: table<StackWinCondition, any>, stackOverCondition: table<StackOverCondition, any>, scoringStyle: ScoringStyle}
   function(s, args)
     s.width = 6
     s.height = 12
@@ -184,6 +185,8 @@ local Stack = class(
     if s.behaviours.delaySimulationUntil then
       s.stopWatchIsRunning = false
     end
+
+    s.scoringStyle = args.scoringStyle
 
     s.swapStallingBackLog = {}
 

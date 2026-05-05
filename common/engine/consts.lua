@@ -50,9 +50,6 @@ consts.SUPER_SELECTION_START = 0.1 -- time held at which super enable is conside
 
 consts.DEFAULT_THEME_DIRECTORY = "Panel Attack Modern"
 
-consts.SCOREMODE_TA    = 1
-consts.SCOREMODE_PDP64 = 2 -- currently not used
-
 -- Yes, 2 is slower than 1 and 50..99 are the same.
 consts.SPEED_TO_RISE_TIME = tableUtils.map(
    {942, 983, 838, 790, 755, 695, 649, 604, 570, 515,

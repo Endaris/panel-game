@@ -12,7 +12,7 @@ local InputField = class(
     local currentFont = love.graphics.getFont()
     self.placeholderText = GraphicsUtil.newText(currentFont, options.placeholder) or GraphicsUtil.newText(currentFont, "Input Field")
     self.value = options.value or ""
-    self.charLimit = options.charLimit or NAME_LENGTH_LIMIT
+    self.charLimit = options.charLimit or math.huge
     -- unlike the name, this also allows underscores
     self.filterAlphanumeric = options.filterAlphanumeric or (options.filterAlphanumeric == nil and true)
 

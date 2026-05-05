@@ -685,6 +685,7 @@ function Match:createStackWithSettings(levelData, isLocal, inputMethod, inputs)
     panelSource = self.panelSource,
     inputMethod = inputMethod,
     stackSetupModifications = self.rules.stackSetupModifications or {},
+    scoringStyle = self.rules.scoringStyle or MatchRules.ScoringStyles.TA,
     engineVersion = self.engineVersion,
   }
 
