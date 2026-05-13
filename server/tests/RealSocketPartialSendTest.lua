@@ -11,7 +11,7 @@
 --
 
 json = require("common.lib.dkjson")
-local Connection = require("server.Connection")
+local Connection = require("server.main.Connection")
 require("client.src.server_queue")
 local TcpClient = require("client.src.network.TcpClient")
 local NetworkProtocol = require("common.network.NetworkProtocol")

@@ -330,6 +330,19 @@ function PADatabase:getBanByIP(ip)
   return longestBan
 end
 
+---@param publicPlayerID PublicPlayerID
+function PADatabase:getBanByPublicID(publicPlayerID)
+  local bans = self:getIDBans(publicPlayerID)
+
+  local longestBan = nil
+  for _, ban in ipairs(bans) do
+    if (os.time() < ban.completionTime) and ((not longestBan) or (ban.completionTime > longestBan.completionTime)) then
+      longestBan = ban
+    end
+  end
+  return longestBan
+end
+
 local selectPlayerUnseenBansStatement = assert(db:prepare("SELECT banID, reason FROM PlayerBanList WHERE publicPlayerID = ? AND banSeen IS NULL"))
 -- Retrieves player messages that the player has not seen yet.
 ---@param publicPlayerID integer

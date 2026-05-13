@@ -370,10 +370,12 @@ function Room:updateWinCounts(game)
 end
 
 ---@param sender ServerPlayer
+---@return boolean success
 function Room:handleGameAbort(sender)
   if #self.players == 1 and self.players[1] == sender then
     logger.debug(sender.name .. " aborted the game")
     self:abortGame(sender)
+    return true
   elseif #self.players == 2 and tableUtils.trueForAny(self.players, function(p) return p.publicPlayerID == sender.publicPlayerID end) then
     -- aborts in multiplayer room are a bigger deal so we should log them as info
     logger.info(sender.name .. " aborted the game")
@@ -410,8 +412,10 @@ function Room:handleGameAbort(sender)
       --  the general occurence of the situation should be rare enough that consequences of abuse in this manner should be minimal
       --  as the abuser does only have control over their own connection to the server
     end
+    return true
   else
     logger.warn(self.roomNumber .. ": Unexpected abort from player with publicID " .. sender.publicPlayerID)
+    return false
   end
 end
 
@@ -422,6 +426,9 @@ function Room:abortGame(sender)
   self.game = nil
 end
 
+---@param sender ServerPlayer
+---@param paused boolean
+---@return boolean # if pause was toggled
 function Room:togglePause(sender, paused)
   if #self.players == 1 and self.players[1] == sender and paused ~= (self:state() == "paused") then
     self:broadcastJson(ServerProtocol.sendPauseNotification(self.roomNumber, sender, paused), sender)
@@ -434,6 +441,9 @@ function Room:togglePause(sender, paused)
         player:setState("playing")
       end
     end
+    return true
+  else
+    return false
   end
 end
 
