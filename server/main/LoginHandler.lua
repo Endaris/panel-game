@@ -8,12 +8,10 @@ local tableUtils = require("common.lib.tableUtils")
 ---@class LoginHandler
 ---@field playerbase Playerbase
 ---@field database ServerDB
----@field leaderboards Leaderboard[]
 local LoginHandler = class(
-function(self, playerbase, database, leaderboards)
+function(self, playerbase, database)
   self.playerbase = playerbase
   self.database = database
-  self.leaderboards = leaderboards
 end)
 
 ---@param ipAddress string
@@ -40,8 +38,8 @@ function LoginHandler:login(player, ipAddress, loginMessage)
   local message = {}
 
   -- Name change is allowed because it was already checked above
-  if self.playerbase.players[player.userId] ~= player.name then
-    local oldName = self.playerbase.players[player.userId]
+  if self.playerbase.privateIdToName[player.userId] ~= player.name then
+    local oldName = self.playerbase.privateIdToName[player.userId]
     self:changeUsername(player.userId, player.name)
 
     logger.warn(player.userId .. " changed name from '" .. oldName .. "' to '" .. player.name .. "'")
@@ -54,9 +52,11 @@ function LoginHandler:login(player, ipAddress, loginMessage)
   player.save_replays_publicly = loginMessage.save_replays_publicly
 
   player:updateSettings(loginMessage.playerSettings)
-  for i, leaderboard in ipairs(self.leaderboards) do    
-    leaderboard:update_timestamp(player.userId)
-  end
+  -- This doesn't really make sense to log this way; hiding for inactivity from leaderboards should happen for lack of ranked activity
+  -- Just logging in and leaving without playing a (ranked) game shouldn't be enough
+  --for i, leaderboard in ipairs(self.leaderboards) do
+  --  leaderboard:update_timestamp(player.userId)
+  --end
   self:logIP(player, ipAddress)
 
   local serverNotices = self:getMessages(player)
@@ -112,11 +112,11 @@ function LoginHandler:canLogin(userID, name, IP_logging_in, engineVersion)
       denyReason = "That player name is already taken"
       logger.warn("Login failure: Player tried to create a new user with an already taken name: " .. name)
     end
-  elseif not self.playerbase.players[userID] then
+  elseif not self.playerbase.privateIdToName[userID] then
     denyReason = "The user ID provided was not found on this server"
     playerBan = self:insertBan(IP_logging_in, denyReason, os.time() + 60)
     logger.warn("Login failure: " .. name .. " specified an invalid user ID")
-  elseif self.playerbase.players[userID] ~= name and self.playerbase:nameTaken(userID, name) then
+  elseif self.playerbase.privateIdToName[userID] ~= name and self.playerbase:nameTaken(userID, name) then
     denyReason = "That player name is already taken"
     logger.warn("Login failure: Player (" .. userID .. ") tried to use already taken name: " .. name)
   elseif self.nameToConnectionIndex[name] then
@@ -134,7 +134,7 @@ end
 ---@return privateUserId?
 function LoginHandler:createNewUser(name)
   local user_id = nil
-  while not user_id or self.playerbase.players[user_id] do
+  while not user_id or self.playerbase.privateIdToName[user_id] do
     user_id = self:generate_new_user_id()
   end
   if self.playerbase:addPlayer(user_id, name) then
@@ -152,11 +152,6 @@ end
 
 function LoginHandler:changeUsername(privateUserID, username)
   self.playerbase:updatePlayer(privateUserID, username)
-  for i, leaderboard in ipairs(self.leaderboards) do
-    if leaderboard.players[privateUserID] then
-      leaderboard.players[privateUserID].user_name = username
-    end
-  end
 end
 
 ---@param ip string

@@ -4,18 +4,29 @@ local TIME_ATTACK_TIME = 120
 
 local GameModes = {}
 
+---@enum (key) GameModeID Used as identifier for the type of game that is being played
+GameModes.IDs = {
+  TWO_PLAYER_VS = "TWO_PLAYER_VS",
+  ONE_PLAYER_TIME_ATTACK = "ONE_PLAYER_TIME_ATTACK",
+  ONE_PLAYER_ENDLESS = "ONE_PLAYER_ENDLESS",
+  ONE_PLAYER_TRAINING = "ONE_PLAYER_TRAINING",
+  ONE_PLAYER_CHALLENGE = "ONE_PLAYER_CHALLENGE",
+  ONE_PLAYER_VS_SELF = "ONE_PLAYER_VS_SELF",
+  ONE_PLAYER_PUZZLE = "ONE_PLAYER_PUZZLE",
+  TWO_PLAYER_TIME_ATTACK = "TWO_PLAYER_TIME_ATTACK",
+}
+
 ---@class GameMode
 ---@field stackInteraction StackInteractions
 ---@field matchRules MatchRules
 ---@field playerCount integer
 ---@field name string
+---@field id GameModeID
 --- the following properties should be strictly client side rather than universal
 --- but since they're just magic strings without dependencies it's not like they ruin anything for now
 ---@field gameScene string
 ---@field style Styles
 ---@field richPresenceLabel string?
----@field updateLocalPlayersDerivedSettings function
----@field gameModeId GameModeID
 local GameMode = class(function(self, properties)
   for key, value in pairs(properties) do
     self[key] = value
@@ -49,6 +60,7 @@ local OnePlayerVsSelf = GameMode({
   gameScene = "VsSelfGame",
   richPresenceLabel = "1p vs self", -- loc("mm_1_vs"),
   name = "vsSelf",
+  id = GameModes.IDs.ONE_PLAYER_VS_SELF,
 
   -- already known match properties
   playerCount = 1,
@@ -69,6 +81,7 @@ local OnePlayerTimeAttack = GameMode({
   gameScene = "TimeAttackGame",
   richPresenceLabel = "Time Attack", -- loc("mm_1_time"),
   name = "timeattack",
+  id = GameModes.IDs.ONE_PLAYER_TIME_ATTACK,
 
   -- already known match properties
   playerCount = 1,
@@ -90,6 +103,7 @@ local OnePlayerEndless = GameMode({
   gameScene = "EndlessGame",
   richPresenceLabel = "Endless", -- loc("mm_1_endless"),
   name = "endless",
+  id = GameModes.IDs.ONE_PLAYER_ENDLESS,
 
   -- already known match properties
   playerCount = 1,
@@ -111,6 +125,7 @@ local OnePlayerTraining = GameMode({
   gameScene = "GameBase",
   richPresenceLabel = "Training", -- loc("mm_1_training"),
   name = "training",
+  id = GameModes.IDs.ONE_PLAYER_TRAINING,
 
   -- already known match properties
   playerCount = 1,
@@ -132,6 +147,7 @@ local OnePlayerPuzzle = GameMode({
   richPresenceLabel = "Puzzle", -- loc("mm_1_puzzle"),
   gameScene = "PuzzleGame",
   name = "puzzle",
+  id = GameModes.IDs.ONE_PLAYER_PUZZLE,
 
   -- already known match properties
   playerCount = 1,
@@ -155,6 +171,7 @@ local OnePlayerChallenge = GameMode({
   gameScene = "Game1pChallenge",
   richPresenceLabel = "Challenge Mode", -- loc("mm_1_challenge_mode"),
   name = "challenge",
+  id = GameModes.IDs.ONE_PLAYER_CHALLENGE,
 
   -- already known match properties
   playerCount = 1,
@@ -175,6 +192,7 @@ local TwoPlayerVersus = GameMode({
   gameScene = "GameBase",
   richPresenceLabel = "2p versus", -- loc("mm_2_vs"),
   name = "VS",
+  id = GameModes.IDs.TWO_PLAYER_VS,
 
   -- already known match properties
   playerCount = 2,
@@ -194,6 +212,7 @@ local TwoPlayerTimeAttack = GameMode({
   gameScene = "TimeAttackGame",
   richPresenceLabel = "2p Time Attack", -- loc("mm_2_time"),
   name = "2p_timeattack",
+  id = GameModes.IDs.TWO_PLAYER_TIME_ATTACK,
 
   playerCount = 2,
   stackInteraction = StackInteractions.NONE, -- Cambia VERSUS por NONE
@@ -211,18 +230,6 @@ local TwoPlayerTimeAttack = GameMode({
 
 GameModes.Styles = Styles
 GameModes.StackInteractions = StackInteractions
-
----@enum (key) GameModeID Used as identifier for the type of game that is being played
-GameModes.IDs = {
-  TWO_PLAYER_VS = "TWO_PLAYER_VS",
-  ONE_PLAYER_TIME_ATTACK = "ONE_PLAYER_TIME_ATTACK",
-  ONE_PLAYER_ENDLESS = "ONE_PLAYER_ENDLESS",
-  ONE_PLAYER_TRAINING = "ONE_PLAYER_TRAINING",
-  ONE_PLAYER_CHALLENGE = "ONE_PLAYER_CHALLENGE",
-  ONE_PLAYER_VS_SELF = "ONE_PLAYER_VS_SELF",
-  ONE_PLAYER_PUZZLE = "ONE_PLAYER_PUZZLE",
-  TWO_PLAYER_TIME_ATTACK = "TWO_PLAYER_TIME_ATTACK",
-}
 
 ---@type table<GameModeID, GameMode>
 local privateGameModes = {}

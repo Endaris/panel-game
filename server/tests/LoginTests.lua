@@ -10,7 +10,7 @@ testServer.insertBan = function (ip, reason, completionTime)
 end
 
 testServer.playerbase = Playerbase({}, MockPersistence)
-MockPersistence.setPlayerDataRef(testServer.playerbase.players)
+MockPersistence.setPlayerDataRef(testServer.playerbase.privateIdToName)
 testServer.playerbase:addPlayer("1", "Jerry")
 testServer.playerbase:addPlayer("2", "Ben")
 

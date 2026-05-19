@@ -69,7 +69,7 @@ function(self, roomNumber, players, gameMode, leaderboard)
   end
 
   if self.leaderboard then
-    self.ranked, self.rankedReasons = self:rating_adjustment_approved()
+    self.ranked, self.rankedReasons = self:isRankedApproved()
   else
     self.ranked = false
     self.rankedReasons = { "No leaderboard attached to the room" }
@@ -444,6 +444,51 @@ function Room:togglePause(sender, paused)
     return true
   else
     return false
+  end
+end
+
+---@return boolean
+---@return string[] reasons or caveats
+function Room:isRankedApproved()
+  local reasons = {}
+
+  if not self.leaderboard then
+    reasons[#reasons+1] = "Game mode does not support ranked"
+    return false, reasons
+  end
+
+  -- local playerColorsOutOfBoundsForRanked = false
+  -- for i, player in ipairs(players) do
+  --   if player.levelData.colorCount < MIN_COLORS_FOR_RANKED or player.levelData.colorCount > MAX_COLORS_FOR_RANKED then
+  --     playerColorsOutOfBoundsForRanked = true
+  --   end
+  -- end
+  -- if playerColorsOutOfBoundsForRanked then
+  --   reasons[#reasons + 1] = "Only color counts between " .. MIN_COLORS_FOR_RANKED .. " and " .. MAX_COLORS_FOR_RANKED .. " are allowed for ranked play."
+  -- end
+
+  for i, player in ipairs(self.players) do
+    if player:usesModifiedLevelData() then
+      reasons[#reasons + 1] = player.name .. " uses modified level data"
+    end
+  end
+
+  if #self.players == 2 then
+    if self.players[1].level ~= self.players[2].level then
+      reasons[#reasons + 1] = "Levels don't match"
+    -- elseif not tableUtils.deep_content_equal(players[1].levelData or LevelPresets.getModern(players[1].level), players[2].levelData or LevelPresets.getModern(players[2].level)) then
+    --  reasons[#reasons + 1] = "Level data doesn't match"
+    end
+  
+    if self.players[1].inputMethod == "touch" or self.players[2].inputMethod == "touch" then
+      reasons[#reasons + 1] = "Touch input is not currently allowed in ranked matches."
+    end
+  end
+
+  if #reasons > 0 then
+    return false, reasons
+  else
+    return self.leaderboard:rating_adjustment_approved(self.players)
   end
 end
 

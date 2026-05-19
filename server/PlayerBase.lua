@@ -4,7 +4,7 @@ local tableUtils = require("common.lib.tableUtils")
 
 -- Represents all player accounts on the server.
 ---@class Playerbase
----@field players table<privateUserId, string>
+---@field privateIdToName table<privateUserId, string>
 ---@field persistence Persistence
 ---@field publicIdToPrivateId privateUserId[]
 ---@field privateIdToPublicId table<privateUserId, integer>
@@ -13,11 +13,11 @@ local Playerbase =
   class(
   function(self, playerData, persistence)
     self.persistence = persistence
-    self.players = playerData or {}
+    self.privateIdToName = playerData or {}
     self.publicIdToPrivateId = {}
     self.privateIdToPublicId = {}
 
-    for privateId, _ in pairs(self.players) do
+    for privateId, _ in pairs(self.privateIdToName) do
       local playerInfo = self.persistence.getPlayerInfo(privateId)
       if playerInfo then
         self.publicIdToPrivateId[playerInfo.publicPlayerID] = privateId
@@ -28,7 +28,7 @@ local Playerbase =
       end
     end
 
-    logger.info(tableUtils.length(self.players) .. " players loaded")
+    logger.info(tableUtils.length(self.privateIdToName) .. " players loaded")
   end
 )
 
@@ -36,7 +36,7 @@ local Playerbase =
 ---@param playerName string
 ---@return boolean success
 function Playerbase:addPlayer(userID, playerName)
-  self.players[userID] = playerName
+  self.privateIdToName[userID] = playerName
   if self.persistence.persistNewPlayer(userID, playerName) then
     local playerInfo = self.persistence.getPlayerInfo(userID)
     if playerInfo then
@@ -55,7 +55,7 @@ end
 ---@param userId privateUserId
 ---@param playerName string
 function Playerbase:updatePlayer(userId, playerName)
-  self.players[userId] = playerName
+  self.privateIdToName[userId] = playerName
   self.persistence.persistPlayerNameChange(userId, playerName)
 end
 
@@ -65,7 +65,7 @@ end
 ---@return boolean
 function Playerbase:nameTaken(userID, playerName)
 
-  for key, value in pairs(self.players) do
+  for key, value in pairs(self.privateIdToName) do
     if value:lower() == playerName:lower() then
       if key ~= userID then
         return true

@@ -13,7 +13,7 @@ require("common.lib.csprng")
 require("server.stridx")
 require("server.server_globals")
 local Connection = require("server.main.Connection")
-local Leaderboard = require("server.Leaderboard")
+local Leaderboard = require("server.ranking.Leaderboard")
 local Playerbase = require("server.PlayerBase")
 local Room = require("server.Room")
 local ClientMessages = require("server.ClientMessages")
@@ -25,6 +25,7 @@ local FileIO = require("server.FileIO")
 local GameModes = require("common.data.GameModes")
 local MainHandler = require("server.main.MainHandler")
 local LoginHandler = require("server.main.LoginHandler")
+local LeaderboardHandler = require("server.main.LeaderboardHandler")
 
 local pairs = pairs
 local ipairs = ipairs
@@ -54,6 +55,7 @@ local time = os.time
 ---@field lobbyChanged boolean if new lobby data should be sent out on the next loop
 ---@field playerbase table
 ---@field leaderboard Leaderboard
+---@field leaderboardHandler LeaderboardHandler
 ---@field persistence Persistence
 ---@field _shuttingDown boolean
 local Server = class(
@@ -79,7 +81,7 @@ local Server = class(
     self.lastFlushTime = self.lastProcessTime
     self.lobbyChanged = false
     self._shuttingDown = false
-    local loginHandler = LoginHandler(self.database, self.persistence, {self.leaderboard})
+    local loginHandler = LoginHandler(self.database, self.persistence)
     self.mainHandler = MainHandler(self.database, self.persistence, loginHandler)
 
     FileIO.read_csprng_seed_file()
@@ -100,16 +102,10 @@ local Server = class(
 )
 
 function Server:start()
-  logger.info("Starting up server with port: " .. (SERVER_PORT or 49569))
-  local s = socket.bind("*", SERVER_PORT or 49569)
-  if s then
-    self.socket = s
-  else
-    error("Failed to create server socket. Check if there are any other instances blocking the port")
-  end
-  self.socket:settimeout(0)
+  self.mainHandler:start()
 
-  logger.debug(os.time())
+  self.leaderboardHandler = LeaderboardHandler(self.persistence, self.playerbase)
+  self.leaderboardHandler:initializeLeaderboard(GameModes.IDs.TWO_PLAYER_VS, self.persistence.modes.FILE, "leaderboard.csv")
 end
 
 function Server:stop()
@@ -134,41 +130,16 @@ function Server:initializePlayerData(filePath, playerData)
     self.persistence.setPlayerDataRef(playerData)
 
     self.playerbase = Playerbase(playerData, self.persistence)
-    logger.debug("playerbase: " .. json.encode(self.playerbase.players))
+    logger.debug("playerbase: " .. json.encode(self.playerbase.privateIdToName))
   else
     logger.warn("Tried to load player data when the server already had player data loaded!\n" .. debug.traceback())
-  end
-end
-
----@param gameMode GameMode
----@param filePath string
----@param data table?
-function Server:initializeLeaderboard(gameMode, filePath, data)
-  if not self.leaderboard then
-    self.persistence.setLeaderboardPath(filePath)
-    self.leaderboard = Leaderboard(gameMode, self.persistence)
-    if not data then
-      data = self.persistence.getLeaderboardData()
-    else
-      -- do nothing, assume that's already parsed data
-    end
-    if data then
-      self.leaderboard:importData(data)
-    end
-
-    logger.debug("leaderboard json:")
-    logger.debug(json.encode(self.leaderboard.players))
-    self.persistence.persistLeaderboard(self.leaderboard)
-    logger.debug("leaderboard report: " .. json.encode(self.leaderboard:get_report(self)))
-  else
-    logger.warn("Tried to load leaderboard data when the server already had its leaderboard loaded!\n" .. debug.traceback())
   end
 end
 
 function Server:importDatabase()
   local usedNames = {}
   local cleanedPlayerData = {}
-  for key, value in pairs(self.playerbase.players) do
+  for key, value in pairs(self.playerbase.privateIdToName) do
     local name = value
     while usedNames[name] ~= nil do
       name = name .. math.random(1, 9999)

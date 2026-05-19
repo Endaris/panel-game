@@ -4,7 +4,7 @@ local ClientProtocol = require("common.network.ClientProtocol")
 local json = require("common.lib.dkjson")
 local NetworkProtocol = require("common.network.NetworkProtocol")
 local ServerTesting = require("server.tests.ServerTesting")
-local Leaderboard = require("server.Leaderboard")
+local Leaderboard = require("server.ranking.Leaderboard")
 local GameModes = require("common.data.GameModes")
 local tableUtils = require("common.lib.tableUtils")
 

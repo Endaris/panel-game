@@ -356,4 +356,34 @@ function FileIO.copyItem(source, destination)
   return success, err
 end
 
+---@param destination string
+---@param data any[]
+---@return boolean success
+function FileIO.writeAsCSV(destination, data)
+  local status, error = pcall(
+    csvfile.write(destination, data)
+  )
+
+  if not status then
+    logger.error("Failed to write csv file " .. destination .. " with error: " .. error)
+    return false
+  else
+    --logger.trace("Successfully wrote to " .. destination)
+    return true
+  end
+end
+
+function FileIO.writePublicLeaderboardFile(path, data)
+  local fullPath = FileIO.combinePath(".", "ftp", "PA_public_" .. path)
+  local status, error = pcall(
+    function()
+      FileIO.makeDirectoryRecursive(FileIO.combinePath(".", "ftp"))
+      csvfile.write(fullPath, data)
+    end
+  )
+  if not status then
+    logger.error("Failed to write public leaderboard file " .. fullPath .. " with error: " .. error)
+  end
+end
+
 return FileIO

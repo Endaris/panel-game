@@ -290,12 +290,10 @@ function MainHandler:processMessage(message, connection)
         return true
       end
     elseif message.leaderboard_request then
-      connection:sendJson(ServerProtocol.sendLeaderboard(self.leaderboard:get_report(self, self.connectionToPlayer[connection].userId)))
+      connection:sendJson(ServerProtocol.sendLeaderboard(self.leaderboardHandler:getLeaderboardReport(GameModes.IDs.TWO_PLAYER_VS)))
       return true
     elseif player.state == "lobby" and message.roomRequest then
-      self.roomHandler:createRoom(message.gameMode, player)
-      self.proposals:clearPlayer(player)
-      self:setLobbyChanged()
+      self:createRoom(message.gameMode, player)
       return true
     elseif message.playerSettings then
       -- Note this also starts the game if everything is ready from both player's character select settings
@@ -399,7 +397,7 @@ end
 ---@param ... ServerPlayer
 function MainHandler:createRoom(gameModeId, ...)
   local gameMode = GameModes.getPreset(gameModeId)
-  local leaderboard = self.leaderboardHandler:getLeaderboard(gameMode)
+  local leaderboard = self.leaderboardHandler:getLeaderboard(gameModeId)
   local newRoom = self.roomHandler:createRoom(gameMode, leaderboard, ...)
 
   for _, player in ipairs(newRoom.players) do
@@ -414,6 +412,8 @@ function MainHandler:createRoom(gameModeId, ...)
   newRoom:connectSignal("matchStart", self, self.setLobbyChanged)
   newRoom:connectSignal("matchEnd", self, self.processGameEnd)
   newRoom:connectSignal("pauseToggled", self, self.setLobbyChanged)
+
+  self:setLobbyChanged()
 end
 
 ---@param game ServerGame

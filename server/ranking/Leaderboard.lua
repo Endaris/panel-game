@@ -1,5 +1,9 @@
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
+local GameModes = require("common.data.GameModes")
+local ELO = require("server.ranking.ELO")
+local LeaderboardGame = require("server.ranking.LeaderboardGame")
+local signal = require("common.lib.signal")
 
 local leagues = {
             {league="Newcomer",     min_rating = -1000},
@@ -18,7 +22,8 @@ for k, v in ipairs(leagues) do
   logger.debug(v.league .. ":  " .. v.min_rating)
 end
 
----@class LeaderboardPlayer 
+---@class LeaderboardPlayer
+---@field publicId PublicPlayerID?
 ---@field user_name string?
 ---@field rating number
 ---@field placement_done boolean?
@@ -33,40 +38,47 @@ end
 ---@field players table<string, LeaderboardPlayer>
 ---@field loadedPlacementMatches {incomplete: table, complete: table}
 ---@field playersPerGame integer
----@field consts table
 ---@field gameMode GameMode the game mode this leaderboard is for; currently unused
 ---@field persistence Persistence a collection of persistence methods; referenced directly on the leaderboard so they can be replaced for testing
----@overload fun(gameMode: GameMode, persistence: Persistence): Leaderboard
-local Leaderboard =
-  class(
-  function(self, gameMode, persistence)
-    self.gameMode = gameMode
-    self.persistence = persistence
-    self.players = {}
-    self.loadedPlacementMatches = {
-      incomplete = {},
-      complete = {}
-    }
-    self.playersPerGame = 2
-
-    self.consts = {
-      DEFAULT_RATING = 1500,
-      RATING_SPREAD_MODIFIER = 400,
-      PLACEMENT_MATCH_COUNT_REQUIREMENT = 30,
-      ALLOWABLE_RATING_SPREAD_MULTIPLIER = .9,
-      K = 10,
-      PLACEMENT_MATCHES_ENABLED = true,
-      PLACEMENT_MATCH_K = 50,
-      MIN_LEVEL_FOR_RANKED = 1,
-      MAX_LEVEL_FOR_RANKED = 10,
-    }
-
-    logger.debug("RATING_SPREAD_MODIFIER: " .. (self.consts.RATING_SPREAD_MODIFIER or "nil"))
+---@field persistenceMode PersistenceMode
+---@overload fun(gameMode: GameMode, persistence: Persistence, mode: PersistenceMode, filePath: string?): Leaderboard
+local Leaderboard = class(
+---@param self Leaderboard
+---@param gameMode GameMode
+---@param persistence Persistence
+---@param persistenceMode PersistenceMode
+---@param filePath string?
+function(self, gameMode, persistence, persistenceMode, filePath)
+  self.gameMode = gameMode
+  self.persistence = persistence
+  self.persistenceMode = persistenceMode
+  if self.persistenceMode == persistence.modes.FILE then
+    assert(filePath, "need to provide a file path when running a leaderboard in file mode")
+    self.filePath = filePath
   end
+
+  self.players = {}
+  self.loadedPlacementMatches = {
+    incomplete = {},
+    complete = {}
+  }
+  self.playersPerGame = 2
+
+  local data = self.persistence.getLeaderboardData(self)
+  if data then
+    self:importData(data)
+  end
+
+  logger.debug("leaderboard for " .. gameMode.id .. ":")
+  logger.debug(json.encode(self.leaderboard.players))
+
+  signal.turnIntoEmitter(self)
+  self:createSignal("leaderboardChanged")
+end
 )
 
----@param data {[1]: privateUserId, [2]: string, [3]: number, [4]: string, [5]: number?, [6]: integer, [7]: integer?, [8]: integer?}[]
---- user_id, user_name, rating, placement_done, placement_rating, ranked_games_played, ranked_games_won, last_login_time
+---@param data {[1]: privateUserId, [2]: string, [3]: number, [4]: string, [5]: number?, [6]: integer, [7]: integer?, [8]: integer?, [9]: integer?}[]
+--- user_id, user_name, rating, placement_done, placement_rating, ranked_games_played, ranked_games_won, last_login_time, public_id
 function Leaderboard:importData(data)
   if data then
     for row = 2, #data do
@@ -88,6 +100,8 @@ function Leaderboard:importData(data)
           self.players[data[row][1]][data[1][col]] = tonumber(data[row][col])
         elseif data[1][col] == "placement_done" then
           self.players[data[row][1]][data[1][col]] = data[row][col] and string.lower(data[row][col]) ~= "false"
+        elseif data[1][col] == "public_id" then
+          self.players[data[row][1]][data[1][col]] = tonumber(data[row][col])
         else
           self.players[data[row][1]][data[1][col]] = data[row][col]
         end
@@ -96,66 +110,12 @@ function Leaderboard:importData(data)
   end
 end
 
-function Leaderboard:update(user_id, new_rating)
-  logger.debug("in Leaderboard.update")
-  if self.players[user_id] then
-    self.players[user_id].rating = new_rating
-  else
-    self.players[user_id] = {rating = new_rating}
-  end
-
-  logger.debug("new_rating = " .. new_rating)
-  self.persistence.persistLeaderboard(self)
-  logger.debug("done with Leaderboard.update")
-end
-
----@param server Server
----@param user_id_of_requester privateUserId?
----@return {user_name: string, rating: number, is_you: boolean?}[]
-function Leaderboard:get_report(server, user_id_of_requester)
-  --returns the leaderboard as an array sorted from highest rating to lowest,
-  --with usernames from playerbase.players instead of user_ids
-  --ie report[1] will give the highest rating player's user_name and how many points they have. Like this:
-  --report[1] might return {user_name="Alice",rating=2250}
-  --report[2] might return {user_name="Bob",rating=2100,is_you=true} if Bob requested the leaderboard
-  local report = {}
-  local leaderboard_player_count = 0
-  --count how many entries there are in self.players since #self.players will not give us an accurate answer for sparse tables
-  for k, v in pairs(self.players) do
-    leaderboard_player_count = leaderboard_player_count + 1
-  end
-  for k, v in pairs(self.players) do
-    for insert_index = 1, leaderboard_player_count do
-      local player_is_leaderboard_requester = nil
-      if server.playerbase.players[k] then --only include in the report players who are still listed in the playerbase
-        if v.placement_done then --don't include players who haven't finished placement
-          if v.rating then -- don't include entries who's rating is nil (which shouldn't happen anyway)
-            if k == user_id_of_requester then
-              player_is_leaderboard_requester = true
-            end
-            if report[insert_index] and report[insert_index].rating and v.rating >= report[insert_index].rating then
-              table.insert(report, insert_index, {user_name = server.playerbase.players[k], rating = v.rating, is_you = player_is_leaderboard_requester})
-              break
-            elseif insert_index == leaderboard_player_count or #report == 0 then
-              table.insert(report, {user_name = server.playerbase.players[k], rating = v.rating, is_you = player_is_leaderboard_requester}) -- at the end of the table.
-              break
-            end
-          end
-        end
-      end
-    end
-  end
-  for k, v in pairs(report) do
-    v.rating = math.round(v.rating)
-  end
-  return report
-end
-
+---@deprecated should change this to a "last ranked game played" column instead
 function Leaderboard:update_timestamp(user_id)
   if self.players[user_id] then
     local timestamp = os.time()
     self.players[user_id].last_login_time = timestamp
-    self.persistence.persistLeaderboard(self)
+    self:emitSignal("leaderboardChanged", self)
     logger.debug(user_id .. "'s login timestamp has been updated to " .. timestamp)
   else
     logger.debug(user_id .. " is not on the leaderboard, so no timestamp will be assigned at this time.")
@@ -171,8 +131,8 @@ function Leaderboard:qualifies_for_placement(userId)
   local placement_matches_played = #self.loadedPlacementMatches.incomplete[userId]
   if (self.players[userId] and self.players[userId].placement_done) then
     return false, "user is already placed"
-  elseif placement_matches_played < self.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT then
-    return false, placement_matches_played .. "/" .. self.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT .. " placement matches played."
+  elseif placement_matches_played < ELO.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT then
+    return false, placement_matches_played .. "/" .. ELO.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT .. " placement matches played."
   -- else
   -- local win_ratio
   -- local win_count
@@ -183,7 +143,7 @@ function Leaderboard:qualifies_for_placement(userId)
   -- if win_ratio < placement_match_win_ratio_requirement then
   -- return false, "placement win ratio is currently "..math.round(win_ratio*100).."%.  "..math.round(placement_match_win_ratio_requirement*100).."% is required for placement."
   -- end
-  elseif not self.consts.PLACEMENT_MATCHES_ENABLED then
+  elseif not ELO.consts.PLACEMENT_MATCHES_ENABLED then
     return false, ""
   end
   return true
@@ -232,12 +192,22 @@ end
 ---@param player ServerPlayer
 function Leaderboard:addToLeaderboard(player)
   if not self.players[player.userId] or not self.players[player.userId].rating then
-    self.players[player.userId] = {user_name = player.name, rating = self.consts.DEFAULT_RATING}
-    logger.debug("Gave " .. self.players[player.userId].user_name .. " a new rating of " .. self.consts.DEFAULT_RATING)
-    if not self.consts.PLACEMENT_MATCHES_ENABLED then
+    self.players[player.userId] = {user_name = player.name, rating = ELO.consts.DEFAULT_RATING, publicId = player.publicPlayerID}
+    logger.debug("Gave " .. self.players[player.userId].user_name .. " a new rating of " .. ELO.consts.DEFAULT_RATING)
+    if not ELO.consts.PLACEMENT_MATCHES_ENABLED then
       self.players[player.userId].placement_done = true
     end
-    self.persistence.persistLeaderboard(self)
+    self:emitSignal("leaderboardChanged", self)
+  end
+end
+
+---@param serverPlayer ServerPlayer
+---@return LeaderboardPlayer
+function Leaderboard:getLeaderboardPlayer(serverPlayer)
+  if self.players[serverPlayer.userId] then
+    return self.players[serverPlayer.userId]
+  else
+    return {user_name = serverPlayer.name, rating = ELO.consts.DEFAULT_RATING, publicId = serverPlayer.publicPlayerID}
   end
 end
 
@@ -255,45 +225,8 @@ function Leaderboard:get_league(rating)
   return "LeagueNotFound"
 end
 
-function Leaderboard:calculate_rating_adjustment(Rc, Ro, Oa, k) -- -- print("calculating expected outcome for") -- print(players[player_number].name.." Ranking: "..self.players[players[player_number].user_id].rating)
-  --[[ --Algorithm we are implementing, per community member Bbforky:
-      Formula for Calculating expected outcome:
-      RATING_SPREAD_MODIFIER = 400
-      Oe=1/(1+10^((Ro-Rc)/RATING_SPREAD_MODIFIER)))
-
-      Oe= Expected Outcome
-      Ro= Current rating of opponent
-      Rc= Current rating
-
-      Formula for Calculating new rating:
-
-      Rn=Rc+k(Oa-Oe)
-
-      Rn=New Rating
-      Oa=Actual Outcome (0 for loss, 1 for win)
-      k= Constant (Probably will use 10)
-  ]] -- print("vs")
-  -- print(players[player_number].opponent.name.." Ranking: "..self.players[players[player_number].opponent.user_id].rating)
-  Oe = 1 / (1 + 10 ^ ((Ro - Rc) / self.consts.RATING_SPREAD_MODIFIER))
-  -- print("expected outcome: "..Oe)
-  Rn = Rc + k * (Oa - Oe)
-  return Rn
-end
-
----@param player ServerPlayer
----@return integer
-function Leaderboard:getK(player)
-  local k
-  if self.players[player.userId].placement_done then
-    k = self.consts.K
-  else
-    k = self.consts.PLACEMENT_MATCH_K
-  end
-  return k
-end
-
----@param player ServerPlayer
----@param opponent ServerPlayer
+---@param player LeaderboardPlayer
+---@param opponent LeaderboardPlayer
 ---@param result (0 | 1)
 function Leaderboard:addPlacementResult(player, opponent, result)
   local placementMatches = self:loadPlacementMatches(player.userId)
@@ -310,23 +243,23 @@ function Leaderboard:addPlacementResult(player, opponent, result)
 
   local leaderboardPlayer = self.players[player.userId]
   --adjust newcomer's placement_rating
-  leaderboardPlayer.placement_rating = self:calculate_rating_adjustment(leaderboardPlayer.placement_rating or self.consts.DEFAULT_RATING, self.players[opponent.userId].rating, result, self:getK(player))
+  leaderboardPlayer.placement_rating = ELO.calculate_rating_adjustment(leaderboardPlayer.placement_rating or ELO.consts.DEFAULT_RATING, self.players[opponent.userId].rating, result, ELO.getK(leaderboardPlayer))
   logger.debug("New newcomer rating: " .. leaderboardPlayer.placement_rating)
 end
 
 ---@param game ServerGame
 ---@return boolean # if the game is a placement game
----@return ServerPlayer?
+---@return LeaderboardPlayer?
 function Leaderboard:isPlacementGame(game)
   for _, player in ipairs(game.players) do
     if not self.players[player.userId].placement_done then
-      return true, player
+      return true, self.players[player.userId]
     end
   end
   return false
 end
 
----@alias RatingUpdate {old: number, new: number, difference: number, ranked_games_played: integer, ranked_games_won: integer, userId: privateUserId, placement_match_progress: string}
+---@alias RatingUpdate {old: number, new: number, difference: number, ranked_games_played: integer, ranked_games_won: integer, userId: privateUserId, placement_match_progress: string, league: string}
 
 ---@param game ServerGame
 ---@return RatingUpdate[] # The rating changes for each player in the game
@@ -350,53 +283,11 @@ function Leaderboard:processGameResult(game)
     self:addToLeaderboard(player)
   end
 
-  local ratings = {}
-
+  
   local isPlacementGame, placementPlayer = self:isPlacementGame(game)
-  for i, player in ipairs(game.players) do
-    local rating = {}
-    rating.old = self:getRating(player)
-    ratings[i] = rating
-  end
+  local leaderboardGame = LeaderboardGame(self, game)
 
-  if isPlacementGame then
-    ---@cast placementPlayer -nil
-    -- if it is a placement match we only need to calculate the placement player and possible finalize placement if the game finished their placements
-    -- for the other player there is either no calculation or the calculation is done in the placement finalization
-
-    local placementIndex
-    local rankedIndex
-    local rankedPlayer
-    if game.players[1] == placementPlayer then
-      placementIndex = 1
-      rankedIndex = 2
-    else
-      placementIndex = 2
-      rankedIndex = 1
-    end
-    rankedPlayer = game.players[rankedIndex]
-
-    local Oa = (game.winnerId == placementPlayer.publicPlayerID) and 1 or 0
-    self:addPlacementResult(placementPlayer, rankedPlayer, Oa)
-    local processPlacementMatches, reason = self:qualifies_for_placement(placementPlayer.userId)
-    if processPlacementMatches then
-      self:process_placement_matches(placementPlayer.userId)
-    else
-      ratings[placementIndex].placement_match_progress = reason
-    end
-    for i, player in ipairs(game.players) do
-      ratings[i].new = self:getRating(player)
-      ratings[i].difference = ratings[i].new - ratings[i].old
-    end
-  else
-    local Oa = (game.winnerId == game.players[1].publicPlayerID) and 1 or 0
-    ratings[1].new = self:calculate_rating_adjustment(ratings[1].old, ratings[2].old, Oa, self:getK(game.players[1]))
-    ratings[1].difference = ratings[1].new - ratings[1].old
-
-    Oa = (Oa == 1 and 0 or 1)
-    ratings[2].new = self:calculate_rating_adjustment(ratings[2].old, ratings[1].old, Oa, self:getK(game.players[2]))
-    ratings[2].difference = ratings[2].new - ratings[2].old
-  end
+  local ratings = ELO.processGameResult(self, leaderboardGame, isPlacementGame, placementPlayer)
 
   for i, player in ipairs(game.players) do
     local leaderboardPlayer = self.players[player.userId]
@@ -421,7 +312,7 @@ function Leaderboard:processGameResult(game)
   end
 
   logger.debug("done with Leaderboard.processGameResult")
-  self.persistence.persistLeaderboard(self)
+  self:emitSignal("leaderboardChanged", self)
 
   return ratings
 end
@@ -448,7 +339,7 @@ function Leaderboard:process_placement_matches(userId)
     else
       op_outcome = 0
     end
-    local op_rating_change = self:calculate_rating_adjustment(placement_matches[i].op_rating, self.players[userId].placement_rating, op_outcome, 10) - placement_matches[i].op_rating
+    local op_rating_change = ELO.calculate_rating_adjustment(placement_matches[i].op_rating, self.players[userId].placement_rating, op_outcome, 10) - placement_matches[i].op_rating
     self.players[placement_matches[i].op_user_id].rating = self.players[placement_matches[i].op_user_id].rating + op_rating_change
     self.players[placement_matches[i].op_user_id].ranked_games_played = (self.players[placement_matches[i].op_user_id].ranked_games_played or 0) + 1
     self.players[placement_matches[i].op_user_id].ranked_games_won = (self.players[placement_matches[i].op_user_id].ranked_games_won or 0) + op_outcome
@@ -456,7 +347,7 @@ function Leaderboard:process_placement_matches(userId)
   self.players[userId].placement_done = true
 
   self.persistence.persistPlacementFinalization(userId)
-  self.persistence.persistLeaderboard(self)
+  self:emitSignal("leaderboardChanged", self)
 end
 
 ---@param players ServerPlayer[]
@@ -464,86 +355,15 @@ end
 ---@return string[] reasons why the players cannot play ranked with each other
 function Leaderboard:rating_adjustment_approved(players)
   --returns whether both players in the room have game states such that rating adjustment should be approved
-  local reasons = {}
-  local caveats = {}
-  local both_players_are_placed = nil
 
-  if self.consts.PLACEMENT_MATCHES_ENABLED then
-    if self.players[players[1].userId] and self.players[players[1].userId].placement_done and self.players[players[2].userId] and self.players[players[2].userId].placement_done then
-      --both players are placed on the leaderboard.
-      both_players_are_placed = true
-    elseif not (self.players[players[1].userId] and self.players[players[1].userId].placement_done) and not (self.players[players[2].userId] and self.players[players[2].userId].placement_done) then
-      reasons[#reasons + 1] = "Neither player has finished enough placement matches against already ranked players"
-    end
-  else
-    both_players_are_placed = true
-  end
-  -- don't let players use the same account
-  if players[1].userId == players[2].userId then
-    reasons[#reasons + 1] = "Players cannot use the same account"
-  end
-
-  --don't let players too far apart in rating play ranked
-  local ratings = {}
-  for k, v in ipairs(players) do
-    if self.players[v.userId] then
-      if not self.players[v.userId].placement_done and self.players[v.userId].placement_rating then
-        ratings[k] = self.players[v.userId].placement_rating
-      elseif self.players[v.userId].rating and self.players[v.userId].rating ~= 0 then
-        ratings[k] = self.players[v.userId].rating
-      else
-        ratings[k] = self.consts.DEFAULT_RATING
-      end
-    else
-      ratings[k] = self.consts.DEFAULT_RATING
-    end
-  end
-  if math.abs(ratings[1] - ratings[2]) > self.consts.RATING_SPREAD_MODIFIER * self.consts.ALLOWABLE_RATING_SPREAD_MULTIPLIER then
-    reasons[#reasons + 1] = "Players' ratings are too far apart"
-  end
-
-  local player_level_out_of_bounds_for_ranked = false
-  for i = 1, 2 do --we'll change 2 here when more players are allowed.
-    if (players[i].level < self.consts.MIN_LEVEL_FOR_RANKED or players[i].level > self.consts.MAX_LEVEL_FOR_RANKED) then
-      player_level_out_of_bounds_for_ranked = true
-    end
-  end
-  if player_level_out_of_bounds_for_ranked then
-    reasons[#reasons + 1] = "Only levels between " .. self.consts.MIN_LEVEL_FOR_RANKED .. " and " .. self.consts.MAX_LEVEL_FOR_RANKED .. " are allowed for ranked play."
-  end
-  -- local playerColorsOutOfBoundsForRanked = false
-  -- for i, player in ipairs(players) do
-  --   if player.levelData.colorCount < MIN_COLORS_FOR_RANKED or player.levelData.colorCount > MAX_COLORS_FOR_RANKED then
-  --     playerColorsOutOfBoundsForRanked = true
-  --   end
-  -- end
-  -- if playerColorsOutOfBoundsForRanked then
-  --   reasons[#reasons + 1] = "Only color counts between " .. MIN_COLORS_FOR_RANKED .. " and " .. MAX_COLORS_FOR_RANKED .. " are allowed for ranked play."
-  -- end
-  if players[1].level ~= players[2].level then
-    reasons[#reasons + 1] = "Levels don't match"
-  -- elseif not tableUtils.deep_content_equal(players[1].levelData or LevelPresets.getModern(players[1].level), players[2].levelData or LevelPresets.getModern(players[2].level)) then
-  --  reasons[#reasons + 1] = "Level data doesn't match"
-  end
+  local lbPlayers = {}
 
   for i, player in ipairs(players) do
-    if player:usesModifiedLevelData() then
-      reasons[#reasons + 1] = player.name .. " uses modified level data"
-    end
+    lbPlayers[i] = self:getLeaderboardPlayer(player)
   end
 
-  if players[1].inputMethod == "touch" or players[2].inputMethod == "touch" then
-    reasons[#reasons + 1] = "Touch input is not currently allowed in ranked matches."
-  end
-
-  if reasons[1] then
-    return false, reasons
-  else
-    if self.consts.PLACEMENT_MATCHES_ENABLED and not both_players_are_placed and ((self.players[players[1].userId] and self.players[players[1].userId].placement_done) or (self.players[players[2].userId] and self.players[players[2].userId].placement_done)) then
-      caveats[#caveats + 1] = "Note: Rating adjustments for these matches will be processed when the newcomer finishes placement."
-    end
-    return true, caveats
-  end
+  local approved, reasons = ELO.canPlayRatedMatch(lbPlayers)
+  return approved, reasons
 end
 
 ---@return table[] # the leaderboard with full information for saving internally

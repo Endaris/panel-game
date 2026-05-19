@@ -183,7 +183,6 @@ end
 -- 1 = classic
 -- 2 = modern
 -- style is a menu-only concept for UI display
--- derived settings (levelData) should be updated by calling gameMode.updateLocalPlayersDerivedSettings
 function Player:setStyle(style)
   if style ~= self.settings.style then
     self.settings.style = style

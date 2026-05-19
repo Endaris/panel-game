@@ -22,10 +22,6 @@ end
 function MockPersistence.persistGame(game)
 end
 
----@param leaderboard Leaderboard
-function MockPersistence.persistLeaderboard(leaderboard)
-end
-
 function MockPersistence.getLeaderboardData()
 end
 

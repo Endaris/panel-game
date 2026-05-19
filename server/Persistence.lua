@@ -5,6 +5,9 @@ local logger = require("common.lib.logger")
 ---@class Persistence
 local Persistence = {}
 
+---@enum PersistenceMode
+Persistence.modes = { FILE = "FILE", DATABASE = "DATABASE" }
+
 local VsLeaderboardPath = "leaderboard.csv"
 local PlayerIdsToNamesPath = "players.txt"
 -- this should be a reference to the same player data the Playerbase holds onto
@@ -54,12 +57,13 @@ function Persistence.persistGame(game)
 end
 
 ---@param leaderboard Leaderboard
-function Persistence.persistLeaderboard(leaderboard)
-  FileIO.write_leaderboard_file(leaderboard, VsLeaderboardPath)
-end
-
-function Persistence.getLeaderboardData()
-  return FileIO.readCsvFile(VsLeaderboardPath)
+function Persistence.getLeaderboardData(leaderboard)
+  if leaderboard.persistenceMode == Persistence.modes.FILE then
+    -- TODO: annotate return type so the DB version can match it?
+    return FileIO.readCsvFile(leaderboard.filePath)
+  elseif leaderboard.persistence == Persistence.modes.DATABASE then
+    -- TODO: create leaderboard table(s) in DB and read from it
+  end
 end
 
 ---@param userId privateUserId
