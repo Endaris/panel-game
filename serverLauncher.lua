@@ -27,17 +27,14 @@ require("server.tests.LeaderboardTests")
 require("server.tests.RoomTests")
 require("server.tests.ScoreVerifierTests")
 
-local database = require("server.PADatabase")
 local Server = require("server.server")
 local Persistence = require("server.Persistence")
 
-local server = Server(database, Persistence)
-server:initializePlayerData("players.txt")
+-- so that seeds don't repeat after each server restart
+math.randomseed(os.time())
 
-local isPlayerTableEmpty = database:getPlayerRecordCount() == 0
-if isPlayerTableEmpty then
-  server:importDatabase()
-end
+Persistence.initialize(Persistence.modes.FILE, "PADatabase.sqlite3", "players.txt")
+local server = Server(Persistence)
 server:start()
 
 while true do

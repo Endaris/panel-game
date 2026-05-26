@@ -4,6 +4,7 @@ local GameModes = require("common.data.GameModes")
 local ELO = require("server.ranking.ELO")
 local LeaderboardGame = require("server.ranking.LeaderboardGame")
 local signal = require("common.lib.signal")
+local Persistence = require("server.Persistence")
 
 local leagues = {
             {league="Newcomer",     min_rating = -1000},
@@ -23,7 +24,7 @@ for k, v in ipairs(leagues) do
 end
 
 ---@class LeaderboardPlayer
----@field publicId PublicPlayerID?
+---@field public_id PublicPlayerID?
 ---@field user_name string?
 ---@field rating number
 ---@field placement_done boolean?
@@ -33,28 +34,33 @@ end
 ---@field last_login_time integer?
 
 -- Object that represents players rankings and placement matches, along with login times
----@class Leaderboard : Signal
+---@class Server.Leaderboard : Signal
 ---@field filePath string doubles as the filename without extension
 ---@field players table<string, LeaderboardPlayer>
 ---@field loadedPlacementMatches {incomplete: table, complete: table}
 ---@field playersPerGame integer
 ---@field gameMode GameMode the game mode this leaderboard is for; currently unused
----@field persistence Persistence a collection of persistence methods; referenced directly on the leaderboard so they can be replaced for testing
 ---@field persistenceMode PersistenceMode
----@overload fun(gameMode: GameMode, persistence: Persistence, mode: PersistenceMode, filePath: string?): Leaderboard
+---@field ratingAlgorithm RatingAlgorithm
+---@field placementMatchCount integer
+---@overload fun(gameMode: GameMode, mode: PersistenceMode, filePath: string, ratingAlgorithm: RatingAlgorithm?, placementMatchCount: integer?): Server.Leaderboard
 local Leaderboard = class(
----@param self Leaderboard
+---@param self Server.Leaderboard
 ---@param gameMode GameMode
----@param persistence Persistence
 ---@param persistenceMode PersistenceMode
----@param filePath string?
-function(self, gameMode, persistence, persistenceMode, filePath)
+---@param filePath string
+---@param ratingAlgorithm RatingAlgorithm?
+---@param placementMatchCount integer?
+function(self, gameMode, persistenceMode, filePath, ratingAlgorithm, placementMatchCount)
   self.gameMode = gameMode
-  self.persistence = persistence
   self.persistenceMode = persistenceMode
-  if self.persistenceMode == persistence.modes.FILE then
-    assert(filePath, "need to provide a file path when running a leaderboard in file mode")
-    self.filePath = filePath
+  assert(filePath, "need to provide a file path regardless of persistence mode for exporting the public leaderboard")
+  self.filePath = filePath
+  self.ratingAlgorithm = ratingAlgorithm or ELO
+  if ratingAlgorithm:supportsPlacementMatches() then
+    self.placementMatchCount = placementMatchCount or 0
+  else
+    self.placementMatchCount = 0
   end
 
   self.players = {}
@@ -64,13 +70,13 @@ function(self, gameMode, persistence, persistenceMode, filePath)
   }
   self.playersPerGame = 2
 
-  local data = self.persistence.getLeaderboardData(self)
+  local data = Persistence.getLeaderboardData(self)
   if data then
     self:importData(data)
   end
 
   logger.debug("leaderboard for " .. gameMode.id .. ":")
-  logger.debug(json.encode(self.leaderboard.players))
+  logger.debug(json.encode(self.players))
 
   signal.turnIntoEmitter(self)
   self:createSignal("leaderboardChanged")
@@ -131,8 +137,8 @@ function Leaderboard:qualifies_for_placement(userId)
   local placement_matches_played = #self.loadedPlacementMatches.incomplete[userId]
   if (self.players[userId] and self.players[userId].placement_done) then
     return false, "user is already placed"
-  elseif placement_matches_played < ELO.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT then
-    return false, placement_matches_played .. "/" .. ELO.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT .. " placement matches played."
+  elseif placement_matches_played < self.placementMatchCount then
+    return false, placement_matches_played .. "/" .. self.placementMatchCount .. " placement matches played."
   -- else
   -- local win_ratio
   -- local win_count
@@ -143,7 +149,7 @@ function Leaderboard:qualifies_for_placement(userId)
   -- if win_ratio < placement_match_win_ratio_requirement then
   -- return false, "placement win ratio is currently "..math.round(win_ratio*100).."%.  "..math.round(placement_match_win_ratio_requirement*100).."% is required for placement."
   -- end
-  elseif not ELO.consts.PLACEMENT_MATCHES_ENABLED then
+  elseif self.placementMatchCount == 0 then
     return false, ""
   end
   return true
@@ -153,7 +159,7 @@ end
 function Leaderboard:loadPlacementMatches(userId)
   logger.debug("Requested loading placement matches for user_id:  " .. (userId or "nil"))
   if not self.loadedPlacementMatches.incomplete[userId] then
-    self.loadedPlacementMatches.incomplete[userId] = self.persistence.getPlacementData(userId)
+    self.loadedPlacementMatches.incomplete[userId] = Persistence.getPlacementData(self, userId)
     logger.debug(tostring(self.loadedPlacementMatches.incomplete[userId]))
     logger.debug(json.encode(self.loadedPlacementMatches.incomplete[userId]))
   else
@@ -183,18 +189,20 @@ end
 ---@param player ServerPlayer
 ---@return string?
 function Leaderboard:getPlacementProgress(player)
-  local qualifies, progress = self:qualifies_for_placement(player.userId)
-  if not (self.players[player.userId] and self.players[player.userId].placement_done) and not qualifies then
-    return progress
+  if self.ratingAlgorithm.supportsPlacementMatches() then
+    local qualifies, progress = self:qualifies_for_placement(player.userId)
+    if not (self.players[player.userId] and self.players[player.userId].placement_done) and not qualifies then
+      return progress
+    end
   end
 end
 
 ---@param player ServerPlayer
 function Leaderboard:addToLeaderboard(player)
   if not self.players[player.userId] or not self.players[player.userId].rating then
-    self.players[player.userId] = {user_name = player.name, rating = ELO.consts.DEFAULT_RATING, publicId = player.publicPlayerID}
-    logger.debug("Gave " .. self.players[player.userId].user_name .. " a new rating of " .. ELO.consts.DEFAULT_RATING)
-    if not ELO.consts.PLACEMENT_MATCHES_ENABLED then
+    self.players[player.userId] = {user_name = player.name, rating = self.ratingAlgorithm.consts.DEFAULT_RATING, public_id = player.publicPlayerID}
+    logger.debug("Gave " .. self.players[player.userId].user_name .. " a new rating of " .. self.ratingAlgorithm.consts.DEFAULT_RATING)
+    if not self.ratingAlgorithm.supportsPlacementMatches() or self.placementMatchCount == 0 then
       self.players[player.userId].placement_done = true
     end
     self:emitSignal("leaderboardChanged", self)
@@ -207,7 +215,7 @@ function Leaderboard:getLeaderboardPlayer(serverPlayer)
   if self.players[serverPlayer.userId] then
     return self.players[serverPlayer.userId]
   else
-    return {user_name = serverPlayer.name, rating = ELO.consts.DEFAULT_RATING, publicId = serverPlayer.publicPlayerID}
+    return {user_name = serverPlayer.name, rating = self.ratingAlgorithm.consts.DEFAULT_RATING, public_id = serverPlayer.publicPlayerID}
   end
 end
 
@@ -239,11 +247,11 @@ function Leaderboard:addPlacementResult(player, opponent, result)
 
   logger.debug("PRINTING PLACEMENT MATCHES FOR USER")
   logger.debug(json.encode(self.loadedPlacementMatches.incomplete[player.userId]))
-  self.persistence.persistPlacementGames(player.userId, self.loadedPlacementMatches.incomplete[player.userId])
+  Persistence.persistPlacementGames(self, player.userId, self.loadedPlacementMatches.incomplete[player.userId])
 
   local leaderboardPlayer = self.players[player.userId]
   --adjust newcomer's placement_rating
-  leaderboardPlayer.placement_rating = ELO.calculate_rating_adjustment(leaderboardPlayer.placement_rating or ELO.consts.DEFAULT_RATING, self.players[opponent.userId].rating, result, ELO.getK(leaderboardPlayer))
+  leaderboardPlayer.placement_rating = self.ratingAlgorithm.calculate_rating_adjustment(leaderboardPlayer.placement_rating or self.ratingAlgorithm.consts.DEFAULT_RATING, self.players[opponent.userId].rating, result, self.ratingAlgorithm.getK(leaderboardPlayer))
   logger.debug("New newcomer rating: " .. leaderboardPlayer.placement_rating)
 end
 
@@ -287,7 +295,7 @@ function Leaderboard:processGameResult(game)
   local isPlacementGame, placementPlayer = self:isPlacementGame(game)
   local leaderboardGame = LeaderboardGame(self, game)
 
-  local ratings = ELO.processGameResult(self, leaderboardGame, isPlacementGame, placementPlayer)
+  local ratings = self.ratingAlgorithm.processGameResult(self, leaderboardGame, isPlacementGame, placementPlayer)
 
   for i, player in ipairs(game.players) do
     local leaderboardPlayer = self.players[player.userId]
@@ -339,14 +347,14 @@ function Leaderboard:process_placement_matches(userId)
     else
       op_outcome = 0
     end
-    local op_rating_change = ELO.calculate_rating_adjustment(placement_matches[i].op_rating, self.players[userId].placement_rating, op_outcome, 10) - placement_matches[i].op_rating
+    local op_rating_change = self.ratingAlgorithm.calculate_rating_adjustment(placement_matches[i].op_rating, self.players[userId].placement_rating, op_outcome, 10) - placement_matches[i].op_rating
     self.players[placement_matches[i].op_user_id].rating = self.players[placement_matches[i].op_user_id].rating + op_rating_change
     self.players[placement_matches[i].op_user_id].ranked_games_played = (self.players[placement_matches[i].op_user_id].ranked_games_played or 0) + 1
     self.players[placement_matches[i].op_user_id].ranked_games_won = (self.players[placement_matches[i].op_user_id].ranked_games_won or 0) + op_outcome
   end
   self.players[userId].placement_done = true
 
-  self.persistence.persistPlacementFinalization(userId)
+  Persistence.persistPlacementFinalization(self, userId)
   self:emitSignal("leaderboardChanged", self)
 end
 
@@ -362,23 +370,24 @@ function Leaderboard:rating_adjustment_approved(players)
     lbPlayers[i] = self:getLeaderboardPlayer(player)
   end
 
-  local approved, reasons = ELO.canPlayRatedMatch(lbPlayers)
+  local approved, reasons = self.ratingAlgorithm.canPlayRatedMatch(lbPlayers)
   return approved, reasons
 end
 
 ---@return table[] # the leaderboard with full information for saving internally
 ---@return table[] # the leaderboard with a reduced data set for saving in a publicly accessible location
 function Leaderboard:toSheetData()
-  local leaderboard_table = {}
-  local public_leaderboard_table = {}
-  leaderboard_table[#leaderboard_table + 1] = {"user_id", "user_name", "rating", "placement_done", "placement_rating", "ranked_games_played", "ranked_games_won","last_login_time"}
-  public_leaderboard_table[#public_leaderboard_table + 1] = {"user_name", "rating", "ranked_games_played"} --excluding ranked_games_won for now because it doesn't track properly, and user_id because they are secret.
+  local leaderboardTable = {}
+  local publicLeaderboardTable = {}
+  local playerbase = Persistence.getPlayerBase()
+  leaderboardTable[#leaderboardTable + 1] = {"user_id", "user_name", "rating", "placement_done", "placement_rating", "ranked_games_played", "ranked_games_won","last_login_time", "public_id"}
+  publicLeaderboardTable[#publicLeaderboardTable + 1] = {"user_name", "rating", "ranked_games_played", "public_id"} --excluding ranked_games_won for now because it doesn't track properly, and user_id because they are secret.
   for user_id, v in pairs(self.players) do
-    leaderboard_table[#leaderboard_table + 1] = {user_id, v.user_name, v.rating, tostring(v.placement_done or ""), v.placement_rating, v.ranked_games_played, v.ranked_games_won, v.last_login_time}
-    public_leaderboard_table[#public_leaderboard_table + 1] = {v.user_name, v.rating, v.ranked_games_played}
+    leaderboardTable[#leaderboardTable + 1] = {user_id, playerbase.privateIdToName[user_id], v.rating, tostring(v.placement_done or ""), v.placement_rating, v.ranked_games_played, v.ranked_games_won, v.last_login_time, v.publicId or playerbase.privateIdToPublicId[user_id]}
+    publicLeaderboardTable[#publicLeaderboardTable + 1] = {playerbase.privateIdToName[user_id], v.rating, v.ranked_games_played, v.publicId or playerbase.privateIdToPublicId[user_id]}
   end
 
-  return leaderboard_table, public_leaderboard_table
+  return leaderboardTable, publicLeaderboardTable
 end
 
 return Leaderboard

@@ -1,3 +1,5 @@
+local PlayerBase = require("server.PlayerBase")
+
 ---@diagnostic disable: missing-fields, duplicate-set-field, inject-field
 
 ---@type Persistence
@@ -6,16 +8,25 @@ local testData
 
 -- this should be a reference to the same player data the Playerbase holds onto
 local PlayerData
+local playerBase
 
-function MockPersistence.setLeaderboardPath(path)
+---@param data table<privateUserId, string>
+---@return Server.Playerbase
+function MockPersistence.injectPlayerData(data)
+  MockPersistence.clearData()
+  playerBase = PlayerBase.initialize(data, MockPersistence)
+  return playerBase
 end
 
-function MockPersistence.setPlayerIdsPath(path)
+function MockPersistence.getPlayerBase()
+  if not playerBase then
+    error("Tried to fetch cached playerbase before it was initialized")
+  end
+  return playerBase
 end
 
----@param playerData table<privateUserId, string>
-function MockPersistence.setPlayerDataRef(playerData)
-  PlayerData = playerData
+function MockPersistence.clearData()
+  playerBase = nil
 end
 
 ---@param game ServerGame
@@ -39,8 +50,7 @@ function MockPersistence.getPlacementData(userId)
   return {}
 end
 
----@param playerData table<privateUserId, string>
-function MockPersistence.persistPlayerData(playerData)
+function MockPersistence.persistPlayerData()
 end
 
 function MockPersistence.persistNewPlayer(userId, name)
@@ -51,14 +61,6 @@ function MockPersistence.persistPlayerNameChange(userId, name)
   return true
 end
 
----@return table<privateUserId, string>
-function MockPersistence.getPlayerData()
-  if PlayerData then
-    return PlayerData
-  end
-  return {}
-end
-
 ---@param privateUserId privateUserId
 ---@return DB_Player?
 function MockPersistence.getPlayerInfo(privateUserId)
@@ -66,6 +68,9 @@ function MockPersistence.getPlayerInfo(privateUserId)
     --publicPlayerID: integer, privatePlayerID: integer, username: string, lastLoginTime: integer
     return {publicPlayerID = testData[tonumber(privateUserId)].publicPlayerID, privatePlayerID = privateUserId, username = testData[tonumber(privateUserId)].name, lastLoginTime = 0}
   end
+end
+
+function MockPersistence.persistNewIpBan(ip, reason, completionTime)
 end
 
 -- set this in case it's important to have pre-existing players for a test with cohesive ids that can be verified against

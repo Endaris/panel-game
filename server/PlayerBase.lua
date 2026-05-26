@@ -1,44 +1,72 @@
 local class = require("common.lib.class")
 local logger = require("common.lib.logger")
 local tableUtils = require("common.lib.tableUtils")
+local Persistence
 
 -- Represents all player accounts on the server.
----@class Playerbase
+---@class Server.Playerbase
 ---@field privateIdToName table<privateUserId, string>
----@field persistence Persistence
 ---@field publicIdToPrivateId privateUserId[]
 ---@field privateIdToPublicId table<privateUserId, integer>
----@overload fun(playerData: table<privateUserId, string>, persistence: Persistence): Playerbase
-local Playerbase =
-  class(
-  function(self, playerData, persistence)
-    self.persistence = persistence
-    self.privateIdToName = playerData or {}
-    self.publicIdToPrivateId = {}
-    self.privateIdToPublicId = {}
+local Playerbase = {}
 
-    for privateId, _ in pairs(self.privateIdToName) do
-      local playerInfo = self.persistence.getPlayerInfo(privateId)
-      if playerInfo then
-        self.publicIdToPrivateId[playerInfo.publicPlayerID] = privateId
-        self.privateIdToPublicId[privateId] = playerInfo.publicPlayerID
-      else
-        self.publicIdToPrivateId[#self.publicIdToPrivateId+1] = privateId
-        self.privateIdToPublicId[privateId] = #self.publicIdToPrivateId
-      end
-    end
-
-    logger.info(tableUtils.length(self.privateIdToName) .. " players loaded")
+function Playerbase.initialize(playerData, persistence)
+  if Persistence then
+    error("Playerbase can only be initialized once")
   end
-)
+
+  Persistence = persistence
+  Playerbase.privateIdToName = playerData or {}
+  Playerbase.publicIdToPrivateId = {}
+  Playerbase.privateIdToPublicId = {}
+
+  for privateId, _ in pairs(Playerbase.privateIdToName) do
+    local playerInfo = Persistence.getPlayerInfo(privateId)
+    if playerInfo then
+      Playerbase.publicIdToPrivateId[playerInfo.publicPlayerID] = privateId
+      Playerbase.privateIdToPublicId[privateId] = playerInfo.publicPlayerID
+    else
+      Playerbase.publicIdToPrivateId[#Playerbase.publicIdToPrivateId+1] = privateId
+      Playerbase.privateIdToPublicId[privateId] = #Playerbase.publicIdToPrivateId
+    end
+  end
+
+  logger.info(tableUtils.length(Playerbase.privateIdToName) .. " players loaded")
+
+  return Playerbase
+end
+
+---@param dbPlayers DB_Player[]
+---@param persistence Persistence
+function Playerbase.initializeFromDbData(dbPlayers, persistence)
+  if Persistence then
+    error("Playerbase can only be initialized once")
+  end
+
+  Persistence = persistence
+  Playerbase.privateIdToName = {}
+  Playerbase.publicIdToPrivateId = {}
+  Playerbase.privateIdToPublicId = {}
+
+  for i, player in ipairs(dbPlayers) do
+    local privateId = tostring(player.privatePlayerID)
+    Playerbase.publicIdToPrivateId[player.publicPlayerID] = privateId
+    Playerbase.privateIdToPublicId[privateId] = player.publicPlayerID
+    Playerbase.privateIdToName[privateId] = player.name
+  end
+
+  logger.info(tableUtils.length(Playerbase.privateIdToName) .. " players loaded")
+
+  return Playerbase
+end
 
 ---@param userID privateUserId
 ---@param playerName string
 ---@return boolean success
 function Playerbase:addPlayer(userID, playerName)
   self.privateIdToName[userID] = playerName
-  if self.persistence.persistNewPlayer(userID, playerName) then
-    local playerInfo = self.persistence.getPlayerInfo(userID)
+  if Persistence.persistNewPlayer(userID, playerName) then
+    local playerInfo = Persistence.getPlayerInfo(userID)
     if playerInfo then
       self.publicIdToPrivateId[playerInfo.publicPlayerID] = userID
       self.privateIdToPublicId[userID] = playerInfo.publicPlayerID
@@ -56,7 +84,7 @@ end
 ---@param playerName string
 function Playerbase:updatePlayer(userId, playerName)
   self.privateIdToName[userId] = playerName
-  self.persistence.persistPlayerNameChange(userId, playerName)
+  Persistence.persistPlayerNameChange(userId, playerName)
 end
 
 -- returns true if the name is taken by a different user already

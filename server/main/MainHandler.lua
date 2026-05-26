@@ -13,12 +13,14 @@ local FileIO = require("server.FileIO")
 local RoomHandler = require("server.main.RoomHandler")
 local util = require("common.lib.util")
 local LeaderboardHandler = require("server.main.LeaderboardHandler")
+local Persistence = require("server.Persistence")
+local LoginHandler = require("server.main.LoginHandler")
 
 local pairs = pairs
 local ipairs = ipairs
 
 ---Handles the general server functionality around accepting and managing connections, messages, rooms and games
----@class MainHandler
+---@class Server.MainHandler
 ---@field socket TcpSocket the master socket for accepting incoming client connections
 ---@field database ServerDB the database object
 ---@field connectionNumberIndex integer GLOBAL counter of the next available connection index
@@ -38,9 +40,7 @@ local ipairs = ipairs
 ---@field loginHandler LoginHandler
 local MainHandler = class(
 ---@param self MainHandler
----@param database ServerDB
----@param persistence Persistence
-function(self, database, persistence, loginHandler)
+function(self)
   ---@class MainHandler
   self = self
   self.connectionNumberIndex = 1
@@ -55,11 +55,10 @@ function(self, database, persistence, loginHandler)
   self.playerToRoom = {}
   self.spectatorToRoom = {}
   self.nameToPlayer = {}
-  self.database = database
-  self.persistence = persistence
   self.lobbyChanged = false
   self.roomHandler = RoomHandler()
-  self.loginHandler = loginHandler
+  self.loginHandler = LoginHandler(Persistence)
+  self.loginHandler:setNameToConnectionReference(self.nameToConnectionIndex)
   self.leaderboardHandler = LeaderboardHandler()
 end)
 
@@ -333,7 +332,7 @@ function MainHandler:handleLogin(connection, userId, name, ipAddress, port, engi
 
     banDuration = "Ban Remaining: " .. util.toDayHourMinuteSecondString(secondsRemaining)
 
-    self:markBanAsSeen(playerBan.banID)
+    Persistence.markBanAsSeen(playerBan.banID)
     logger.warn("Login denied because of ban: " .. playerBan.reason)
     connection:sendJson(ServerProtocol.denyLogin(playerBan.reason, banDuration))
   else
@@ -425,7 +424,7 @@ function MainHandler:processGameEnd(game)
   -- there needs to be a better mechanism to validate whether a game should be persisted / persisted for a leaderboard
   -- as the current persistGame somewhat assumes both (explicit player number and that the game was played to determine a winner/placement)
   if game and game.complete and game.replay.metadata.gameModeName == "VS" then
-    self.persistence.persistGame(game)
+    Persistence.persistGame(game)
   end
 end
 
@@ -496,8 +495,5 @@ function MainHandler:getLobbyStateV2()
 
   return { players = players, rooms = rooms }
 end
-
-
-
 
 return MainHandler

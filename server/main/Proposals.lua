@@ -1,5 +1,7 @@
 local class = require("common.lib.class")
 
+---@class Server.Proposals
+---@field proposals table<PublicPlayerID, table<PublicPlayerID, table<GameModeID, boolean>>> mapping of player name to a mapping of the players they have challenged for each game mode
 local Proposals = class(
 function(self)
   self.proposals = {}

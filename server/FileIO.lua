@@ -121,22 +121,6 @@ function FileIO.write_error_report(error_report_json)
   )
 end
 
----@param leaderboard Leaderboard
-function FileIO.write_leaderboard_file(leaderboard, path)
-  local leaderboard_table, public_leaderboard_table = leaderboard:toSheetData()
-
-  local status, error = pcall(
-    function()
-      csvfile.write(FileIO.combinePath(".", path), leaderboard_table)
-      FileIO.makeDirectoryRecursive(FileIO.combinePath(".", "ftp"))
-      csvfile.write(FileIO.combinePath(".", "ftp", "PA_public_" .. path), public_leaderboard_table)
-    end
-  )
-  if not status then
-    logger.error("Failed to write leaderboard file with error: " .. error)
-  end
-end
-
 function FileIO.readCsvFile(filePath)
   if FileIO.fileExists(filePath) == false then
     return nil

@@ -1,4 +1,9 @@
 ---@class RatingAlgorithm
+---@field consts table
+---@field canPlayRatedMatch fun(lbPlayers: LeaderboardPlayer[]): boolean
+---@field calculate_rating_adjustment fun(...: any): number
+---@field processGameResult fun(leaderboard: Server.Leaderboard, game: LeaderboardGame, isPlacementGame: boolean?, placementPlayer: LeaderboardPlayer?): RatingUpdate[]
+---@field supportsPlacementMatches fun(): boolean
 
 
 ---@class ELO : RatingAlgorithm
@@ -7,10 +12,8 @@ local ELO = {}
 ELO.consts = {
   DEFAULT_RATING = 1500,
   RATING_SPREAD_MODIFIER = 400,
-  PLACEMENT_MATCH_COUNT_REQUIREMENT = 30,
   ALLOWABLE_RATING_SPREAD_MULTIPLIER = .9,
   K = 10,
-  PLACEMENT_MATCHES_ENABLED = true,
   PLACEMENT_MATCH_K = 50,
   MIN_LEVEL_FOR_RANKED = 1,
   MAX_LEVEL_FOR_RANKED = 10,
@@ -18,10 +21,11 @@ ELO.consts = {
   MAX_PLAYER_COUNT = 2,
 }
 
+---@param leaderboard Server.Leaderboard
 ---@param players LeaderboardPlayer[]
 ---@return boolean
 ---@return string[] reasons or caveats
-function ELO.canPlayRatedMatch(players)
+function ELO.canPlayRatedMatch(leaderboard, players)
   local reasons = {}
   local caveats = {}
   local both_players_are_placed = nil
@@ -30,7 +34,7 @@ function ELO.canPlayRatedMatch(players)
     return false, {"This rating algorithm is only made to process results from games between two players"}
   end
 
-  if ELO.consts.PLACEMENT_MATCHES_ENABLED then
+  if leaderboard.placementMatchCount > 0 then
     if players[1].placement_done and players[2].placement_done then
       --both players are placed on the leaderboard.
       both_players_are_placed = true
@@ -41,7 +45,7 @@ function ELO.canPlayRatedMatch(players)
     both_players_are_placed = true
   end
   -- don't let players use the same account
-  if players[1].publicId == players[2].publicId then
+  if players[1].public_id == players[2].public_id then
     reasons[#reasons + 1] = "Players cannot use the same account"
   end
 
@@ -73,7 +77,7 @@ function ELO.canPlayRatedMatch(players)
   if reasons[1] then
     return false, reasons
   else
-    if ELO.consts.PLACEMENT_MATCHES_ENABLED and not both_players_are_placed and ((players[1].placement_done) or (players[2].placement_done)) then
+    if leaderboard.placementMatchCount > 0 and not both_players_are_placed and ((players[1].placement_done) or (players[2].placement_done)) then
       caveats[#caveats + 1] = "Note: Rating adjustments for these matches will be processed when the newcomer finishes placement."
     end
     return true, caveats
@@ -81,8 +85,8 @@ function ELO.canPlayRatedMatch(players)
 end
 
 ---@param player LeaderboardPlayer
+---@return integer
 function ELO.getK(player)
-  local k
   if player.placement_done then
     return ELO.consts.K
   else
@@ -90,6 +94,11 @@ function ELO.getK(player)
   end
 end
 
+---@param Rc number
+---@param Ro number
+---@param Oa (0 | 1)
+---@param k integer
+---@return number
 function ELO.calculate_rating_adjustment(Rc, Ro, Oa, k) -- -- print("calculating expected outcome for") -- print(players[player_number].name.." Ranking: "..self.players[players[player_number].user_id].rating)
   --[[ --Algorithm we are implementing, per community member Bbforky:
       Formula for Calculating expected outcome:
@@ -109,13 +118,13 @@ function ELO.calculate_rating_adjustment(Rc, Ro, Oa, k) -- -- print("calculating
       k= Constant (Probably will use 10)
   ]] -- print("vs")
   -- print(players[player_number].opponent.name.." Ranking: "..self.players[players[player_number].opponent.user_id].rating)
-  Oe = 1 / (1 + 10 ^ ((Ro - Rc) / ELO.consts.RATING_SPREAD_MODIFIER))
+  local Oe = 1 / (1 + 10 ^ ((Ro - Rc) / ELO.consts.RATING_SPREAD_MODIFIER))
   -- print("expected outcome: "..Oe)
-  Rn = Rc + k * (Oa - Oe)
+  local Rn = Rc + k * (Oa - Oe)
   return Rn
 end
 
----@param leaderboard Leaderboard
+---@param leaderboard Server.Leaderboard
 ---@param game LeaderboardGame
 ---@param isPlacementGame boolean
 ---@param placementPlayer LeaderboardPlayer
@@ -171,5 +180,9 @@ function ELO.processGameResult(leaderboard, game, isPlacementGame, placementPlay
   return ratings
 end
 
+---@return boolean
+function ELO.supportsPlacementMatches()
+  return true
+end
 
 return ELO

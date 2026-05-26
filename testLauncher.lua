@@ -56,6 +56,12 @@ function love.load()
 end
 
 local allTests = {
+  "server.tests.LoginTests",
+  "server.tests.LeaderboardTests",
+  "server.tests.RoomTests",
+  "server.tests.ServerTests",
+  "server.tests.RealSocketPartialSendTest",
+  "server.tests.ScoreVerifierTests",
   "common.tests.lib.RandomGeneratorTests",
   "common.tests.lib.JsonPrecisionTests",
   "common.tests.engine.PanelGenTests",
@@ -78,12 +84,6 @@ local allTests = {
   "common.tests.network.NetworkProtocolTests",
   "common.tests.network.TouchDataEncodingTests",
   "common.tests.data.InputCompressionTests",
-  "server.tests.LoginTests",
-  "server.tests.LeaderboardTests",
-  "server.tests.RoomTests",
-  "server.tests.ServerTests",
-  "server.tests.RealSocketPartialSendTest",
-  "server.tests.ScoreVerifierTests",
   "client.tests.FileUtilsTests",
   "client.tests.ModControllerTests",
   "client.tests.QueueTests",

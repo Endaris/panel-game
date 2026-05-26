@@ -6,12 +6,12 @@ local Player = require("server.Player")
 local tableUtils = require("common.lib.tableUtils")
 
 ---@class LoginHandler
----@field playerbase Playerbase
----@field database ServerDB
+---@field persistence Persistence
+---@field nameToConnectionIndex table<string, integer>?
 local LoginHandler = class(
-function(self, playerbase, database)
-  self.playerbase = playerbase
-  self.database = database
+function(self, persistence)
+  self.persistence = persistence
+  self.playerbase = persistence.getPlayerBase()
 end)
 
 ---@param ipAddress string
@@ -19,8 +19,8 @@ end)
 ---@return DB_Ban?
 function LoginHandler:getOutstandingBan(ipAddress, userId)
   local bans = {}
-  bans[#bans+1] = self:getBanByIP(ipAddress)
-  bans[#bans+1] = self:getBanByID(userId)
+  bans[#bans+1] = self.persistence.getBanByIP(ipAddress)
+  bans[#bans+1] = self.persistence.getBanByID(userId)
 
   if #bans == 0 then
     return nil
@@ -57,36 +57,19 @@ function LoginHandler:login(player, ipAddress, loginMessage)
   --for i, leaderboard in ipairs(self.leaderboards) do
   --  leaderboard:update_timestamp(player.userId)
   --end
-  self:logIP(player, ipAddress)
+  self.persistence.persistIpIdPair(player.publicPlayerID, ipAddress)
 
-  local serverNotices = self:getMessages(player)
+  local serverNotices = self.persistence.getUnseenMessagesForPublicId(player.publicPlayerID)
   if tableUtils.length(serverNotices) > 0 then
     local noticeString = ""
     for messageID, serverNotice in pairs(serverNotices) do
       noticeString = noticeString .. serverNotice .. "\n\n"
-      self:markMessageAsSeen(messageID)
+      self.persistence.markMessageAsSeen(messageID)
     end
     message.server_notice = noticeString
   end
 
   return message
-end
-
--- Checks if a logging in player is banned based off their IP.
----@param ip string
----@return DB_Ban?
-function LoginHandler:getBanByIP(ip)
-  return self.database:getBanByIP(ip)
-end
-
----@param userId privateUserId
----@return DB_Ban?
-function LoginHandler:getBanByID(userId)
-  local publicId = self.playerbase.privateIdToPublicId[userId]
-
-  if publicId then
-    return self.database:getBanByPublicID(publicId)
-  end
 end
 
 ---@return boolean loginApproved if the player can log in
@@ -114,7 +97,7 @@ function LoginHandler:canLogin(userID, name, IP_logging_in, engineVersion)
     end
   elseif not self.playerbase.privateIdToName[userID] then
     denyReason = "The user ID provided was not found on this server"
-    playerBan = self:insertBan(IP_logging_in, denyReason, os.time() + 60)
+    local playerBan = self.persistence.persistNewIpBan(IP_logging_in, denyReason, os.time() + 60)
     logger.warn("Login failure: " .. name .. " specified an invalid user ID")
   elseif self.playerbase.privateIdToName[userID] ~= name and self.playerbase:nameTaken(userID, name) then
     denyReason = "That player name is already taken"
@@ -135,7 +118,7 @@ end
 function LoginHandler:createNewUser(name)
   local user_id = nil
   while not user_id or self.playerbase.privateIdToName[user_id] do
-    user_id = self:generate_new_user_id()
+    user_id = self:generateNewUserId()
   end
   if self.playerbase:addPlayer(user_id, name) then
     return user_id
@@ -143,7 +126,7 @@ function LoginHandler:createNewUser(name)
 end
 
 ---@return privateUserId new_user_id
-function LoginHandler:generate_new_user_id()
+function LoginHandler:generateNewUserId()
   local new_user_id = cs_random()
   local result = tostring(new_user_id)
   assert(result)
@@ -154,43 +137,8 @@ function LoginHandler:changeUsername(privateUserID, username)
   self.playerbase:updatePlayer(privateUserID, username)
 end
 
----@param ip string
----@param reason string
----@param completionTime integer
----@return DB_Ban?
-function LoginHandler:insertBan(ip, reason, completionTime)
-  return self.database:insertBan(ip, reason, completionTime)
+function LoginHandler:setNameToConnectionReference(nameToConnectionIndex)
+  self.nameToConnectionIndex = nameToConnectionIndex
 end
-
----@param player ServerPlayer
----@param ipAddress string
-function LoginHandler:logIP(player, ipAddress)
-  self.database:insertIPID(ipAddress, player.publicPlayerID)
-end
-
--- gets the messages for that player
----@param player ServerPlayer
----@return table<integer, string>
-function LoginHandler:getMessages(player)
-  return self.database:getPlayerMessages(player.publicPlayerID)
-end
-
--- gets the bans for that player they did not see yet
----@param player ServerPlayer
----@return table<BanID, string>
-function LoginHandler:getUnseenBans(player)
-  return self.database:getPlayerUnseenBans(player.publicPlayerID)
-end
-
----@param banId integer
-function LoginHandler:markBanAsSeen(banId)
-  self.database:playerBanSeen(banId)
-end
-
----@param messageId integer
-function LoginHandler:markMessageAsSeen(messageId)
-  self.database:playerMessageSeen(messageId)
-end
-
 
 return LoginHandler

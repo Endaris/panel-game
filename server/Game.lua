@@ -41,7 +41,7 @@ end)
 function Game.createFromRoomState(room)
   local game = Game(room.players)
 
-  local roomIsRanked, reasons = room:rating_adjustment_approved()
+  local roomIsRanked, reasons = room:isRankedApproved()
   game.ranked = roomIsRanked
 
   local replayPanelSource = {

@@ -2,17 +2,14 @@ local ServerGame = require("server.Game")
 local Leaderboard = require("server.ranking.Leaderboard")
 local LevelPresets = require("common.data.LevelPresets")
 local GameModes = require("common.data.GameModes")
--- we don't want to test the persistence part here, do that explicitly elsewhere instead
-local MockPersistence = require("server.tests.MockPersistence")
 local ServerTesting = require("server.tests.ServerTesting")
+local ELO = require("server.ranking.ELO")
 
-local leaderboard = Leaderboard(GameModes.getPreset(GameModes.IDs.TWO_PLAYER_VS), MockPersistence)
-leaderboard.consts.PLACEMENT_MATCH_COUNT_REQUIREMENT = 2
+local leaderboard = Leaderboard(GameModes.getPreset(GameModes.IDs.TWO_PLAYER_VS), nil, "", ELO, 2)
 leaderboard.consts.RATING_SPREAD_MODIFIER = 400
 leaderboard.consts.ALLOWABLE_RATING_SPREAD_MULTIPLIER = .9
 leaderboard.consts.K = 10
 leaderboard.consts.PLACEMENT_MATCH_K = 50
-leaderboard.consts.PLACEMENT_MATCHES_ENABLED = true
 leaderboard.consts.MIN_LEVEL_FOR_RANKED = 1
 leaderboard.consts.MAX_LEVEL_FOR_RANKED = 10
 

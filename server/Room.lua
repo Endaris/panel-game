@@ -93,7 +93,7 @@ function Room:onPlayerSettingsUpdate(player)
     if self.leaderboard then
       if self.ranked or player.wants_ranked_match then
         logger.debug("about to check for rating_adjustment_approval for " .. player.name)
-        local ranked_match_approved, reasons = self:rating_adjustment_approved()
+        local ranked_match_approved, reasons = self:isRankedApproved()
         self:broadcastJson(ServerProtocol.updateRankedStatus(self.roomNumber, ranked_match_approved, reasons))
       end
     end
@@ -283,22 +283,6 @@ function Room:broadcastJson(message, sender)
   self:sendJsonToSpectators(message)
 end
 
----@return boolean # if the players may play ranked
----@return string[] reasons why or why not they may play ranked or what caveats apply to playing ranked
-function Room:rating_adjustment_approved()
-  if not self.leaderboard then
-    return false, {"Room has no leaderboard"}
-  end
-
-  for _, player in ipairs(self.players) do
-    if not player.wants_ranked_match then
-      return false, {player.name .. " doesn't want ranked"}
-    end
-  end
-
-  return self.leaderboard:rating_adjustment_approved(self.players)
-end
-
 ---@return string
 function Room:toString()
   local info = self.name
@@ -447,10 +431,17 @@ function Room:togglePause(sender, paused)
   end
 end
 
----@return boolean
----@return string[] reasons or caveats
+---@return boolean # if the players may play ranked
+---@return string[] reasons why or why not they may play ranked or what caveats apply to playing ranked
 function Room:isRankedApproved()
   local reasons = {}
+
+  for _, player in ipairs(self.players) do
+    if not player.wants_ranked_match then
+      reasons[#reasons+1] = player.name .. " doesn't want ranked"
+      return false, reasons
+    end
+  end
 
   if not self.leaderboard then
     reasons[#reasons+1] = "Game mode does not support ranked"
